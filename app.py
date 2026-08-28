@@ -61,11 +61,12 @@ if not df_gecmis.empty:
         else:
             st.sidebar.warning("Hisse bulunamadı veya likidite barajına takıldı.")
 
-    # --- 1. ANA TABLO: KURUMSAL SÜPÜRME RADARI ---
-    st.subheader("🚀 Kurumsal Süpürme & Likidite Boşluğu Liderleri")
-    st.markdown("*Büyük kurumların agresif alım yaptığı (Sweep > %50) ve satıcı kademelerinin boşaldığı hisseler.*")
+    # --- 1. ANA TABLO: KURUMSAL SÜPÜRME RADARI (TOP 20) ---
+    st.subheader("🚀 Kurumsal Süpürme & Likidite Boşluğu Liderleri (Top 20)")
+    st.markdown("*Büyük kurumların agresif alım yaptığı (Sweep) ve satıcı kademelerinin boşaldığı hisseler.*")
     
-    top_candidates = df[df['quant_score'] >= 45.0].sort_values(by='quant_score', ascending=False)
+    # En yüksek akış skoruna sahip ilk 20 hisseyi doğrudan göster
+    top_candidates = df.sort_values(by='quant_score', ascending=False).head(20)
     
     display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'sweep_ratio', 'vol_z', 'kyle_lambda', 'value_traded', 'change_%']
     display_cols = [c for c in display_cols if c in df.columns]
@@ -99,7 +100,7 @@ if not df_gecmis.empty:
             hide_index=True
         )
     else:
-        st.info("ℹ️ Bugün net bir kurumsal süpürme gerçekleşmedi.")
+        st.info("ℹ️ Veri bulunamadı.")
 
     st.divider()
 
@@ -107,7 +108,7 @@ if not df_gecmis.empty:
     st.subheader("🚨 Kurumsal Boşaltım Radarı (Satış Baskısı)")
     st.markdown("*Yüksek hacimli satıcı baskısı veya kurumsal çıkış yiyen hisseler.*")
     
-    dumps = df[df['regime'].str.contains('BOŞALTIM', na=False)].sort_values(by='vol_z', ascending=False).head(10)
+    dumps = df[df['change_%'] < -1.0].sort_values(by='vol_z', ascending=False).head(10)
     if not dumps.empty:
         df_dump = dumps[display_cols].rename(columns=col_names)
         st.dataframe(
