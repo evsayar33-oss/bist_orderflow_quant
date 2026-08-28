@@ -33,6 +33,7 @@ if not df_gecmis.empty:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).round(2)
 
+    # --- SIDEBAR: HİSSE AKIŞ SORGULAMA ---
     st.sidebar.header("🔍 Hisse Mikro-Yapı Sorgu")
     search_ticker = st.sidebar.text_input("Hisse Kodu (Örn: THYAO):").upper()
     
@@ -60,7 +61,7 @@ if not df_gecmis.empty:
         else:
             st.sidebar.warning("Hisse bulunamadı veya likidite barajına takıldı.")
 
-    # 1. ANA TABLO: KURUMSAL SÜPÜRME RADARI
+    # --- 1. ANA TABLO: KURUMSAL SÜPÜRME RADARI ---
     st.subheader("🚀 Kurumsal Süpürme & Likidite Boşluğu Liderleri")
     st.markdown("*Büyük kurumların agresif alım yaptığı (Sweep > %50) ve satıcı kademelerinin boşaldığı hisseler.*")
     
@@ -74,7 +75,7 @@ if not df_gecmis.empty:
         'quant_score': 'Akış Skoru',
         'score_diff': 'İvme Farkı',
         'regime': 'Mikroyapı Rejimi',
-        'sweep_ratio': 'Süpürme Oranı %',
+        'sweep_ratio': 'Süpürme %',
         'vol_z': 'Hacim Sapması (Z)',
         'kyle_lambda': "Kyle's Lambda",
         'value_traded': 'İşlem Hacmi (TL)',
@@ -82,16 +83,18 @@ if not df_gecmis.empty:
     }
     
     if not top_candidates.empty:
+        df_show = top_candidates[display_cols].rename(columns=col_names)
         st.dataframe(
-            top_candidates[display_cols].rename(columns=col_names).style.background_gradient(subset=['Akış Skoru'], cmap='Greens').format({
-                'Akış Skoru': '{:.1f}',
-                'İvme Farkı': '{:+.1f}',
-                'Süpürme Oranı %': '%{:.1f}',
-                'Hacim Sapması (Z)': '{:+.2f}σ',
-                "Kyle's Lambda": '{:.2f}',
-                'İşlem Hacmi (TL)': '{:,.0f}',
-                'Günlük %': '%{:.2f}'
-            }),
+            df_show,
+            column_config={
+                "Akış Skoru": st.column_config.ProgressColumn("Akış Skoru", min_value=0, max_value=100, format="%.1f"),
+                "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%.1f%%"),
+                "Hacim Sapması (Z)": st.column_config.NumberColumn("Hacim Sapması (Z)", format="%+.2fσ"),
+                "Kyle's Lambda": st.column_config.NumberColumn("Kyle's Lambda", format="%.2f"),
+                "İşlem Hacmi (TL)": st.column_config.NumberColumn("İşlem Hacmi (TL)", format="%,.0f TL"),
+                "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+.2f%%"),
+                "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+.1f")
+            },
             use_container_width=True,
             hide_index=True
         )
@@ -100,22 +103,24 @@ if not df_gecmis.empty:
 
     st.divider()
 
-    # 2. DİSKALİFİYE EDİLENLER: KURUMSAL BOŞALTIM
+    # --- 2. DİSKALİFİYE EDİLENLER: KURUMSAL BOŞALTIM ---
     st.subheader("🚨 Kurumsal Boşaltım Radarı (Satış Baskısı)")
     st.markdown("*Yüksek hacimli satıcı baskısı veya kurumsal çıkış yiyen hisseler.*")
     
     dumps = df[df['regime'].str.contains('BOŞALTIM', na=False)].sort_values(by='vol_z', ascending=False).head(10)
     if not dumps.empty:
+        df_dump = dumps[display_cols].rename(columns=col_names)
         st.dataframe(
-            dumps[display_cols].rename(columns=col_names).style.background_gradient(subset=['Günlük %'], cmap='Reds_r').format({
-                'Akış Skoru': '{:.1f}',
-                'İvme Farkı': '{:+.1f}',
-                'Süpürme Oranı %': '%{:.1f}',
-                'Hacim Sapması (Z)': '{:+.2f}σ',
-                "Kyle's Lambda": '{:.2f}',
-                'İşlem Hacmi (TL)': '{:,.0f}',
-                'Günlük %': '%{:.2f}'
-            }),
+            df_dump,
+            column_config={
+                "Akış Skoru": st.column_config.NumberColumn("Akış Skoru", format="%.1f"),
+                "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%.1f%%"),
+                "Hacim Sapması (Z)": st.column_config.NumberColumn("Hacim Sapması (Z)", format="%+.2fσ"),
+                "Kyle's Lambda": st.column_config.NumberColumn("Kyle's Lambda", format="%.2f"),
+                "İşlem Hacmi (TL)": st.column_config.NumberColumn("İşlem Hacmi (TL)", format="%,.0f TL"),
+                "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+.2f%%"),
+                "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+.1f")
+            },
             use_container_width=True,
             hide_index=True
         )
