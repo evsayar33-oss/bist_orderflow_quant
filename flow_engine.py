@@ -29,37 +29,46 @@ def calculate_quant_scores(df, df_gecmis):
         item = row.to_dict()
         
         close = float(item.get('close', 0.0))
+        open_p = float(item.get('open', close))
         high = float(item.get('high', close))
         low = float(item.get('low', close))
         change = float(item.get('change_%', 0.0))
         value_traded = float(item.get('value_traded', 0.0))
-        f_ratio = float(item.get('foreign_ratio', 20.0))
         rvol = float(item.get('rvol', 1.0))
-        
-        hist_df = df_gecmis[df_gecmis['ticker'] == item['ticker']] if not df_gecmis.empty else pd.DataFrame()
+        f_ratio = float(item.get('foreign_ratio', 20.0))
 
-        # 1. KYLE'S LAMBDA (LİKİDİTE BOŞLUĞU: 10M TL BAŞINA FİYAT ETKİSİ)
-        kyle_lambda = (abs(change) / ((value_traded / 10000000.0) + 1e-9)) if value_traded > 0 else 0.0
-        kyle_lambda = round(min(kyle_lambda, 50.0), 3)
+        # =========================================================================
+        # 1. LOGARİTMİK KYLE'S LAMBDA (UÇ DEĞERLERİ EZMEYEN FORMÜL)
+        # =========================================================================
+        raw_lambda = (abs(change) / ((value_traded / 10000000.0) + 1e-9)) if value_traded > 0 else 0.0
+        # Logaritmik yumuşatma ile uç değerlerin piyasayı ezmesini engelliyoruz
+        log_lambda = np.log1p(raw_lambda)
 
-        # 2. KURUMSAL SÜPÜRME ORANI (SWEEP RATIO)
+        # =========================================================================
+        # 2. DİNAMİK KURUMSAL SÜPÜRME ORANI (SWEEP RATIO)
+        # =========================================================================
         range_span = high - low
-        aggressor_score = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
-        sweep_ratio = (f_ratio * 0.55) + (max(aggressor_score, 0) * 45.0)
-        sweep_ratio = round(min(max(sweep_ratio, 0.0), 100.0), 1)
-
-        # 3. ARTIK HACİM ŞOKU
-        if not hist_df.empty and 'value_traded' in hist_df.columns:
-            hist_vals = hist_df['value_traded'].tail(HIST_WINDOW)
-            mean_val = float(hist_vals.mean())
-            std_val = float(hist_vals.std()) if len(hist_vals) > 2 and float(hist_vals.std()) > 0 else (mean_val * 0.3)
-            vol_z = float((value_traded - mean_val) / (std_val + 1e-9))
+        if range_span > 0:
+            clv = ((close - low) - (high - close)) / range_span
+            body_efficiency = (close - open_p) / range_span
         else:
-            vol_z = float((rvol - 1.0) * 2.0)
+            clv = 0.0
+            body_efficiency = 0.0
+            
+        # Süpürme Oranı: Kurum Payı (%40) + Kapanış Gücü (%35) + Gövde İvmesi (%25)
+        sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 35.0) + (max(body_efficiency, 0) * 25.0)
+        sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
+
+        # =========================================================================
+        # 3. İLK GÜN DE ÇALIŞAN ARTIK HACİM Z-SKORU
+        # =========================================================================
+        # TradingView'in 10 günlük RVOL verisini Z-Skoruna dönüştürür
+        vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
         item['sweep_ratio'] = sweep_ratio
-        item['kyle_lambda'] = kyle_lambda
+        item['kyle_lambda'] = round(raw_lambda, 2)
+        item['log_lambda'] = log_lambda
         item['vol_z'] = vol_z
         scored_data.append(item)
 
@@ -68,27 +77,26 @@ def calculate_quant_scores(df, df_gecmis):
         return res_df
 
     # =========================================================================
-    # 4. ÇAPRAZ KESİT NORMALİZASYONU (CROSS-SECTIONAL SCALING)
+    # 4. YÜZDELİK DİLİM NORMALİZASYONU (PERCENTILE RANKING)
     # =========================================================================
-    for col in ['sweep_ratio', 'vol_z', 'kyle_lambda']:
-        min_v = float(res_df[col].min())
-        max_v = float(res_df[col].max())
-        if max_v - min_v > 0:
-            res_df[f'{col}_norm'] = ((res_df[col] - min_v) / (max_v - min_v)) * 100.0
-        else:
-            res_df[f'{col}_norm'] = 50.0
+    # Tüm piyasayı kendi içinde 0 - 100 dilimine yayıyoruz (Liderler 90+ alır)
+    res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
+    res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
+    res_df['pct_lambda'] = res_df['log_lambda'].rank(pct=True) * 100.0
 
-    # Nihai Skor (%40 Süpürme + %35 Hacim Şoku + %25 Fiyat Etkisi)
+    # Nihai Akış Skoru
     res_df['quant_score'] = np.where(
         res_df['change_%'] >= 0,
-        np.round(res_df['sweep_ratio_norm'] * 0.40 + res_df['vol_z_norm'] * 0.35 + res_df['kyle_lambda_norm'] * 0.25, 1),
-        np.round(res_df['sweep_ratio_norm'] * 0.10, 1)
+        np.round(res_df['pct_sweep'] * 0.40 + res_df['pct_vol_z'] * 0.35 + res_df['pct_lambda'] * 0.25, 1),
+        np.round(res_df['pct_sweep'] * 0.10, 1) # Negatif fiyatlılara düşük taban puanı
     )
 
-    # Rejim Tespiti
+    # =========================================================================
+    # 5. DİNAMİK REJİM ETİKETLEMESİ
+    # =========================================================================
     conditions = [
-        (res_df['quant_score'] >= 65.0) & (res_df['change_%'] > 1.0),
-        (res_df['kyle_lambda_norm'] >= 65.0) & (res_df['change_%'] > 0),
+        (res_df['quant_score'] >= 75.0) & (res_df['change_%'] > 1.0),
+        (res_df['pct_lambda'] >= 75.0) & (res_df['change_%'] > 0.5),
         (res_df['change_%'] < -1.5) & (res_df['vol_z'] >= 0.5)
     ]
     choices = [
@@ -98,7 +106,8 @@ def calculate_quant_scores(df, df_gecmis):
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR AKIŞ")
 
-    drop_cols = ['sweep_ratio_norm', 'vol_z_norm', 'kyle_lambda_norm']
+    # Temizlik
+    drop_cols = ['log_lambda', 'pct_sweep', 'pct_vol_z', 'pct_lambda']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne göre akış farkı
