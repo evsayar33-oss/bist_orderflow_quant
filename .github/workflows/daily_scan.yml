@@ -2,9 +2,9 @@ name: BIST Order Flow Scan
 
 on:
   schedule:
-    # Türkiye Saati ile 11:05 (UTC 08:05) - Hafta İçi (1-5)
-    - cron: '5 8 * * 1-5'
-  workflow_dispatch: # Manuel tetikleme butonu
+    # Türkiye Saati ile 17:00 (UTC 14:00) - Hafta İçi (Pazartesi - Cuma: 1-5)
+    - cron: '0 14 * * 1-5'
+  workflow_dispatch: # İstediğin an elinle de çalıştırabilmen için buton açık kalır
 
 jobs:
   build:
