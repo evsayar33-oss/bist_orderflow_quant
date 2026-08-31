@@ -18,9 +18,12 @@ def gecmis_veriyi_yukle():
             return pd.DataFrame()
     return pd.DataFrame()
 
-def calculate_quant_scores(df, df_gecmis):
+def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
     if df.empty: 
         return df
+
+    if dynamic_weights is None:
+        dynamic_weights = {"persistence": 0.40, "growth": 0.25, "sweep": 0.25, "vol_z": 0.10}
 
     scored_data = []
 
@@ -42,32 +45,16 @@ def calculate_quant_scores(df, df_gecmis):
         perf_6m = float(item.get('perf_6m', 0.0))
         perf_1y = float(item.get('perf_1y', 0.0))
 
-        # =========================================================================
-        # 1. TESTERE & ÖLÜ HİSSE İNFAZ FİLTRESİ (EDIP / ALARK ENGELİ)
-        # =========================================================================
+        # 1. DEĞER TUZAĞI VE TESTERE İNFAZ KALKANI
         is_weak_or_trap = False
-        
-        # Kural A: Son 6 ayda %15'ten veya Son 3 ayda %8'den az getiri yapmışsa (Ölü/Testere)
-        # Bu kural EDIP gibi yatayda ölü olanları ve ALARK gibi düşenleri KESİNLİKLE ELER!
         if perf_6m < 15.0 or perf_3m < 8.0 or perf_1m < 1.0:
             is_weak_or_trap = True
-            
-        # Kural B: Son 1 yılda negatif olan hisseler (Yapısal Ayı Trendi)
-        if perf_1y < 10.0:
+        if perf_1y < 10.0 or perf_1m > 60.0:
             is_weak_or_trap = True
-            
-        # Kural C: Aşırı Parabolik Tükeniş (Son 1 ayda %60'tan fazla prim yapmışsa aşırı şişmiştir)
-        if perf_1m > 60.0:
-            is_weak_or_trap = True
-            
-        # Kural D: Zarar eden veya özsermayesini eriten şirketler
         if roe <= 0.0 or net_margin < 0.0:
             is_weak_or_trap = True
 
-        # =========================================================================
-        # 2. ÇOKLU ZAMAN DİLİMİ TREND SÜREKLİLİĞİ (TREND PERSISTENCE - RYGYO MODELİ)
-        # =========================================================================
-        # 1A, 3A, 6A ve 1Y getirilerinin kusursuz bileşik uyumu
+        # 2. FAKTÖR HESAPLAMALARI
         trend_persistence = (
             max(perf_1m, 0.0) * 0.25 + 
             max(perf_3m, 0.0) * 0.35 + 
@@ -75,10 +62,8 @@ def calculate_quant_scores(df, df_gecmis):
             max(perf_1y * 0.1, 0.0) * 0.15
         )
         
-        # Gordon Değerleme İskontosu (ROE / PB)
         growth_discount = (roe / max(pb, 0.3)) if roe > 0 else 0.0
 
-        # Mikroyapı Süpürme
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.50) + (max(clv, 0) * 50.0)
@@ -98,27 +83,28 @@ def calculate_quant_scores(df, df_gecmis):
     if res_df.empty: 
         return res_df
 
-    # Çapraz Kesit Sıralaması
+    # 3. NORMALİZASYON
     res_df['pct_persistence'] = res_df['trend_persistence'].rank(pct=True) * 100.0
     res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
 
-    # LİDERLİK SKORU: %45 Çoklu Trend Sürekliliği + %25 Büyüme İskontosu + %20 Süpürme + %10 Hacim
+    # 4. DİNAMİK YAPAY ZEKA AĞIRLIKLARIYLA NİHAİ SKOR HESABI
+    w_p = dynamic_weights.get('persistence', 0.40)
+    w_g = dynamic_weights.get('growth', 0.25)
+    w_s = dynamic_weights.get('sweep', 0.25)
+    w_v = dynamic_weights.get('vol_z', 0.10)
+
     raw_score = np.round(
-        res_df['pct_persistence'] * 0.45 + 
-        res_df['pct_growth'] * 0.25 + 
-        res_df['pct_sweep'] * 0.20 + 
-        res_df['pct_vol_z'] * 0.10, 
+        res_df['pct_persistence'] * w_p + 
+        res_df['pct_growth'] * w_g + 
+        res_df['pct_sweep'] * w_s + 
+        res_df['pct_vol_z'] * w_v, 
         1
     )
     
-    # Zayıf, Testere ve Tuzak Hisseleri SIFIRLA
-    res_df['quant_score'] = np.where(
-        (~res_df['is_weak_or_trap']),
-        raw_score,
-        0.0
-    )
+    # Tuzakları Sıfırla
+    res_df['quant_score'] = np.where((~res_df['is_weak_or_trap']), raw_score, 0.0)
 
     # Rejim Sınıflandırması
     conditions = [
@@ -135,7 +121,7 @@ def calculate_quant_scores(df, df_gecmis):
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_persistence', 'pct_growth', 'pct_sweep', 'pct_vol_z', 'is_weak_or_trap', 'trend_persistence']
+    drop_cols = ['is_weak_or_trap', 'trend_persistence']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne göre fark
