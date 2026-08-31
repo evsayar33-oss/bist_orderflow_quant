@@ -28,10 +28,16 @@ if not df_gecmis.empty:
     
     st.caption(f"🗓️ Son Tarama: **{son_tarih.strftime('%Y-%m-%d')}** | 📊 Taranan Hisse: **{len(df)}**")
 
-    format_cols = ['quant_score', 'score_diff', 'sweep_ratio', 'kyle_lambda', 'vol_z', 'value_traded', 'change_%', 'perf_3m']
-    for col in format_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).round(2)
+    # ÇÖKME ENGELLEYİCİ: Eksik kolon varsa otomatik 0 ata
+    required_cols = ['quant_score', 'score_diff', 'sweep_ratio', 'kyle_lambda', 'vol_z', 'value_traded', 'change_%', 'perf_3m']
+    for c in required_cols:
+        if c not in df.columns:
+            df[c] = 0.0
+        else:
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0).round(2)
+
+    if 'regime' not in df.columns:
+        df['regime'] = 'NÖTR AKIŞ'
 
     # SIDEBAR
     st.sidebar.header("🔍 Hisse Mikro-Yapı Sorgu")
@@ -46,7 +52,7 @@ if not df_gecmis.empty:
             sweep = float(h_data['sweep_ratio'].iloc[0])
             lambda_val = float(h_data['kyle_lambda'].iloc[0])
             vol_z = float(h_data['vol_z'].iloc[0])
-            p3m = float(h_data['perf_3m'].iloc[0])
+            p3m = float(h_data.get('perf_3m', pd.Series([0.0])).iloc[0])
             
             st.sidebar.metric(f"{search_ticker} Akış Skoru", f"{score:.1f}", f"{diff:+.1f}")
             st.sidebar.write(f"**Durum:** {regime}")
@@ -108,7 +114,9 @@ if not df_gecmis.empty:
     st.subheader("🪤 Ölü Kedi Tuzakları & Boşaltım Radarı (Uzak Dur)")
     st.markdown("*Düşüş trendinde tepki veren sahte yükselişler veya kurumsal mal çıkışları.*")
     
-    traps = df[df['regime'].str.contains('TUZAĞI|BOŞALTIM|AŞIRI', na=False)].sort_values(by='perf_3m', ascending=True).head(15)
+    sort_by_col = 'perf_3m' if 'perf_3m' in df.columns else 'change_%'
+    traps = df[df['regime'].str.contains('TUZAĞI|BOŞALTIM|AŞIRI', na=False)].sort_values(by=sort_by_col, ascending=True).head(15)
+    
     if not traps.empty:
         st.dataframe(
             traps[display_cols].rename(columns=col_names),
