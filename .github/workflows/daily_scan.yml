@@ -2,9 +2,9 @@ name: BIST Order Flow Scan
 
 on:
   schedule:
-    # Türkiye Saati ile 17:00 (UTC 14:00) - Hafta İçi (Pazartesi - Cuma: 1-5)
+    # Türkiye Saati ile 17:00 (UTC 14:00) - Hafta İçi (1-5)
     - cron: '0 14 * * 1-5'
-  workflow_dispatch: # İstediğin an elinle de çalıştırabilmen için buton açık kalır
+  workflow_dispatch: # Manuel çalıştırma butonu
 
 jobs:
   build:
@@ -35,5 +35,5 @@ jobs:
       run: |
         git config --global user.name "QuantBot"
         git config --global user.email "quantbot@github.com"
-        git add gecmis_veri.csv
-        git diff --quiet && git diff --staged --quiet || (git commit -m "QuantBot Veri Guncelleme: $(date)" && git push)
+        git add gecmis_veri.csv signals_log.csv model_weights.json
+        git diff --quiet && git diff --staged --quiet || (git commit -m "QuantBot AI Guncelleme: $(date)" && git push)
