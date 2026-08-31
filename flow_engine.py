@@ -6,7 +6,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 GECMIS_DOSYA = "gecmis_veri.csv"
-HIST_WINDOW = 20
 
 def gecmis_veriyi_yukle():
     if os.path.exists(GECMIS_DOSYA):
@@ -36,81 +35,110 @@ def calculate_quant_scores(df, df_gecmis):
         value_traded = float(item.get('value_traded', 0.0))
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
+        
+        pe = float(item.get('pe', 999.0))
+        pb = float(item.get('pb', 999.0))
+        roe = float(item.get('roe', 0.0))
+        roa = float(item.get('roa', 0.0))
+        op_margin = float(item.get('op_margin', 0.0))
+        net_margin = float(item.get('net_margin', 0.0))
+        debt_to_equity = float(item.get('debt_to_equity', 99.0))
+        rev_growth = float(item.get('rev_growth', 0.0))
 
         # =========================================================================
-        # 1. LOGARİTMİK KYLE'S LAMBDA (UÇ DEĞERLERİ EZMEYEN FORMÜL)
+        # 1. ZOMBI ŞİRKET & İFLAS RİSKİ FİLTRESİ (FUNDAMENTAL TRASH KILLER)
         # =========================================================================
-        raw_lambda = (abs(change) / ((value_traded / 10000000.0) + 1e-9)) if value_traded > 0 else 0.0
-        # Logaritmik yumuşatma ile uç değerlerin piyasayı ezmesini engelliyoruz
-        log_lambda = np.log1p(raw_lambda)
+        is_fundamental_trash = False
+        
+        # Kural A: Zarar eden veya özsermaye karlılığı negatif olanlar (Geleceği yok)
+        if roe <= 0.0 or net_margin < 0.0:
+            is_fundamental_trash = True
+            
+        # Kural B: Borç Batağı (Borç / Özsermaye oranı %250'nin üzerindeyse)
+        if debt_to_equity > 2.5:
+            is_fundamental_trash = True
+            
+        # Kural C: Aşırı Şişmiş Balon Değerleme (F/K > 70 veya PD/DD > 20)
+        if pe > 70.0 or pb > 20.0:
+            is_fundamental_trash = True
 
         # =========================================================================
-        # 2. DİNAMİK KURUMSAL SÜPÜRME ORANI (SWEEP RATIO)
+        # 2. GELECEK BÜYÜME VE DEĞERLEME İSKONTOSU (JUSTIFIED VALUATION)
+        # =========================================================================
+        # ROE / PB Oranı: Ne kadar sermaye verimli ve ne kadar ucuz? (RYGYO Modeli)
+        growth_discount_ratio = (roe / (pb + 1e-9)) if pb > 0 else 0.0
+        
+        # Faaliyet Marjı ve Gelir Büyümesi Gücü
+        margin_power = max(op_margin, 0.0) + max(rev_growth * 0.5, 0.0)
+
+        # =========================================================================
+        # 3. MİKROYAPI & SÜPÜRME (SWEEP RATIO)
         # =========================================================================
         range_span = high - low
         if range_span > 0:
             clv = ((close - low) - (high - close)) / range_span
-            body_efficiency = (close - open_p) / range_span
         else:
             clv = 0.0
-            body_efficiency = 0.0
             
-        # Süpürme Oranı: Kurum Payı (%40) + Kapanış Gücü (%35) + Gövde İvmesi (%25)
-        sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 35.0) + (max(body_efficiency, 0) * 25.0)
+        sweep_ratio = (f_ratio * 0.50) + (max(clv, 0) * 50.0)
         sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
 
-        # =========================================================================
-        # 3. İLK GÜN DE ÇALIŞAN ARTIK HACİM Z-SKORU
-        # =========================================================================
-        # TradingView'in 10 günlük RVOL verisini Z-Skoruna dönüştürür
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
+        item['growth_discount'] = round(growth_discount_ratio, 2)
+        item['margin_power'] = round(margin_power, 2)
         item['sweep_ratio'] = sweep_ratio
-        item['kyle_lambda'] = round(raw_lambda, 2)
-        item['log_lambda'] = log_lambda
         item['vol_z'] = vol_z
+        item['is_fundamental_trash'] = is_fundamental_trash
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    # =========================================================================
-    # 4. YÜZDELİK DİLİM NORMALİZASYONU (PERCENTILE RANKING)
-    # =========================================================================
-    # Tüm piyasayı kendi içinde 0 - 100 dilimine yayıyoruz (Liderler 90+ alır)
+    # Yüzdelik Dilim Sıralaması
+    res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
+    res_df['pct_margin'] = res_df['margin_power'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
-    res_df['pct_lambda'] = res_df['log_lambda'].rank(pct=True) * 100.0
 
-    # Nihai Akış Skoru
+    # GELECEK QUANT SKORU:
+    # %35 Sermaye Verimlilik İskontosu (ROE/PB) + %25 Büyüme & Marj + %25 Süpürme + %15 Hacim
+    raw_score = np.round(
+        res_df['pct_growth'] * 0.35 + 
+        res_df['pct_margin'] * 0.25 + 
+        res_df['pct_sweep'] * 0.25 + 
+        res_df['pct_vol_z'] * 0.15, 
+        1
+    )
+    
+    # Çöp Şirketleri Sıfırla
     res_df['quant_score'] = np.where(
-        res_df['change_%'] >= 0,
-        np.round(res_df['pct_sweep'] * 0.40 + res_df['pct_vol_z'] * 0.35 + res_df['pct_lambda'] * 0.25, 1),
-        np.round(res_df['pct_sweep'] * 0.10, 1) # Negatif fiyatlılara düşük taban puanı
+        (res_df['change_%'] >= 0) & (~res_df['is_fundamental_trash']),
+        raw_score,
+        0.0
     )
 
-    # =========================================================================
-    # 5. DİNAMİK REJİM ETİKETLEMESİ
-    # =========================================================================
+    # Rejim Sınıflandırması
     conditions = [
-        (res_df['quant_score'] >= 75.0) & (res_df['change_%'] > 1.0),
-        (res_df['pct_lambda'] >= 75.0) & (res_df['change_%'] > 0.5),
+        res_df['is_fundamental_trash'],
+        (res_df['quant_score'] >= 75.0) & (res_df['growth_discount'] >= 15.0),
+        (res_df['quant_score'] >= 55.0) & (res_df['pct_sweep'] >= 60.0),
         (res_df['change_%'] < -1.5) & (res_df['vol_z'] >= 0.5)
     ]
     choices = [
-        "🏛️ KURUMSAL SÜPÜRME (SWEEP)",
-        "⚡ LİKİDİTE BOŞLUĞU (VACUUM)",
+        "🚨 TEMEL ÇÖP (KÖTÜ BİLANÇO/BORÇ)",
+        "🏛️ BİLEŞİK BÜYÜME ŞAMPİYONU (COMPOUNDER)",
+        "⚡ KURUMSAL AKIŞ TOPLAMASI",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
-    res_df['regime'] = np.select(conditions, choices, default="NÖTR AKIŞ")
+    res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    # Temizlik
-    drop_cols = ['log_lambda', 'pct_sweep', 'pct_vol_z', 'pct_lambda']
+    drop_cols = ['pct_growth', 'pct_margin', 'pct_sweep', 'pct_vol_z', 'is_fundamental_trash']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
-    # Düne göre akış farkı
+    # Düne göre fark
     res_df['score_diff'] = 0.0
     if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
         son_tarih = df_gecmis['tarih'].max()
