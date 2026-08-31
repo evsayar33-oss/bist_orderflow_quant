@@ -36,106 +36,80 @@ def calculate_quant_scores(df, df_gecmis):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        pe = float(item.get('pe', 999.0))
-        pb = float(item.get('pb', 999.0))
-        roe = float(item.get('roe', 0.0))
-        roa = float(item.get('roa', 0.0))
-        op_margin = float(item.get('op_margin', 0.0))
-        net_margin = float(item.get('net_margin', 0.0))
-        debt_to_equity = float(item.get('debt_to_equity', 99.0))
-        rev_growth = float(item.get('rev_growth', 0.0))
+        pe = float(item.get('pe', 15.0))
+        pb = float(item.get('pb', 2.0))
+        roe = float(item.get('roe', 15.0))
+        op_margin = float(item.get('op_margin', 10.0))
+        net_margin = float(item.get('net_margin', 8.0))
+        rev_growth = float(item.get('rev_growth', 20.0))
 
         # =========================================================================
-        # 1. ZOMBI ŞİRKET & İFLAS RİSKİ FİLTRESİ (FUNDAMENTAL TRASH KILLER)
+        # 1. GORDON GELECEK BÜYÜME İSKONTOSU (JUSTIFIED VALUATION)
         # =========================================================================
-        is_fundamental_trash = False
+        # ROE / PB Oranı: Sermaye karlılığına göre en ucuz ve en kaliteli olanlar (RYGYO Modeli)
+        safe_pb = max(pb, 0.2)
+        growth_discount = (roe / safe_pb) if roe > 0 else (roe * 0.5)
         
-        # Kural A: Zarar eden veya özsermaye karlılığı negatif olanlar (Geleceği yok)
-        if roe <= 0.0 or net_margin < 0.0:
-            is_fundamental_trash = True
-            
-        # Kural B: Borç Batağı (Borç / Özsermaye oranı %250'nin üzerindeyse)
-        if debt_to_equity > 2.5:
-            is_fundamental_trash = True
-            
-        # Kural C: Aşırı Şişmiş Balon Değerleme (F/K > 70 veya PD/DD > 20)
-        if pe > 70.0 or pb > 20.0:
-            is_fundamental_trash = True
+        # 2. Operasyonel Karlılık & Marj Gücü
+        margin_quality = max(op_margin, 0.0) + max(net_margin, 0.0) + max(rev_growth * 0.3, 0.0)
 
-        # =========================================================================
-        # 2. GELECEK BÜYÜME VE DEĞERLEME İSKONTOSU (JUSTIFIED VALUATION)
-        # =========================================================================
-        # ROE / PB Oranı: Ne kadar sermaye verimli ve ne kadar ucuz? (RYGYO Modeli)
-        growth_discount_ratio = (roe / (pb + 1e-9)) if pb > 0 else 0.0
-        
-        # Faaliyet Marjı ve Gelir Büyümesi Gücü
-        margin_power = max(op_margin, 0.0) + max(rev_growth * 0.5, 0.0)
+        # 3. F/K Değerleme Puanı (Düşük ve Pozitif F/K Ödülü)
+        pe_score = (1.0 / max(pe, 1.0)) * 100.0 if pe > 0 else 0.0
 
-        # =========================================================================
-        # 3. MİKROYAPI & SÜPÜRME (SWEEP RATIO)
-        # =========================================================================
+        # 4. Kurumsal Süpürme & Mikroyapı
         range_span = high - low
-        if range_span > 0:
-            clv = ((close - low) - (high - close)) / range_span
-        else:
-            clv = 0.0
-            
+        clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.50) + (max(clv, 0) * 50.0)
         sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
 
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
-        item['growth_discount'] = round(growth_discount_ratio, 2)
-        item['margin_power'] = round(margin_power, 2)
+        item['growth_discount'] = round(growth_discount, 2)
+        item['margin_quality'] = round(margin_quality, 2)
+        item['pe_score'] = round(pe_score, 2)
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
-        item['is_fundamental_trash'] = is_fundamental_trash
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    # Yüzdelik Dilim Sıralaması
+    # =========================================================================
+    # 5. ÇAPRAZ KESİT FAKTÖR NORMALİZASYONU (PERCENTILE RANKING)
+    # =========================================================================
     res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
-    res_df['pct_margin'] = res_df['margin_power'].rank(pct=True) * 100.0
+    res_df['pct_margin'] = res_df['margin_quality'].rank(pct=True) * 100.0
+    res_df['pct_pe'] = res_df['pe_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
-    res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
 
-    # GELECEK QUANT SKORU:
-    # %35 Sermaye Verimlilik İskontosu (ROE/PB) + %25 Büyüme & Marj + %25 Süpürme + %15 Hacim
-    raw_score = np.round(
+    # Nihai Gelecek Quant Skoru:
+    # %35 Gelecek Büyüme İskontosu (ROE/PB) + %25 Marj & Gelir Gücü + %20 F/K + %20 Kurumsal Süpürme
+    res_df['quant_score'] = np.round(
         res_df['pct_growth'] * 0.35 + 
         res_df['pct_margin'] * 0.25 + 
-        res_df['pct_sweep'] * 0.25 + 
-        res_df['pct_vol_z'] * 0.15, 
+        res_df['pct_pe'] * 0.20 + 
+        res_df['pct_sweep'] * 0.20, 
         1
-    )
-    
-    # Çöp Şirketleri Sıfırla
-    res_df['quant_score'] = np.where(
-        (res_df['change_%'] >= 0) & (~res_df['is_fundamental_trash']),
-        raw_score,
-        0.0
     )
 
     # Rejim Sınıflandırması
     conditions = [
-        res_df['is_fundamental_trash'],
-        (res_df['quant_score'] >= 75.0) & (res_df['growth_discount'] >= 15.0),
-        (res_df['quant_score'] >= 55.0) & (res_df['pct_sweep'] >= 60.0),
-        (res_df['change_%'] < -1.5) & (res_df['vol_z'] >= 0.5)
+        (res_df['roe'] <= 0) | (res_df['net_margin'] < -5.0),
+        (res_df['quant_score'] >= 75.0) & (res_df['growth_discount'] >= 10.0),
+        (res_df['quant_score'] >= 55.0),
+        (res_df['change_%'] < -2.0) & (res_df['vol_z'] >= 1.0)
     ]
     choices = [
-        "🚨 TEMEL ÇÖP (KÖTÜ BİLANÇO/BORÇ)",
+        "🚨 ZOMBİ / DÜŞÜK KALİTE",
         "🏛️ BİLEŞİK BÜYÜME ŞAMPİYONU (COMPOUNDER)",
-        "⚡ KURUMSAL AKIŞ TOPLAMASI",
+        "⚡ SAĞLAM BİLANÇO & AKIŞ",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
-    res_df['regime'] = np.select(conditions, choices, default="NÖTR")
+    res_df['regime'] = np.select(conditions, choices, default="NÖTR KALİTE")
 
-    drop_cols = ['pct_growth', 'pct_margin', 'pct_sweep', 'pct_vol_z', 'is_fundamental_trash']
+    drop_cols = ['pct_growth', 'pct_margin', 'pct_pe', 'pct_sweep', 'pe_score', 'margin_quality']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne göre fark
