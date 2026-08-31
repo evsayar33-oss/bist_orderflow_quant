@@ -34,7 +34,6 @@ def calculate_quant_scores(df, df_gecmis):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        pe = float(item.get('pe', 15.0))
         pb = float(item.get('pb', 2.0))
         roe = float(item.get('roe', 15.0))
         net_margin = float(item.get('net_margin', 8.0))
@@ -44,28 +43,34 @@ def calculate_quant_scores(df, df_gecmis):
         perf_1y = float(item.get('perf_1y', 0.0))
 
         # =========================================================================
-        # 1. DEĞER TUZAĞI & DÜŞEN BIÇAK İNFAZ FİLTRESİ (ALARK & EDIP ENGELİ)
+        # 1. DEĞER TUZAĞI VE AŞIRI ŞİŞME KALKANI
         # =========================================================================
         is_value_trap = False
+        is_overextended = False
         
-        # Kural A: Son 3 ayda veya 6 ayda negatif getiri yapmışsa (Düşen Bıçak)
+        # Kural A: Düşen Bıçak (3A veya 6A getirisi eksi olanlar)
         if perf_3m < 0.0 or perf_6m < -5.0:
             is_value_trap = True
             
-        # Kural B: 1 Yıllık trendi zayıfsa ve 1 ayda eksiye geçmişse (Tükeniş)
-        if perf_1y < 0.0 and perf_1m < -3.0:
-            is_value_trap = True
+        # Kural B: TREN KAÇMIŞ / AŞIRI ŞİŞME (Son 1 ayda zaten %25'ten fazla fırlamışlar!)
+        # Bu kural seni son 30 günde zaten tavan tavan gitmiş hisselerin tepesinde yakalanmaktan korur!
+        if perf_1m > 25.0:
+            is_overextended = True
             
-        # Kural C: Zarar eden veya negatif ROE'li şirketler
+        # Kural C: Zarar eden şirketler
         if roe <= 0.0 or net_margin < 0.0:
             is_value_trap = True
 
         # =========================================================================
-        # 2. ORTA VADELİ LİDERLİK GÜCÜ (STAGE-2 TREND & COMPOUNDING)
+        # 2. DİNLENMİŞ LİDERLİK SKORU (CONSOLIDATION BREAKOUT)
         # =========================================================================
-        # Trend Süreklilik Skoru: 1A, 3A, 6A ve 1Y getirilerinin uyumu
-        trend_persistence = max(perf_1m, 0) * 0.2 + max(perf_3m, 0) * 0.3 + max(perf_6m, 0) * 0.3 + max(perf_1y * 0.1, 0) * 0.2
-        
+        # İdeal Profil: 6A ve 3A çok güçlü (+), ama son 1 ayda dinlenmiş (%0 - %18 arası)
+        consolidation_bonus = 0.0
+        if 0.0 <= perf_1m <= 18.0 and perf_6m >= 15.0:
+            consolidation_bonus = 40.0 # Dinlenip yeni kalkacaklara devasa bonus
+        elif 18.0 < perf_1m <= 25.0:
+            consolidation_bonus = 20.0
+            
         # Gordon Değerleme İskontosu (ROE / PB)
         growth_discount = (roe / max(pb, 0.3)) if roe > 0 else 0.0
 
@@ -78,11 +83,12 @@ def calculate_quant_scores(df, df_gecmis):
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
-        item['trend_persistence'] = round(trend_persistence, 1)
         item['growth_discount'] = round(growth_discount, 2)
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
+        item['consolidation_bonus'] = consolidation_bonus
         item['is_value_trap'] = is_value_trap
+        item['is_overextended'] = is_overextended
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
@@ -90,43 +96,44 @@ def calculate_quant_scores(df, df_gecmis):
         return res_df
 
     # Çapraz Kesit Sıralaması
-    res_df['pct_persistence'] = res_df['trend_persistence'].rank(pct=True) * 100.0
     res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
 
-    # LİDERLİK SKORU: %40 Orta Vadeli Trend Sürekliliği + %30 ROE İskontosu + %20 Süpürme + %10 Hacim
+    # LİDERLİK SKORU: %35 Büyüme İskontosu + %30 Süpürme + %25 Dinlenme Bonusu + %10 Hacim
     raw_score = np.round(
-        res_df['pct_persistence'] * 0.40 + 
-        res_df['pct_growth'] * 0.30 + 
-        res_df['pct_sweep'] * 0.20 + 
+        res_df['pct_growth'] * 0.35 + 
+        res_df['pct_sweep'] * 0.30 + 
+        res_df['consolidation_bonus'] * 0.25 + 
         res_df['pct_vol_z'] * 0.10, 
         1
     )
     
-    # Değer Tuzaklarını SIFIRLA
+    # Değer Tuzaklarını ve Aşırı Şişmiş Tepeleri SIFIRLA
     res_df['quant_score'] = np.where(
-        (~res_df['is_value_trap']),
+        (~res_df['is_value_trap']) & (~res_df['is_overextended']),
         raw_score,
         0.0
     )
 
     # Rejim Sınıflandırması
     conditions = [
+        res_df['is_overextended'],
         res_df['is_value_trap'],
-        (res_df['quant_score'] >= 75.0) & (res_df['perf_3m'] >= 10.0),
-        (res_df['quant_score'] >= 55.0),
+        (res_df['quant_score'] >= 70.0) & (res_df['consolidation_bonus'] > 0),
+        (res_df['quant_score'] >= 50.0),
         (res_df['change_%'] < -2.0) & (res_df['vol_z'] >= 0.5)
     ]
     choices = [
-        "🪤 DEĞER TUZAĞI (ALARK MODELİ DÜŞEN BIÇAK)",
-        "🏛️ ORTA VADELİ LİDER (RYGYO MODELİ)",
+        "🚫 TREN KAÇMIŞ (SON 1A > %25 AŞIRI PRİMLİ)",
+        "🪤 DEĞER TUZAĞI (DÜŞEN BIÇAK)",
+        "🚀 DİNLENMEDEN YENİ ATEŞLENEN LİDER",
         "⚡ POZİTİF TREND & AKIŞ",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_persistence', 'pct_growth', 'pct_sweep', 'pct_vol_z', 'is_value_trap', 'trend_persistence']
+    drop_cols = ['pct_growth', 'pct_sweep', 'pct_vol_z', 'consolidation_bonus', 'is_value_trap', 'is_overextended']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne göre fark
