@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 import os
 
-st.set_page_config(page_title="BIST Forward Quant & Compounder Terminal", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="BIST Medium-Term Leaders Terminal", layout="wide", page_icon="🏛️")
 
-st.title("🏛️ BIST Gelecek Değerleme & Compounder Terminali")
-st.markdown("*Geriye bakan SMA/EMA gibi çizgilerden arındırılmış; Gelecek Büyüme İskontosu (ROE/PB), Marj Genişlemesi ve Kurumsal Süpürme quant motoru.*")
+st.title("🏛️ BIST Orta Vadeli Liderler & Compounder Terminali")
+st.markdown("*ALARK ve EDIP gibi değer tuzaklarından arındırılmış; RYGYO modelinde orta vadeli trend sürekliliği ve kurumsal süpürme quant motoru.*")
 
 def load_data():
     if os.path.exists("gecmis_veri.csv"):
@@ -28,7 +28,7 @@ if not df_gecmis.empty:
     
     st.caption(f"🗓️ Son Tarama: **{son_tarih.strftime('%Y-%m-%d')}** | 📊 Taranan Hisse: **{len(df)}**")
 
-    required_cols = ['quant_score', 'score_diff', 'pe', 'pb', 'roe', 'op_margin', 'sweep_ratio', 'growth_discount', 'change_%']
+    required_cols = ['quant_score', 'score_diff', 'roe', 'growth_discount', 'sweep_ratio', 'perf_1m', 'perf_3m', 'perf_6m', 'change_%']
     for c in required_cols:
         if c not in df.columns:
             df[c] = 0.0
@@ -39,7 +39,7 @@ if not df_gecmis.empty:
         df['regime'] = 'NÖTR'
 
     # SIDEBAR
-    st.sidebar.header("🔍 Şirket Gelecek Değerleme Sorgu")
+    st.sidebar.header("🔍 Hisse Liderlik Sorgu")
     search_ticker = st.sidebar.text_input("Hisse Kodu (Örn: THYAO):").upper()
     
     if search_ticker:
@@ -49,16 +49,15 @@ if not df_gecmis.empty:
             diff = float(h_data['score_diff'].iloc[0])
             regime = h_data['regime'].iloc[0]
             roe_val = float(h_data['roe'].iloc[0])
-            pe_val = float(h_data['pe'].iloc[0])
-            pb_val = float(h_data['pb'].iloc[0])
-            op_m = float(h_data['op_margin'].iloc[0])
+            p1m = float(h_data['perf_1m'].iloc[0])
+            p3m = float(h_data['perf_3m'].iloc[0])
+            p6m = float(h_data['perf_6m'].iloc[0])
             sweep = float(h_data['sweep_ratio'].iloc[0])
             
-            st.sidebar.metric(f"{search_ticker} Quant Skoru", f"{score:.1f}", f"{diff:+.1f}")
-            st.sidebar.write(f"**Rejim:** {regime}")
+            st.sidebar.metric(f"{search_ticker} Liderlik Skoru", f"{score:.1f}", f"{diff:+.1f}")
+            st.sidebar.write(f"**Durum:** {regime}")
             st.sidebar.write(f"**Özsermaye Karlılığı (ROE):** %{roe_val:.1f}")
-            st.sidebar.write(f"**F/K:** {pe_val:.1f} | **PD/DD:** {pb_val:.2f}")
-            st.sidebar.write(f"**Faaliyet Kar Marjı:** %{op_m:.1f}")
+            st.sidebar.write(f"**3A / 6A Getiri:** %{p3m:+.1f} / %{p6m:+.1f}")
             st.sidebar.write(f"**Kurumsal Süpürme:** %{sweep:.1f}")
             
             st.sidebar.write("📈 Son 30 Günlük Skor:")
@@ -69,24 +68,24 @@ if not df_gecmis.empty:
         else:
             st.sidebar.warning("Hisse bulunamadı.")
 
-    # 1. ANA TABLO: BİLEŞİK BÜYÜME ŞAMPİYONLARI (TOP 20)
-    st.subheader("🚀 Bileşik Büyüme & Gelecek Değerleme Liderleri (Top 20)")
-    st.markdown("*Yüksek özsermaye karlılığına (ROE) sahip, geleceğe göre iskontolu ve kurumsal süpürmesi olan gerçek şirketler.*")
+    # 1. ANA TABLO: ORTA VADELİ GERÇEK LİDERLER
+    st.subheader("🚀 Orta Vadeli Trend Liderleri (Top 20)")
+    st.markdown("*Son 3 ve 6 ayda aralıksız pozitif giden, yüksek ROE'li ve kurumsal süpürmesi olan gerçek şampiyonlar.*")
     
-    top_candidates = df.sort_values(by='quant_score', ascending=False).head(20)
+    top_candidates = df[df['quant_score'] > 0.0].sort_values(by='quant_score', ascending=False).head(20)
     
-    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'roe', 'pe', 'pb', 'growth_discount', 'sweep_ratio', 'change_%']
+    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'roe', 'growth_discount', 'perf_3m', 'perf_6m', 'sweep_ratio', 'change_%']
     display_cols = [c for c in display_cols if c in df.columns]
     
     col_names = {
         'ticker': 'Hisse',
-        'quant_score': 'Gelecek Skoru',
+        'quant_score': 'Liderlik Skoru',
         'score_diff': 'İvme Farkı',
-        'regime': 'Kurumsal Rejim',
-        'roe': 'Özsermaye Karlılığı (ROE)',
-        'pe': 'F/K',
-        'pb': 'PD/DD',
+        'regime': 'Liderlik Durumu',
+        'roe': 'ROE (Karlılık %)',
         'growth_discount': 'Büyüme İskontosu',
+        'perf_3m': '3A Trend %',
+        'perf_6m': '6A Trend %',
         'sweep_ratio': 'Süpürme %',
         'change_%': 'Günlük %'
     }
@@ -95,11 +94,11 @@ if not df_gecmis.empty:
         st.dataframe(
             top_candidates[display_cols].rename(columns=col_names),
             column_config={
-                "Gelecek Skoru": st.column_config.ProgressColumn("Gelecek Skoru", min_value=0, max_value=100, format="%.1f"),
-                "Özsermaye Karlılığı (ROE)": st.column_config.NumberColumn("Özsermaye Karlılığı (ROE)", format="%%%0.1f"),
-                "F/K": st.column_config.NumberColumn("F/K", format="%.1f"),
-                "PD/DD": st.column_config.NumberColumn("PD/DD", format="%.2f"),
+                "Liderlik Skoru": st.column_config.ProgressColumn("Liderlik Skoru", min_value=0, max_value=100, format="%.1f"),
+                "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
                 "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
+                "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
+                "6A Trend %": st.column_config.NumberColumn("6A Trend %", format="%+0.1f%%"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
@@ -107,24 +106,26 @@ if not df_gecmis.empty:
             use_container_width=True,
             hide_index=True
         )
+    else:
+        st.info("ℹ️ Kriterleri karşılayan temiz bir lider bulunamadı.")
 
     st.divider()
 
-    # 2. DİSKALİFİYE EDİLENLER: ZOMBİ & ÇÖP ŞİRKETLER
-    st.subheader("🚨 Zombi & Düşük Kaliteli Şirketler (Uzak Dur)")
-    st.markdown("*Zarar eden, özsermaye karlılığı negatif veya aşırı pahalı çöp şirketler.*")
+    # 2. DİSKALİFİYE EDİLENLER: DEĞER TUZAKLARI
+    st.subheader("🪤 Değer Tuzakları & Düşen Bıçaklar (ALARK / EDIP Modeli - Uzak Dur)")
+    st.markdown("*Rasyosu ucuz görünse bile 3-6 aydır düşüş trendinde olan tehlikeli tuzaklar.*")
     
-    traps = df[df['regime'].str.contains('ZOMBİ|DUMP', na=False)].sort_values(by='roe', ascending=True).head(15)
+    traps = df[df['regime'].str.contains('DEĞER TUZAĞI|DUMP', na=False)].sort_values(by='perf_6m', ascending=True).head(15)
     
     if not traps.empty:
         st.dataframe(
             traps[display_cols].rename(columns=col_names),
             column_config={
-                "Gelecek Skoru": st.column_config.NumberColumn("Gelecek Skoru", format="%.1f"),
-                "Özsermaye Karlılığı (ROE)": st.column_config.NumberColumn("Özsermaye Karlılığı (ROE)", format="%%%0.1f"),
-                "F/K": st.column_config.NumberColumn("F/K", format="%.1f"),
-                "PD/DD": st.column_config.NumberColumn("PD/DD", format="%.2f"),
+                "Liderlik Skoru": st.column_config.NumberColumn("Liderlik Skoru", format="%.1f"),
+                "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
                 "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
+                "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
+                "6A Trend %": st.column_config.NumberColumn("6A Trend %", format="%+0.1f%%"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
