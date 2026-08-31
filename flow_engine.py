@@ -28,35 +28,48 @@ def calculate_quant_scores(df, df_gecmis):
         item = row.to_dict()
         
         close = float(item.get('close', 0.0))
-        open_p = float(item.get('open', close))
         high = float(item.get('high', close))
         low = float(item.get('low', close))
         change = float(item.get('change_%', 0.0))
-        value_traded = float(item.get('value_traded', 0.0))
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
         pe = float(item.get('pe', 15.0))
         pb = float(item.get('pb', 2.0))
         roe = float(item.get('roe', 15.0))
-        op_margin = float(item.get('op_margin', 10.0))
         net_margin = float(item.get('net_margin', 8.0))
-        rev_growth = float(item.get('rev_growth', 20.0))
+        perf_1m = float(item.get('perf_1m', 0.0))
+        perf_3m = float(item.get('perf_3m', 0.0))
+        perf_6m = float(item.get('perf_6m', 0.0))
+        perf_1y = float(item.get('perf_1y', 0.0))
 
         # =========================================================================
-        # 1. GORDON GELECEK BÜYÜME İSKONTOSU (JUSTIFIED VALUATION)
+        # 1. DEĞER TUZAĞI & DÜŞEN BIÇAK İNFAZ FİLTRESİ (ALARK & EDIP ENGELİ)
         # =========================================================================
-        # ROE / PB Oranı: Sermaye karlılığına göre en ucuz ve en kaliteli olanlar (RYGYO Modeli)
-        safe_pb = max(pb, 0.2)
-        growth_discount = (roe / safe_pb) if roe > 0 else (roe * 0.5)
+        is_value_trap = False
         
-        # 2. Operasyonel Karlılık & Marj Gücü
-        margin_quality = max(op_margin, 0.0) + max(net_margin, 0.0) + max(rev_growth * 0.3, 0.0)
+        # Kural A: Son 3 ayda veya 6 ayda negatif getiri yapmışsa (Düşen Bıçak)
+        if perf_3m < 0.0 or perf_6m < -5.0:
+            is_value_trap = True
+            
+        # Kural B: 1 Yıllık trendi zayıfsa ve 1 ayda eksiye geçmişse (Tükeniş)
+        if perf_1y < 0.0 and perf_1m < -3.0:
+            is_value_trap = True
+            
+        # Kural C: Zarar eden veya negatif ROE'li şirketler
+        if roe <= 0.0 or net_margin < 0.0:
+            is_value_trap = True
 
-        # 3. F/K Değerleme Puanı (Düşük ve Pozitif F/K Ödülü)
-        pe_score = (1.0 / max(pe, 1.0)) * 100.0 if pe > 0 else 0.0
+        # =========================================================================
+        # 2. ORTA VADELİ LİDERLİK GÜCÜ (STAGE-2 TREND & COMPOUNDING)
+        # =========================================================================
+        # Trend Süreklilik Skoru: 1A, 3A, 6A ve 1Y getirilerinin uyumu
+        trend_persistence = max(perf_1m, 0) * 0.2 + max(perf_3m, 0) * 0.3 + max(perf_6m, 0) * 0.3 + max(perf_1y * 0.1, 0) * 0.2
+        
+        # Gordon Değerleme İskontosu (ROE / PB)
+        growth_discount = (roe / max(pb, 0.3)) if roe > 0 else 0.0
 
-        # 4. Kurumsal Süpürme & Mikroyapı
+        # Mikroyapı Süpürme
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.50) + (max(clv, 0) * 50.0)
@@ -65,51 +78,55 @@ def calculate_quant_scores(df, df_gecmis):
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
+        item['trend_persistence'] = round(trend_persistence, 1)
         item['growth_discount'] = round(growth_discount, 2)
-        item['margin_quality'] = round(margin_quality, 2)
-        item['pe_score'] = round(pe_score, 2)
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
+        item['is_value_trap'] = is_value_trap
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    # =========================================================================
-    # 5. ÇAPRAZ KESİT FAKTÖR NORMALİZASYONU (PERCENTILE RANKING)
-    # =========================================================================
+    # Çapraz Kesit Sıralaması
+    res_df['pct_persistence'] = res_df['trend_persistence'].rank(pct=True) * 100.0
     res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
-    res_df['pct_margin'] = res_df['margin_quality'].rank(pct=True) * 100.0
-    res_df['pct_pe'] = res_df['pe_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
+    res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
 
-    # Nihai Gelecek Quant Skoru:
-    # %35 Gelecek Büyüme İskontosu (ROE/PB) + %25 Marj & Gelir Gücü + %20 F/K + %20 Kurumsal Süpürme
-    res_df['quant_score'] = np.round(
-        res_df['pct_growth'] * 0.35 + 
-        res_df['pct_margin'] * 0.25 + 
-        res_df['pct_pe'] * 0.20 + 
-        res_df['pct_sweep'] * 0.20, 
+    # LİDERLİK SKORU: %40 Orta Vadeli Trend Sürekliliği + %30 ROE İskontosu + %20 Süpürme + %10 Hacim
+    raw_score = np.round(
+        res_df['pct_persistence'] * 0.40 + 
+        res_df['pct_growth'] * 0.30 + 
+        res_df['pct_sweep'] * 0.20 + 
+        res_df['pct_vol_z'] * 0.10, 
         1
+    )
+    
+    # Değer Tuzaklarını SIFIRLA
+    res_df['quant_score'] = np.where(
+        (~res_df['is_value_trap']),
+        raw_score,
+        0.0
     )
 
     # Rejim Sınıflandırması
     conditions = [
-        (res_df['roe'] <= 0) | (res_df['net_margin'] < -5.0),
-        (res_df['quant_score'] >= 75.0) & (res_df['growth_discount'] >= 10.0),
+        res_df['is_value_trap'],
+        (res_df['quant_score'] >= 75.0) & (res_df['perf_3m'] >= 10.0),
         (res_df['quant_score'] >= 55.0),
-        (res_df['change_%'] < -2.0) & (res_df['vol_z'] >= 1.0)
+        (res_df['change_%'] < -2.0) & (res_df['vol_z'] >= 0.5)
     ]
     choices = [
-        "🚨 ZOMBİ / DÜŞÜK KALİTE",
-        "🏛️ BİLEŞİK BÜYÜME ŞAMPİYONU (COMPOUNDER)",
-        "⚡ SAĞLAM BİLANÇO & AKIŞ",
+        "🪤 DEĞER TUZAĞI (ALARK MODELİ DÜŞEN BIÇAK)",
+        "🏛️ ORTA VADELİ LİDER (RYGYO MODELİ)",
+        "⚡ POZİTİF TREND & AKIŞ",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
-    res_df['regime'] = np.select(conditions, choices, default="NÖTR KALİTE")
+    res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_growth', 'pct_margin', 'pct_pe', 'pct_sweep', 'pe_score', 'margin_quality']
+    drop_cols = ['pct_persistence', 'pct_growth', 'pct_sweep', 'pct_vol_z', 'is_value_trap', 'trend_persistence']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne göre fark
