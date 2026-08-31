@@ -69,13 +69,13 @@ if not df_gecmis.empty:
         else:
             st.sidebar.warning("Hisse bulunamadı.")
 
-    # 1. ANA TABLO: BİLEŞİK BÜYÜME ŞAMPİYONLARI
+    # 1. ANA TABLO: BİLEŞİK BÜYÜME ŞAMPİYONLARI (TOP 20)
     st.subheader("🚀 Bileşik Büyüme & Gelecek Değerleme Liderleri (Top 20)")
     st.markdown("*Yüksek özsermaye karlılığına (ROE) sahip, geleceğe göre iskontolu ve kurumsal süpürmesi olan gerçek şirketler.*")
     
-    top_candidates = df[df['quant_score'] > 0.0].sort_values(by='quant_score', ascending=False).head(20)
+    top_candidates = df.sort_values(by='quant_score', ascending=False).head(20)
     
-    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'roe', 'pe', 'pb', 'op_margin', 'sweep_ratio', 'change_%']
+    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'roe', 'pe', 'pb', 'growth_discount', 'sweep_ratio', 'change_%']
     display_cols = [c for c in display_cols if c in df.columns]
     
     col_names = {
@@ -86,7 +86,7 @@ if not df_gecmis.empty:
         'roe': 'Özsermaye Karlılığı (ROE)',
         'pe': 'F/K',
         'pb': 'PD/DD',
-        'op_margin': 'Faaliyet Marjı %',
+        'growth_discount': 'Büyüme İskontosu',
         'sweep_ratio': 'Süpürme %',
         'change_%': 'Günlük %'
     }
@@ -99,7 +99,7 @@ if not df_gecmis.empty:
                 "Özsermaye Karlılığı (ROE)": st.column_config.NumberColumn("Özsermaye Karlılığı (ROE)", format="%%%0.1f"),
                 "F/K": st.column_config.NumberColumn("F/K", format="%.1f"),
                 "PD/DD": st.column_config.NumberColumn("PD/DD", format="%.2f"),
-                "Faaliyet Marjı %": st.column_config.NumberColumn("Faaliyet Marjı %", format="%%%0.1f"),
+                "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
@@ -107,16 +107,14 @@ if not df_gecmis.empty:
             use_container_width=True,
             hide_index=True
         )
-    else:
-        st.info("ℹ️ Bugün kriterleri karşılayan temiz bir şirket bulunamadı.")
 
     st.divider()
 
     # 2. DİSKALİFİYE EDİLENLER: ZOMBİ & ÇÖP ŞİRKETLER
-    st.subheader("🚨 Zombi & İflas Riski Olan Şirketler (Uzak Dur)")
-    st.markdown("*Zarar eden, özsermayesini eriten veya yüksek borç batağındaki çöp şirketler.*")
+    st.subheader("🚨 Zombi & Düşük Kaliteli Şirketler (Uzak Dur)")
+    st.markdown("*Zarar eden, özsermaye karlılığı negatif veya aşırı pahalı çöp şirketler.*")
     
-    traps = df[df['regime'].str.contains('ÇÖP|BOŞALTIM', na=False)].sort_values(by='roe', ascending=True).head(15)
+    traps = df[df['regime'].str.contains('ZOMBİ|DUMP', na=False)].sort_values(by='roe', ascending=True).head(15)
     
     if not traps.empty:
         st.dataframe(
@@ -126,7 +124,7 @@ if not df_gecmis.empty:
                 "Özsermaye Karlılığı (ROE)": st.column_config.NumberColumn("Özsermaye Karlılığı (ROE)", format="%%%0.1f"),
                 "F/K": st.column_config.NumberColumn("F/K", format="%.1f"),
                 "PD/DD": st.column_config.NumberColumn("PD/DD", format="%.2f"),
-                "Faaliyet Marjı %": st.column_config.NumberColumn("Faaliyet Marjı %", format="%%%0.1f"),
+                "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
