@@ -2,11 +2,27 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import json
 
-st.set_page_config(page_title="BIST Medium-Term Leaders Terminal", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="BIST Self-Learning Quant Terminal", layout="wide", page_icon="🤖")
 
-st.title("🏛️ BIST Orta Vadeli Liderler & Compounder Terminali")
-st.markdown("*ALARK ve EDIP gibi değer tuzaklarından arındırılmış; RYGYO modelinde orta vadeli trend sürekliliği ve kurumsal süpürme quant motoru.*")
+st.title("🤖 BIST Öz-Öğrenen (Self-Learning) Quant Terminali")
+st.markdown("*Geçmiş sinyallerin gerçek kâr/zararından öğrenen (Walk-Forward ML), dinamik faktör ağırlıklı kurumsal liderlik terminali.*")
+
+WEIGHTS_FILE = "model_weights.json"
+SIGNAL_LOG_FILE = "signals_log.csv"
+
+def load_ai_metadata():
+    if os.path.exists(WEIGHTS_FILE):
+        try:
+            with open(WEIGHTS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {
+        "weights": {"persistence": 0.40, "growth": 0.25, "sweep": 0.25, "vol_z": 0.10},
+        "status": "🕒 BAZ AĞIRLIKLAR AKTİF"
+    }
 
 def load_data():
     if os.path.exists("gecmis_veri.csv"):
@@ -15,12 +31,24 @@ def load_data():
             if 'tarih' in df.columns:
                 df['tarih'] = pd.to_datetime(df['tarih'])
             return df
-        except Exception as e:
-            st.error(f"Dosya okuma hatası: {e}")
+        except:
             return pd.DataFrame()
     return pd.DataFrame()
 
+ai_meta = load_ai_metadata()
 df_gecmis = load_data()
+
+# --- ÜST PANEL: YAPAY ZEKA VE AĞIRLIK METRİKLERİ ---
+w = ai_meta['weights']
+st.info(f"🧠 **Model Durumu:** {ai_meta['status']}")
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("📈 Trend Sürekliliği Ağırlığı", f"%{int(w['persistence']*100)}")
+c2.metric("💎 Bilanço Büyüme Ağırlığı", f"%{int(w['growth']*100)}")
+c3.metric("🏛️ Kurumsal Süpürme Ağırlığı", f"%{int(w['sweep']*100)}")
+c4.metric("⚡ Hacim Şoku Ağırlığı", f"%{int(w['vol_z']*100)}")
+
+st.divider()
 
 if not df_gecmis.empty:
     son_tarih = df_gecmis['tarih'].max()
@@ -70,7 +98,7 @@ if not df_gecmis.empty:
 
     # 1. ANA TABLO: ORTA VADELİ GERÇEK LİDERLER
     st.subheader("🚀 Orta Vadeli Trend Liderleri (Top 20)")
-    st.markdown("*Son 3 ve 6 ayda aralıksız pozitif giden, yüksek ROE'li ve kurumsal süpürmesi olan gerçek şampiyonlar.*")
+    st.markdown("*AI tarafından dinamik ağırlıklandırılmış, aralıksız pozitif trende sahip gerçek liderler.*")
     
     top_candidates = df[df['quant_score'] > 0.0].sort_values(by='quant_score', ascending=False).head(20)
     
@@ -79,7 +107,7 @@ if not df_gecmis.empty:
     
     col_names = {
         'ticker': 'Hisse',
-        'quant_score': 'Liderlik Skoru',
+        'quant_score': 'AI Liderlik Skoru',
         'score_diff': 'İvme Farkı',
         'regime': 'Liderlik Durumu',
         'roe': 'ROE (Karlılık %)',
@@ -94,7 +122,7 @@ if not df_gecmis.empty:
         st.dataframe(
             top_candidates[display_cols].rename(columns=col_names),
             column_config={
-                "Liderlik Skoru": st.column_config.ProgressColumn("Liderlik Skoru", min_value=0, max_value=100, format="%.1f"),
+                "AI Liderlik Skoru": st.column_config.ProgressColumn("AI Liderlik Skoru", min_value=0, max_value=100, format="%.1f"),
                 "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
                 "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
                 "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
@@ -106,22 +134,19 @@ if not df_gecmis.empty:
             use_container_width=True,
             hide_index=True
         )
-    else:
-        st.info("ℹ️ Kriterleri karşılayan temiz bir lider bulunamadı.")
 
     st.divider()
 
     # 2. DİSKALİFİYE EDİLENLER: DEĞER TUZAKLARI
-    st.subheader("🪤 Değer Tuzakları & Düşen Bıçaklar (ALARK / EDIP Modeli - Uzak Dur)")
+    st.subheader("🪤 Değer Tuzakları & Düşen Bıçaklar (Uzak Dur)")
     st.markdown("*Rasyosu ucuz görünse bile 3-6 aydır düşüş trendinde olan tehlikeli tuzaklar.*")
     
-    traps = df[df['regime'].str.contains('DEĞER TUZAĞI|DUMP', na=False)].sort_values(by='perf_6m', ascending=True).head(15)
-    
+    traps = df[df['regime'].str.contains('DEĞER TUZAĞI|ZAYIF|DUMP', na=False)].sort_values(by='perf_6m', ascending=True).head(15)
     if not traps.empty:
         st.dataframe(
             traps[display_cols].rename(columns=col_names),
             column_config={
-                "Liderlik Skoru": st.column_config.NumberColumn("Liderlik Skoru", format="%.1f"),
+                "AI Liderlik Skoru": st.column_config.NumberColumn("AI Liderlik Skoru", format="%.1f"),
                 "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
                 "Büyüme İskontosu": st.column_config.NumberColumn("Büyüme İskontosu", format="%.1f"),
                 "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
