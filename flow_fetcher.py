@@ -4,25 +4,27 @@ import numpy as np
 import concurrent.futures
 from datetime import datetime
 
-def get_bist_fundamental_data():
-    """TradingView üzerinden geleceğe dönük bilanço ve değerleme verilerini çeker."""
+def get_bist_leader_data():
+    """TradingView üzerinden çoklu zaman dilimi trendleri ve bilanço verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
             {"left": "type", "operation": "equal", "right": "stock"},
-            {"left": "Value.Traded", "operation": "greater", "right": 8000000} # Min 8M TL Likidite
+            {"left": "Value.Traded", "operation": "greater", "right": 8000000}
         ],
         "columns": [
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
-            "price_earnings_ttm",      # F/K
-            "price_book_fq",           # PD/DD
-            "return_on_equity_fq",     # Özsermaye Karlılığı (ROE %)
-            "return_on_assets_fq",     # Varlık Karlılığı (ROA %)
-            "operating_margin",        # Faaliyet Kar Marjı %
-            "net_margin",              # Net Kar Marjı %
-            "total_debt_to_equity_fq", # Toplam Borç / Özsermaye
-            "total_revenue_growth_yoy",# Gelir Büyümesi %
-            "relative_volume_10d_calc" # Hacim Katı
+            "price_earnings_ttm",
+            "price_book_fq",
+            "return_on_equity_fq",
+            "operating_margin",
+            "net_margin",
+            "total_revenue_growth_yoy",
+            "Perf.1M",
+            "Perf.3M",
+            "Perf.6M",
+            "Perf.Y",
+            "relative_volume_10d_calc"
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 300]
@@ -48,23 +50,24 @@ def get_bist_fundamental_data():
                 "volume": float(d[5]) if d[5] is not None else 0.0,
                 "change_%": float(d[6]) if d[6] is not None else 0.0,
                 "value_traded": float(d[7]) if d[7] is not None else 0.0,
-                "pe": float(d[8]) if d[8] is not None else 999.0,
-                "pb": float(d[9]) if d[9] is not None else 999.0,
-                "roe": float(d[10]) if d[10] is not None else 0.0,
-                "roa": float(d[11]) if d[11] is not None else 0.0,
-                "op_margin": float(d[12]) if d[12] is not None else 0.0,
-                "net_margin": float(d[13]) if d[13] is not None else 0.0,
-                "debt_to_equity": float(d[14]) if d[14] is not None else 99.0,
-                "rev_growth": float(d[15]) if d[15] is not None else 0.0,
-                "rvol": float(d[16]) if len(d) > 16 and d[16] is not None else 1.0
+                "pe": float(d[8]) if d[8] is not None else 15.0,
+                "pb": float(d[9]) if d[9] is not None else 2.0,
+                "roe": float(d[10]) if d[10] is not None else 15.0,
+                "op_margin": float(d[11]) if d[11] is not None else 10.0,
+                "net_margin": float(d[12]) if d[12] is not None else 8.0,
+                "rev_growth": float(d[13]) if d[13] is not None else 15.0,
+                "perf_1m": float(d[14]) if d[14] is not None else 0.0,
+                "perf_3m": float(d[15]) if d[15] is not None else 0.0,
+                "perf_6m": float(d[16]) if d[16] is not None else 0.0,
+                "perf_1y": float(d[17]) if d[17] is not None else 0.0,
+                "rvol": float(d[18]) if len(d) > 18 and d[18] is not None else 1.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
-        print(f"Bilanço Verisi Hatası: {e}")
+        print(f"Veri Hatası: {e}")
         return pd.DataFrame()
 
 def fetch_single_broker_flow(ticker):
-    """İş Yatırım üzerinden kurum takas konsantrasyonunu sorgular."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.YatirimDanismanligi/PiyasaVerileri.aspx/GetHisseTakasData"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -87,8 +90,8 @@ def fetch_single_broker_flow(ticker):
     return ticker, 0.0, 0.0
 
 def fetch_all_data():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Geleceğe dönük bilanço ve mikroyapı verileri çekiliyor...")
-    df_market = get_bist_fundamental_data()
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Çoklu zaman dilimi ve liderlik verileri çekiliyor...")
+    df_market = get_bist_leader_data()
     if df_market.empty:
         return df_market
 
