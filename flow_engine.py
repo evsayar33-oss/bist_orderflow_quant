@@ -22,9 +22,6 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
     if df.empty: 
         return df
 
-    if dynamic_weights is None:
-        dynamic_weights = {"persistence": 0.40, "growth": 0.25, "sweep": 0.25, "vol_z": 0.10}
-
     scored_data = []
 
     for idx, row in df.iterrows():
@@ -37,115 +34,109 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        pb = float(item.get('pb', 2.0))
-        roe = float(item.get('roe', 15.0))
-        net_margin = float(item.get('net_margin', 8.0))
+        donch_upper = float(item.get('donch_upper', 0.0))
+        donch_lower = float(item.get('donch_lower', 0.0))
         perf_w = float(item.get('perf_w', 0.0))
         perf_1m = float(item.get('perf_1m', 0.0))
-        perf_3m = float(item.get('perf_3m', 0.0))
-        perf_6m = float(item.get('perf_6m', 0.0))
-        perf_1y = float(item.get('perf_1y', 0.0))
+        roe = float(item.get('roe', 15.0))
+        pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. KESİN DİSKALİFİYE FİLTRELERİ (AŞIRI PRİM & DÜŞEN BIÇAK)
+        # 1. TAZE PİVOT KIRILIMI & TABANDAN UZAKLIK HESABI (DAY 1-2 BREAKOUT)
         # =========================================================================
-        is_disqualified = False
-        disqualify_reason = "NÖTR"
+        # 20 Günlük Zirveye Yakınlık Oranı (1.0 = Tam Zirvede/Kırıyor)
+        pivot_proximity = (close / donch_upper) if donch_upper > 0 else 0.8
         
-        # Kural A: GÜNLÜK EKSİ KAPATANLAR ASLA LİSTEYE GİREMEZ!
-        if change <= 0.0:
-            is_disqualified = True
-            disqualify_reason = "🚨 GÜNLÜK EKSİ / DÜŞÜŞTE"
-            
-        # Kural B: SON 1-2 HAFTADA ZATEN PATLAMIŞ OLANLAR (TRENİ KAÇANLAR)
-        # Eğer son 1 haftada %18'den fazla prim yaptıysa yeni giriş için R:R çok kötüdür!
-        elif perf_w > 18.0 or perf_1m > 45.0:
-            is_disqualified = True
-            disqualify_reason = "🚫 TREN KAÇTI (1-2 HAFTALIK AŞIRI PRİM)"
-            
-        # Kural C: Düşen Bıçak & Testere (6A < %15 veya 3A < %8)
-        elif perf_6m < 15.0 or perf_3m < 8.0:
-            is_disqualified = True
-            disqualify_reason = "🪤 DÜŞEN BIÇAK / TESTERE"
-            
-        # Kural D: Zarar eden şirketler
-        elif roe <= 0.0 or net_margin < 0.0:
-            is_disqualified = True
-            disqualify_reason = "🚨 ZOMBİ BİLANÇO"
-
-        # =========================================================================
-        # 2. DİNLENMİŞ ORTA VADELİ LİDERLİK SKORU
-        # =========================================================================
-        # İdeal Durum: 3A ve 6A çok güçlü (+), ama son 1-2 haftadır dinlenmiş (-%2 ile +%12 arası)
-        trend_persistence = (
-            max(perf_1m, 0.0) * 0.20 + 
-            max(perf_3m, 0.0) * 0.40 + 
-            max(perf_6m, 0.0) * 0.30 + 
-            max(perf_1y * 0.1, 0.0) * 0.10
-        )
+        # 20 Günlük Tabandan Uzaklık (Ne kadar azsa patlama o kadar tazedir!)
+        base_range = donch_upper - donch_lower
+        distance_from_base = ((close - donch_lower) / (donch_lower + 1e-9)) * 100.0 if donch_lower > 0 else 50.0
         
-        # 1-2 haftadır dinlenip yeni kalkan hisseye bonus
-        if -2.0 <= perf_w <= 12.0 and perf_6m >= 15.0:
-            trend_persistence *= 1.30 # Dinlenmiş lider bonusu
+        # 20 Günlük Taban Sıkışma Genişliği (Dar bant = Büyük Yaylanma)
+        base_tightness = (base_range / (close + 1e-9)) if close > 0 else 0.5
 
-        growth_discount = (roe / max(pb, 0.3)) if roe > 0 else 0.0
+        # --- KIRILIM TAZELİK PUANI (0 - 100) ---
+        freshness_score = 0.0
+        if pivot_proximity >= 0.98:  # 20 Günün Zirvesini Tam Bugün Kırıyor!
+            freshness_score += 50.0
+            if distance_from_base <= 12.0:  # Tabandan sadece %0-%12 uzakta (Yeni Başlıyor!)
+                freshness_score += 50.0
+            elif distance_from_base <= 20.0:
+                freshness_score += 30.0
+            else:
+                freshness_score += 10.0  # Zaten çok primlenmişse az puan ver
+        elif pivot_proximity >= 0.94:
+            freshness_score += 30.0
+            if distance_from_base <= 10.0:
+                freshness_score += 30.0
 
+        # =========================================================================
+        # 2. HACİMLİ ATEŞLEME & EMİR AKIŞI (IGNITION FLOW)
+        # =========================================================================
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
-        sweep_ratio = (f_ratio * 0.50) + (max(clv, 0) * 50.0)
+        sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
         sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
 
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
-        item['trend_persistence'] = round(trend_persistence, 1)
-        item['growth_discount'] = round(growth_discount, 2)
+        # Temel Sağlık Çarpanı (ROE pozitif olanlara destek)
+        quality_score = 50.0
+        if roe >= 20.0: quality_score += 30.0
+        elif roe > 0.0: quality_score += 15.0
+        if pb <= 5.0: quality_score += 20.0
+
+        item['pivot_proximity'] = round(pivot_proximity * 100.0, 1)
+        item['distance_from_base'] = round(distance_from_base, 1)
+        item['freshness_score'] = freshness_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
-        item['is_disqualified'] = is_disqualified
-        item['disqualify_reason'] = disqualify_reason
+        item['quality_score'] = quality_score
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    # 3. NORMALİZASYON
-    res_df['pct_persistence'] = res_df['trend_persistence'].rank(pct=True) * 100.0
-    res_df['pct_growth'] = res_df['growth_discount'].rank(pct=True) * 100.0
+    # Yüzdelik Normalizasyon
+    res_df['pct_fresh'] = res_df['freshness_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
-    res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
+    res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
+    res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
 
-    w_p = dynamic_weights.get('persistence', 0.40)
-    w_g = dynamic_weights.get('growth', 0.25)
-    w_s = dynamic_weights.get('sweep', 0.25)
-    w_v = dynamic_weights.get('vol_z', 0.10)
-
+    # NİHAİ TAZE KIRILIM SKORU:
+    # %40 Kırılım Tazeliği & Taban Yakınlığı + %25 Süpürme + %20 Hacim Şoku + %15 Temel Kalite
     raw_score = np.round(
-        res_df['pct_persistence'] * w_p + 
-        res_df['pct_growth'] * w_g + 
-        res_df['pct_sweep'] * w_s + 
-        res_df['pct_vol_z'] * w_v, 
+        res_df['pct_fresh'] * 0.40 + 
+        res_df['pct_sweep'] * 0.25 + 
+        res_df['pct_vol'] * 0.20 + 
+        res_df['pct_qual'] * 0.15, 
         1
     )
     
-    # DİSKALİFİYE EDİLENLERİ KESİNLİKLE SIFIRLA!
-    res_df['quant_score'] = np.where((~res_df['is_disqualified']), raw_score, 0.0)
+    # Sadece o gün pozitif kapatanları ve tabandan %25'ten fazla uzaklaşmamışları ödüllendir
+    res_df['quant_score'] = np.where(
+        (res_df['change_%'] > 0.0) & (res_df['distance_from_base'] <= 35.0),
+        raw_score,
+        np.round(raw_score * 0.10, 1) # Treni kaçmış olanları tabana at
+    )
 
-    # Rejim Tespiti
+    # Rejim Sınıflandırması
     conditions = [
-        res_df['is_disqualified'],
-        (res_df['quant_score'] >= 75.0) & (res_df['perf_w'] <= 12.0),
-        (res_df['quant_score'] >= 75.0)
+        (res_df['distance_from_base'] > 35.0),
+        (res_df['quant_score'] >= 75.0) & (res_df['freshness_score'] >= 70.0),
+        (res_df['quant_score'] >= 60.0),
+        (res_df['change_%'] < -1.5)
     ]
     choices = [
-        res_df['disqualify_reason'],
-        "🚀 DİNLENMEDEN YENİ KALKAN LİDER (DAY-1/2)",
-        "🏛️ ORTA VADELİ LİDER (RYGYO MODELİ)"
+        "🚫 TREN KAÇTI (TABANDAN AŞIRI UZAK)",
+        "🚀 TAZE TABAN KIRILIMI (DAY 1-2 PİVOT)",
+        "⚡ KIRILIM ADAYI (SIKIŞMA BÖLGESİ)",
+        "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['trend_persistence', 'is_disqualified', 'disqualify_reason']
+    drop_cols = ['pct_fresh', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'freshness_score']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne Göre Skor Farkı
