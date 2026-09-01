@@ -28,36 +28,34 @@ def send_telegram_message(message):
         print(f"Telegram hatası: {e}")
 
 def format_quant_report(df_scored):
-    # En yüksek puanlı taze kırılım liderleri
     leaders = df_scored[df_scored['quant_score'] >= 50.0].head(10)
     
-    msg = "🏛️ <b>BIST TAZE TABAN KIRILIM RAPORU (DAY 1-2)</b>\n"
+    msg = "🏛️ <b>BIST DİPTEN İLK KIRILIM RAPORU (STAGE-1)</b>\n"
     msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Saat: 17:00 Kapanış</i>\n"
-    msg += "<i>(Pivottan yeni kopan, taze kırılım liderleri)</i>\n"
+    msg += "<i>(Önceden koşmuş hisseler elenmiş, 3 aylık tabandan YENİ KOPANLAR seçilmiştir)</i>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
     
     if leaders.empty:
-        msg += "ℹ️ <i>Bugün yeni bir taban kırılımı tespit edilemedi.</i>"
+        msg += "ℹ️ <i>Bugün 3 aylık tabanından ilk defa kalkan taze bir lider bulunamadı.</i>"
         return msg
 
     for idx, row in leaders.iterrows():
         s_diff = row.get('score_diff', 0)
         fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
-        p_dist = row.get('pivot_distance', 0.0)
         
         msg += f"🚀 <b>#{row['ticker']}</b> ── <b>[Skor: {row['quant_score']:.1f}]</b> <i>({fark_str})</i>\n"
         msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (<b>%{row['change_%']:+.2f}</b>)\n"
-        msg += f"🎯 Pivottan Uzaklık: <b>%{p_dist:+.1f}</b> (Taze Kırılım!)\n"
-        msg += f"📊 Hacim Z: <b>+{row.get('vol_z', 0.0):.1f}σ</b> | Süpürme: <b>%{row.get('sweep_ratio', 0.0):.1f}</b>\n"
-        msg += f"🏷 Durum: <code>{row.get('regime', 'NÖTR')}</code>\n\n"
+        msg += f"🎯 3A Dipten Uzaklık: <b>%{row['dist_from_3m_low']:.1f}</b> (Dipten Yeni Kalkıyor!)\n"
+        msg += f"📊 3A Dirence Mesafe: <b>%{row['pivot_3m_dist']:+.1f}</b> | Süpürme: <b>%{row['sweep_ratio']:.1f}</b>\n"
+        msg += f"🏷 Durum: <code>{row['regime']}</code>\n\n"
         
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "⚡ <i>Strateji: 20 Günlük Zirve Kırılım Noktasına (Pivot) Yakın Liderler</i>"
+    msg += "⚡ <i>Strateji: 3 Aylık Uykudan Yeni Uyanan Birinci Aşama (Stage-1) Liderler</i>"
     
     return msg
 
 def main():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] === Fresh Breakout Scanner Başlıyor ===")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === Stage-1 Fresh Breakout Scanner Başlıyor ===")
     
     df_current = fetch_all_data()
     if df_current.empty:
