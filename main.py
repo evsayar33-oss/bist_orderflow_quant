@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import os
 import requests
-import json
 from datetime import datetime
 
 from flow_fetcher import fetch_all_data
@@ -29,12 +28,12 @@ def send_telegram_message(message):
         print(f"Telegram hatası: {e}")
 
 def format_quant_report(df_scored):
-    # En yüksek puanlı ilk 10 taze kırılım lideri
-    leaders = df_scored[df_scored['quant_score'] >= 60.0].head(10)
+    # En yüksek puanlı taze kırılım liderleri
+    leaders = df_scored[df_scored['quant_score'] >= 50.0].head(10)
     
     msg = "🏛️ <b>BIST TAZE TABAN KIRILIM RAPORU (DAY 1-2)</b>\n"
     msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Saat: 17:00 Kapanış</i>\n"
-    msg += "<i>(Haftalar önce yükselenler elenmiş, tabandan YENİ KOPANLAR seçilmiştir)</i>\n"
+    msg += "<i>(Pivottan yeni kopan, taze kırılım liderleri)</i>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
     
     if leaders.empty:
@@ -44,15 +43,16 @@ def format_quant_report(df_scored):
     for idx, row in leaders.iterrows():
         s_diff = row.get('score_diff', 0)
         fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
+        p_dist = row.get('pivot_distance', 0.0)
         
         msg += f"🚀 <b>#{row['ticker']}</b> ── <b>[Skor: {row['quant_score']:.1f}]</b> <i>({fark_str})</i>\n"
         msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (<b>%{row['change_%']:+.2f}</b>)\n"
-        msg += f"🎯 Tabandan Uzaklık: <b>%{row['distance_from_base']:.1f}</b> (Taze Kırılım!)\n"
-        msg += f"📊 Hacim Z: <b>+{row['vol_z']:.1f}σ</b> | Süpürme: <b>%{row['sweep_ratio']:.1f}</b>\n"
-        msg += f"🏷 Durum: <code>{row['regime']}</code>\n\n"
+        msg += f"🎯 Pivottan Uzaklık: <b>%{p_dist:+.1f}</b> (Taze Kırılım!)\n"
+        msg += f"📊 Hacim Z: <b>+{row.get('vol_z', 0.0):.1f}σ</b> | Süpürme: <b>%{row.get('sweep_ratio', 0.0):.1f}</b>\n"
+        msg += f"🏷 Durum: <code>{row.get('regime', 'NÖTR')}</code>\n\n"
         
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "⚡ <i>Strateji: 20 Günlük Sıkışmadan Yeni Kalkan Liderler</i>"
+    msg += "⚡ <i>Strateji: 20 Günlük Zirve Kırılım Noktasına (Pivot) Yakın Liderler</i>"
     
     return msg
 
