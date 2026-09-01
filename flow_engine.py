@@ -1,142 +1,93 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import os
-import warnings
+import requests
+from datetime import datetime
 
-warnings.filterwarnings('ignore')
+from flow_fetcher import fetch_all_data
+from flow_engine import calculate_quant_scores, gecmis_veriyi_yukle, GECMIS_DOSYA
 
-GECMIS_DOSYA = "gecmis_veri.csv"
+def send_telegram_message(message):
+    token = os.environ.get('TELEGRAM_TOKEN')
+    chat_id = os.environ.get('CHAT_ID')
+    
+    if not token or not chat_id:
+        print("Telegram Token veya Chat ID bulunamadı.")
+        return
 
-def gecmis_veriyi_yukle():
-    if os.path.exists(GECMIS_DOSYA):
-        try:
-            df = pd.read_csv(GECMIS_DOSYA)
-            if 'tarih' in df.columns:
-                df['tarih'] = pd.to_datetime(df['tarih'])
-            return df
-        except: 
-            return pd.DataFrame()
-    return pd.DataFrame()
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Telegram hatası: {e}")
 
-def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
-    if df.empty: 
-        return df
+def format_quant_report(df_scored):
+    # En yüksek puanlı ilk 10 dip uyanış hissesi
+    leaders = df_scored[df_scored['quant_score'] >= 50.0].head(10)
+    
+    msg = "🏛️ <b>BIST DİP AKÜMÜLASYON VE TABAN UYANIŞ RAPORU</b>\n"
+    msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Saat: 17:00 Kapanış</i>\n"
+    msg += "<i>(Zirvedeki hisseler elenmiş, tabandan İLK DEFA UYANANLAR seçilmiştir)</i>\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    if leaders.empty:
+        msg += "ℹ️ <i>Bugün taban bölgesinden uyanış yapan yeni bir hisse bulunamadı.</i>"
+        return msg
 
-    scored_data = []
-
-    for idx, row in df.iterrows():
-        item = row.to_dict()
+    for idx, row in leaders.iterrows():
+        s_diff = row.get('score_diff', 0)
+        fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
+        d_supp = row.get('dist_from_support', 0.0)
+        r_pos = row.get('range_position', 50.0)
         
-        close = float(item.get('close', 0.0))
-        high = float(item.get('high', close))
-        low = float(item.get('low', close))
-        change = float(item.get('change_%', 0.0))
-        rvol = float(item.get('rvol', 1.0))
-        f_ratio = float(item.get('foreign_ratio', 20.0))
+        msg += f"🎯 <b>#{row['ticker']}</b> ── <b>[Skor: {row['quant_score']:.1f}]</b> <i>({fark_str})</i>\n"
+        msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (<b>%{row['change_%']:+.2f}</b>)\n"
+        msg += f"📍 Taban Konumu: <b>Kanalın %{r_pos:.0f}'si</b> | Dipten Uzaklık: <b>%{d_supp:+.1f}</b>\n"
+        msg += f"📊 Hacim Z: <b>+{row.get('vol_z', 0.0):.1f}σ</b> | Süpürme: <b>%{row.get('sweep_ratio', 0.0):.1f}</b>\n"
+        msg += f"🏷 Durum: <code>{row.get('regime', 'NÖTR')}</code>\n\n"
         
-        high_1m = float(item.get('high_1m', close))
-        low_1m = float(item.get('low_1m', close))
-        perf_w = float(item.get('perf_w', 0.0))
-        perf_1m = float(item.get('perf_1m', 0.0))
-        roe = float(item.get('roe', 15.0))
-        pb = float(item.get('pb', 2.0))
+    msg += "━━━━━━━━━━━━━━━━━━━━\n"
+    msg += "⚡ <i>Strateji: Zirveden Değil, Destek Tabanından Kurumsal Alışla Kalkanlar</i>"
+    
+    return msg
 
-        # =========================================================================
-        # 1. 20 GÜNLÜK PİVOT KIRILIM NOKTASI (DAY-1 / DAY-2 BREAKOUT)
-        # =========================================================================
-        # 20 Günlük Zirveden Sapma % (0% = Tam Kırıyor, +3% = Yeni Kırdı)
-        pivot_dist = ((close - high_1m) / (high_1m + 1e-9)) * 100.0 if high_1m > 0 else 0.0
-        
-        # Kırılım Tazelik Puanı (Kırılım noktasına ne kadar yakınsa o kadar yüksek puan)
-        # -%2 ile +%4 arasında olan hisseler 100 tam puan alır!
-        pivot_score = max(100.0 - abs(pivot_dist - 1.0) * 12.0, 10.0)
+def main():
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] === Bottom Accumulation Scanner Başlıyor ===")
+    
+    df_current = fetch_all_data()
+    if df_current.empty:
+        print("Hata: Piyasa verisi alınamadı.")
+        return
 
-        # 2. 20 Günlük Taban Sıkışma Genişliği (Dar Taban = Güçlü Enerji)
-        base_width = ((high_1m - low_1m) / (close + 1e-9)) * 100.0 if close > 0 else 25.0
-        tightness_score = max(100.0 - base_width * 2.5, 15.0)
+    df_gecmis = gecmis_veriyi_yukle()
+    df_scored = calculate_quant_scores(df_current, df_gecmis)
+    
+    if df_scored.empty:
+        print("Puanlanmış veri boş döndü.")
+        return
 
-        # =========================================================================
-        # 3. AŞIRI ŞİŞME CEZASI (SON 1 HAFTADA %18+ KOŞANLARI AŞAĞI BASTIRIR)
-        # =========================================================================
-        # Son 1 haftada zaten çok primlenmiş hisselerin puanını kademeli kısar
-        extension_penalty = 1.0
-        if perf_w > 12.0:
-            extension_penalty = max(1.0 - (perf_w - 12.0) * 0.04, 0.20)
+    if not df_gecmis.empty:
+        bugun = pd.Timestamp.now().normalize()
+        df_gecmis = df_gecmis[df_gecmis['tarih'] != bugun]
+        df_yeni_gecmis = pd.concat([df_gecmis, df_scored], ignore_index=True)
+    else:
+        df_yeni_gecmis = df_scored
 
-        # 4. KURUMSAL SÜPÜRME VE HACİM
-        range_span = high - low
-        clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
-        sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
-        sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
+    df_yeni_gecmis['tarih'] = pd.to_datetime(df_yeni_gecmis['tarih'])
+    limit_tarih = pd.Timestamp.now().normalize() - pd.Timedelta(days=30)
+    df_yeni_gecmis = df_yeni_gecmis[df_yeni_gecmis['tarih'] >= limit_tarih]
+    
+    df_yeni_gecmis.to_csv(GECMIS_DOSYA, index=False)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Başarılı! {GECMIS_DOSYA} kaydedildi.")
 
-        vol_z = float((rvol - 1.0) * 1.85)
-        vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
+    telegram_msg = format_quant_report(df_scored)
+    send_telegram_message(telegram_msg)
 
-        quality_score = 50.0
-        if roe >= 15.0: quality_score += 30.0
-        if pb <= 5.0: quality_score += 20.0
-
-        item['pivot_dist'] = round(pivot_dist, 1)
-        item['base_width'] = round(base_width, 1)
-        item['pivot_score'] = pivot_score
-        item['tightness_score'] = tightness_score
-        item['sweep_ratio'] = sweep_ratio
-        item['vol_z'] = vol_z
-        item['quality_score'] = quality_score
-        item['extension_penalty'] = extension_penalty
-        scored_data.append(item)
-
-    res_df = pd.DataFrame(scored_data)
-    if res_df.empty: 
-        return res_df
-
-    # Yüzdelik Normalizasyon
-    res_df['pct_pivot'] = res_df['pivot_score'].rank(pct=True) * 100.0
-    res_df['pct_tight'] = res_df['tightness_score'].rank(pct=True) * 100.0
-    res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
-    res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
-
-    # NİHAİ PUAN: %35 Kırılım Noktası + %25 Taban Sıkışması + %25 Süpürme + %15 Hacim
-    raw_score = (
-        res_df['pct_pivot'] * 0.35 + 
-        res_df['pct_tight'] * 0.25 + 
-        res_df['pct_sweep'] * 0.25 + 
-        res_df['pct_vol'] * 0.15
-    ) * res_df['extension_penalty']
-
-    raw_score = np.round(np.clip(raw_score, 0.0, 99.5), 1)
-
-    # Sadece o gün pozitif kapatanlar tam puan alır
-    res_df['quant_score'] = np.where(
-        res_df['change_%'] > 0.0,
-        raw_score,
-        np.round(raw_score * 0.15, 1)
-    )
-
-    # Rejim Tespiti
-    conditions = [
-        (res_df['perf_w'] > 20.0),
-        (res_df['quant_score'] >= 75.0) & (res_df['pivot_dist'].between(-2.0, 4.0)),
-        (res_df['quant_score'] >= 55.0),
-        (res_df['change_%'] < -1.5)
-    ]
-    choices = [
-        "🚫 TREN KAÇTI (HAFTALIK AŞIRI PRİM)",
-        "🚀 TAZE TABAN KIRILIMI (DAY 1-2 PİVOT)",
-        "⚡ KIRILIM ADAYI (SIKIŞMA)",
-        "🚨 KURUMSAL BOŞALTIM (DUMP)"
-    ]
-    res_df['regime'] = np.select(conditions, choices, default="NÖTR")
-
-    drop_cols = ['pct_pivot', 'pct_tight', 'pct_sweep', 'pct_vol', 'pivot_score', 'tightness_score', 'extension_penalty']
-    res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
-
-    # Düne Göre Fark
-    res_df['score_diff'] = 0.0
-    if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
-        son_tarih = df_gecmis['tarih'].max()
-        df_son = df_gecmis[df_gecmis['tarih'] == son_tarih]
-        eski_map = dict(zip(df_son['ticker'], df_son['quant_score']))
-        res_df['score_diff'] = np.round(res_df['quant_score'] - res_df['ticker'].map(eski_map).fillna(res_df['quant_score']), 1)
-
-    return res_df.sort_values(by='quant_score', ascending=False).reset_index(drop=True)
+if __name__ == "__main__":
+    main()
