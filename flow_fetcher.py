@@ -4,8 +4,8 @@ import numpy as np
 import concurrent.futures
 from datetime import datetime
 
-def get_bist_fresh_breakout_data():
-    """TradingView üzerinden 20 günlük zirve (High.1M), taban (Low.1M) ve hacim verilerini çeker."""
+def get_bist_accumulation_data():
+    """TradingView üzerinden dip, tepe, hacim ve mikroyapı verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
@@ -14,11 +14,11 @@ def get_bist_fresh_breakout_data():
         ],
         "columns": [
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
-            "High.1M",                 # 20 Günlük Zirve Kırılım Seviyesi
-            "Low.1M",                  # 20 Günlük Taban Seviyesi
-            "relative_volume_10d_calc",# RVOL
-            "Perf.W",                  # 1 Haftalık Prim %
-            "Perf.1M",                 # 1 Aylık Prim %
+            "High.1M",                 # 1 Aylık Zirve (Direnç)
+            "Low.1M",                  # 1 Aylık Dip (Destek Tabanı)
+            "relative_volume_10d_calc",# RVOL (Hacim Katı)
+            "Perf.W",                  # 1 Haftalık Prim
+            "Perf.1M",                 # 1 Aylık Prim
             "return_on_equity_fq",     # ROE
             "price_book_fq"            # PD/DD
         ],
@@ -37,21 +37,21 @@ def get_bist_fresh_breakout_data():
         rows = []
         for item in data.get("data", []):
             d = item["d"]
-            close_val = float(d[1]) if d[1] is not None else 0.0
-            high_val = float(d[3]) if d[3] is not None else close_val
-            low_val = float(d[4]) if d[4] is not None else close_val
+            close_p = float(d[1]) if d[1] is not None else 0.0
+            high_p = float(d[3]) if d[3] is not None else close_p
+            low_p = float(d[4]) if d[4] is not None else close_p
             
             rows.append({
                 "ticker": d[0],
-                "close": close_val,
-                "open": float(d[2]) if d[2] is not None else close_val,
-                "high": high_val,
-                "low": low_val,
+                "close": close_p,
+                "open": float(d[2]) if d[2] is not None else close_p,
+                "high": high_p,
+                "low": low_p,
                 "volume": float(d[5]) if d[5] is not None else 0.0,
                 "change_%": float(d[6]) if d[6] is not None else 0.0,
                 "value_traded": float(d[7]) if d[7] is not None else 0.0,
-                "high_1m": float(d[8]) if d[8] is not None else high_val,
-                "low_1m": float(d[9]) if d[9] is not None else low_val,
+                "high_1m": float(d[8]) if d[8] is not None else high_p,
+                "low_1m": float(d[9]) if d[9] is not None else low_p,
                 "rvol": float(d[10]) if len(d) > 10 and d[10] is not None else 1.0,
                 "perf_w": float(d[11]) if len(d) > 11 and d[11] is not None else 0.0,
                 "perf_1m": float(d[12]) if len(d) > 12 and d[12] is not None else 0.0,
@@ -86,8 +86,8 @@ def fetch_single_broker_flow(ticker):
     return ticker, 0.0, 0.0
 
 def fetch_all_data():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 20 günlük taze taban ve kırılım verileri çekiliyor...")
-    df_market = get_bist_fresh_breakout_data()
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Dip akümülasyon ve taban verileri çekiliyor...")
+    df_market = get_bist_accumulation_data()
     if df_market.empty:
         return df_market
 
