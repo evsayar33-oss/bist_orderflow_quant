@@ -2,26 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-import json
 
-st.set_page_config(page_title="BIST Medium-Term Leaders Terminal", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="BIST Fresh Breakout Terminal", layout="wide", page_icon="🏛️")
 
-st.title("🏛️ BIST Orta Vadeli Liderler Terminali")
-st.markdown("*Son 1-2 haftada aşırı primlenmiş veya o gün eksi kapatan hisselerden arındırılmış; sadece **75+ Genel Puanı ve Pozitif İvmesi olan** gerçek liderler.*")
-
-WEIGHTS_FILE = "model_weights.json"
-
-def load_ai_metadata():
-    if os.path.exists(WEIGHTS_FILE):
-        try:
-            with open(WEIGHTS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
-    return {
-        "weights": {"persistence": 0.40, "growth": 0.25, "sweep": 0.25, "vol_z": 0.10},
-        "status": "🕒 BAZ AĞIRLIKLAR AKTİF"
-    }
+st.title("🏛️ BIST Taze Taban Kırılım & Liderlik Terminali")
+st.markdown("*Haftalar öncesinden yükselmiş treni kaçan hisseleri eleyen; **20 günlük sıkışma tabanından YENİ KOPAN (Day 1-2)** taze hisseleri bulan Quant Motoru.*")
 
 def load_data():
     if os.path.exists("gecmis_veri.csv"):
@@ -34,20 +19,7 @@ def load_data():
             return pd.DataFrame()
     return pd.DataFrame()
 
-ai_meta = load_ai_metadata()
 df_gecmis = load_data()
-
-# ÜST AI PANELİ
-w = ai_meta['weights']
-st.info(f"🧠 **Model Durumu:** {ai_meta['status']}")
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("📈 Trend Sürekliliği Ağırlığı", f"%{int(w['persistence']*100)}")
-c2.metric("💎 Bilanço Büyüme Ağırlığı", f"%{int(w['growth']*100)}")
-c3.metric("🏛️ Kurumsal Süpürme Ağırlığı", f"%{int(w['sweep']*100)}")
-c4.metric("⚡ Hacim Şoku Ağırlığı", f"%{int(w['vol_z']*100)}")
-
-st.divider()
 
 if not df_gecmis.empty:
     son_tarih = df_gecmis['tarih'].max()
@@ -55,7 +27,7 @@ if not df_gecmis.empty:
     
     st.caption(f"🗓️ Son Tarama: **{son_tarih.strftime('%Y-%m-%d')}** | 📊 Taranan Hisse: **{len(df)}**")
 
-    required_cols = ['quant_score', 'score_diff', 'roe', 'growth_discount', 'sweep_ratio', 'perf_w', 'perf_1m', 'perf_3m', 'perf_6m', 'change_%']
+    required_cols = ['quant_score', 'score_diff', 'pivot_proximity', 'distance_from_base', 'sweep_ratio', 'vol_z', 'perf_w', 'perf_1m', 'change_%', 'close']
     for c in required_cols:
         if c not in df.columns:
             df[c] = 0.0
@@ -66,7 +38,7 @@ if not df_gecmis.empty:
         df['regime'] = 'NÖTR'
 
     # SIDEBAR
-    st.sidebar.header("🔍 Hisse Liderlik Sorgu")
+    st.sidebar.header("🔍 Hisse Kırılım Sorgu")
     search_ticker = st.sidebar.text_input("Hisse Kodu (Örn: THYAO):").upper()
     
     if search_ticker:
@@ -75,17 +47,14 @@ if not df_gecmis.empty:
             score = float(h_data['quant_score'].iloc[0])
             diff = float(h_data['score_diff'].iloc[0])
             regime = h_data['regime'].iloc[0]
-            roe_val = float(h_data['roe'].iloc[0])
-            pw = float(h_data['perf_w'].iloc[0])
-            p3m = float(h_data['perf_3m'].iloc[0])
-            p6m = float(h_data['perf_6m'].iloc[0])
+            dist_base = float(h_data['distance_from_base'].iloc[0])
+            p_prox = float(h_data['pivot_proximity'].iloc[0])
             sweep = float(h_data['sweep_ratio'].iloc[0])
             
-            st.sidebar.metric(f"{search_ticker} Liderlik Skoru", f"{score:.1f}", f"{diff:+.1f}")
+            st.sidebar.metric(f"{search_ticker} Kırılım Skoru", f"{score:.1f}", f"{diff:+.1f}")
             st.sidebar.write(f"**Durum:** {regime}")
-            st.sidebar.write(f"**Özsermaye Karlılığı (ROE):** %{roe_val:.1f}")
-            st.sidebar.write(f"**1 Haftalık Prim:** %{pw:+.1f}")
-            st.sidebar.write(f"**3A / 6A Getiri:** %{p3m:+.1f} / %{p6m:+.1f}")
+            st.sidebar.write(f"**Tabandan Uzaklık:** %{dist_base:.1f}")
+            st.sidebar.write(f"**20G Zirve Yakınlığı:** %{p_prox:.1f}")
             st.sidebar.write(f"**Kurumsal Süpürme:** %{sweep:.1f}")
             
             st.sidebar.write("📈 Son 30 Günlük Skor:")
@@ -96,69 +65,68 @@ if not df_gecmis.empty:
         else:
             st.sidebar.warning("Hisse bulunamadı.")
 
-    # 1. ANA TABLO: SADECE 75+ VE POZİTİF OLANLAR
-    st.subheader("🚀 Orta Vadeli Trend Liderleri (75+ Puan & Pozitif İvme)")
-    st.markdown("*Son 1-2 haftada aşırı primlenmemiş, dinlenmeden yeni kalkan ve o gün mutlaka pozitif (+) olan liderler.*")
+    # 1. ANA TABLO: TAZE TABAN KIRILIMLARI (TOP 20)
+    st.subheader("🚀 Taze Taban Kırılım Liderleri (Top 20)")
+    st.markdown("*20 günlük zirvesini yeni kıran, tabanına yakın (%0-%15) taze Day 1-2 hisseleri.*")
     
-    top_candidates = df[
-        (df['quant_score'] >= 75.0) & 
-        (df['change_%'] > 0.0) & 
-        (df['score_diff'] >= 0.0)
-    ].sort_values(by='quant_score', ascending=False)
+    top_candidates = df[df['quant_score'] > 0.0].sort_values(by='quant_score', ascending=False).head(20)
     
-    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'roe', 'perf_w', 'perf_3m', 'perf_6m', 'sweep_ratio', 'change_%']
+    display_cols = ['ticker', 'quant_score', 'score_diff', 'regime', 'distance_from_base', 'pivot_proximity', 'vol_z', 'sweep_ratio', 'perf_w', 'change_%', 'close']
     display_cols = [c for c in display_cols if c in df.columns]
     
     col_names = {
         'ticker': 'Hisse',
-        'quant_score': 'Liderlik Skoru',
+        'quant_score': 'Kırılım Skoru',
         'score_diff': 'İvme Farkı',
-        'regime': 'Liderlik Durumu',
-        'roe': 'ROE (Karlılık %)',
-        'perf_w': '1H Prim %',
-        'perf_3m': '3A Trend %',
-        'perf_6m': '6A Trend %',
+        'regime': 'Kırılım Durumu',
+        'distance_from_base': 'Tabandan Uzaklık %',
+        'pivot_proximity': '20G Zirve %',
+        'vol_z': 'Hacim Z',
         'sweep_ratio': 'Süpürme %',
-        'change_%': 'Günlük %'
+        'perf_w': '1H %',
+        'change_%': 'Günlük %',
+        'close': 'Fiyat (TL)'
     }
     
     if not top_candidates.empty:
         st.dataframe(
             top_candidates[display_cols].rename(columns=col_names),
             column_config={
-                "Liderlik Skoru": st.column_config.ProgressColumn("Liderlik Skoru", min_value=0, max_value=100, format="%.1f"),
-                "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
-                "1H Prim %": st.column_config.NumberColumn("1H Prim %", format="%+0.1f%%"),
-                "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
-                "6A Trend %": st.column_config.NumberColumn("6A Trend %", format="%+0.1f%%"),
+                "Kırılım Skoru": st.column_config.ProgressColumn("Kırılım Skoru", min_value=0, max_value=100, format="%.1f"),
+                "Tabandan Uzaklık %": st.column_config.NumberColumn("Tabandan Uzaklık %", format="%+0.1f%%"),
+                "20G Zirve %": st.column_config.NumberColumn("20G Zirve %", format="%0.1f%%"),
+                "Hacim Z": st.column_config.NumberColumn("Hacim Z", format="%+.2fσ"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
+                "1H %": st.column_config.NumberColumn("1H %", format="%+0.1f%%"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
+                "Fiyat (TL)": st.column_config.NumberColumn("Fiyat (TL)", format="%.2f TL"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
             },
             use_container_width=True,
             hide_index=True
         )
     else:
-        st.info("ℹ️ Bugün 75 puan ve üzeri kriteri karşılayan (pozitif) yeni bir orta vadeli lider bulunamadı.")
+        st.info("ℹ️ Bugün kriterleri karşılayan taze bir taban kırılımı bulunamadı.")
 
     st.divider()
 
-    # 2. DİSKALİFİYE EDİLENLER: TRENİ KAÇANLAR & TUZAKLAR
-    st.subheader("🚫 Diskalifiye Edilenler (Treni Kaçanlar & Tuzaklar - Uzak Dur)")
-    st.markdown("*Son 1-2 haftada zaten aşırı primlenmiş (%18+) veya o gün eksi kapatan hisseler.*")
+    # 2. DİSKALİFİYE EDİLENLER: TRENİ KAÇANLAR
+    st.subheader("🚫 Treni Kaçanlar (Tabandan Aşırı Uzaklaşmış - Uzak Dur)")
+    st.markdown("*Tabanından %35'ten fazla uzaklaşmış, tepede tükeniş yaşayan hisseler.*")
     
-    traps = df[df['regime'].str.contains('TREN KAÇTI|DÜŞEN BIÇAK|EKSİ|ZOMBİ', na=False)].sort_values(by='perf_w', ascending=False).head(15)
+    traps = df[df['regime'].str.contains('TREN KAÇTI|DUMP', na=False)].sort_values(by='distance_from_base', ascending=False).head(15)
     if not traps.empty:
         st.dataframe(
             traps[display_cols].rename(columns=col_names),
             column_config={
-                "Liderlik Skoru": st.column_config.NumberColumn("Liderlik Skoru", format="%.1f"),
-                "ROE (Karlılık %)": st.column_config.NumberColumn("ROE (Karlılık %)", format="%%%0.1f"),
-                "1H Prim %": st.column_config.NumberColumn("1H Prim %", format="%+0.1f%%"),
-                "3A Trend %": st.column_config.NumberColumn("3A Trend %", format="%+0.1f%%"),
-                "6A Trend %": st.column_config.NumberColumn("6A Trend %", format="%+0.1f%%"),
+                "Kırılım Skoru": st.column_config.NumberColumn("Kırılım Skoru", format="%.1f"),
+                "Tabandan Uzaklık %": st.column_config.NumberColumn("Tabandan Uzaklık %", format="%+0.1f%%"),
+                "20G Zirve %": st.column_config.NumberColumn("20G Zirve %", format="%0.1f%%"),
+                "Hacim Z": st.column_config.NumberColumn("Hacim Z", format="%+.2fσ"),
                 "Süpürme %": st.column_config.NumberColumn("Süpürme %", format="%%%0.1f"),
+                "1H %": st.column_config.NumberColumn("1H %", format="%+0.1f%%"),
                 "Günlük %": st.column_config.NumberColumn("Günlük %", format="%+0.2f%%"),
+                "Fiyat (TL)": st.column_config.NumberColumn("Fiyat (TL)", format="%.2f TL"),
                 "İvme Farkı": st.column_config.NumberColumn("İvme Farkı", format="%+0.1f")
             },
             use_container_width=True,
