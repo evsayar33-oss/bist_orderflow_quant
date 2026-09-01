@@ -4,8 +4,8 @@ import numpy as np
 import concurrent.futures
 from datetime import datetime
 
-def get_bist_leader_data():
-    """TradingView üzerinden çoklu zaman dilimi trendleri, haftalık prim ve bilanço verilerini çeker."""
+def get_bist_fresh_breakout_data():
+    """TradingView üzerinden 20 günlük taban, kırılım ve hacim verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
@@ -14,18 +14,13 @@ def get_bist_leader_data():
         ],
         "columns": [
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
-            "price_earnings_ttm",
-            "price_book_fq",
-            "return_on_equity_fq",
-            "operating_margin",
-            "net_margin",
-            "total_revenue_growth_yoy",
-            "Perf.W",                  # 1 Haftalık Prim % (YENİ EKLENDİ)
-            "Perf.1M",
-            "Perf.3M",
-            "Perf.6M",
-            "Perf.Y",
-            "relative_volume_10d_calc"
+            "DonchChnl.upper",         # 20 Günlük Zirve (Pivot Kırılım Seviyesi)
+            "DonchChnl.lower",         # 20 Günlük Taban Seviyesi
+            "relative_volume_10d_calc",# Hacim Artış Katı (RVOL)
+            "Perf.W",                  # 1 Haftalık Değişim
+            "Perf.1M",                 # 1 Aylık Değişim
+            "return_on_equity_fq",     # ROE
+            "price_book_fq"            # PD/DD
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 300]
@@ -51,18 +46,13 @@ def get_bist_leader_data():
                 "volume": float(d[5]) if d[5] is not None else 0.0,
                 "change_%": float(d[6]) if d[6] is not None else 0.0,
                 "value_traded": float(d[7]) if d[7] is not None else 0.0,
-                "pe": float(d[8]) if d[8] is not None else 15.0,
-                "pb": float(d[9]) if d[9] is not None else 2.0,
-                "roe": float(d[10]) if d[10] is not None else 15.0,
-                "op_margin": float(d[11]) if d[11] is not None else 10.0,
-                "net_margin": float(d[12]) if d[12] is not None else 8.0,
-                "rev_growth": float(d[13]) if d[13] is not None else 15.0,
-                "perf_w": float(d[14]) if d[14] is not None else 0.0,
-                "perf_1m": float(d[15]) if d[15] is not None else 0.0,
-                "perf_3m": float(d[16]) if d[16] is not None else 0.0,
-                "perf_6m": float(d[17]) if d[17] is not None else 0.0,
-                "perf_1y": float(d[18]) if d[18] is not None else 0.0,
-                "rvol": float(d[19]) if len(d) > 19 and d[19] is not None else 1.0
+                "donch_upper": float(d[8]) if d[8] is not None else 0.0,
+                "donch_lower": float(d[9]) if d[9] is not None else 0.0,
+                "rvol": float(d[10]) if len(d) > 10 and d[10] is not None else 1.0,
+                "perf_w": float(d[11]) if len(d) > 11 and d[11] is not None else 0.0,
+                "perf_1m": float(d[12]) if len(d) > 12 and d[12] is not None else 0.0,
+                "roe": float(d[13]) if len(d) > 13 and d[13] is not None else 15.0,
+                "pb": float(d[14]) if len(d) > 14 and d[14] is not None else 2.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -92,8 +82,8 @@ def fetch_single_broker_flow(ticker):
     return ticker, 0.0, 0.0
 
 def fetch_all_data():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Çoklu zaman dilimi ve liderlik verileri çekiliyor...")
-    df_market = get_bist_leader_data()
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Taze taban kırılım ve pivot verileri çekiliyor...")
+    df_market = get_bist_fresh_breakout_data()
     if df_market.empty:
         return df_market
 
