@@ -40,28 +40,54 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         pb = float(item.get('pb', 2.0))
         roe = float(item.get('roe', 15.0))
         net_margin = float(item.get('net_margin', 8.0))
+        perf_w = float(item.get('perf_w', 0.0))
         perf_1m = float(item.get('perf_1m', 0.0))
         perf_3m = float(item.get('perf_3m', 0.0))
         perf_6m = float(item.get('perf_6m', 0.0))
         perf_1y = float(item.get('perf_1y', 0.0))
 
-        # 1. DEĞER TUZAĞI VE TESTERE İNFAZ KALKANI
-        is_weak_or_trap = False
-        if perf_6m < 15.0 or perf_3m < 8.0 or perf_1m < 1.0:
-            is_weak_or_trap = True
-        if perf_1y < 10.0 or perf_1m > 60.0:
-            is_weak_or_trap = True
-        if roe <= 0.0 or net_margin < 0.0:
-            is_weak_or_trap = True
+        # =========================================================================
+        # 1. KESİN DİSKALİFİYE FİLTRELERİ (AŞIRI PRİM & DÜŞEN BIÇAK)
+        # =========================================================================
+        is_disqualified = False
+        disqualify_reason = "NÖTR"
+        
+        # Kural A: GÜNLÜK EKSİ KAPATANLAR ASLA LİSTEYE GİREMEZ!
+        if change <= 0.0:
+            is_disqualified = True
+            disqualify_reason = "🚨 GÜNLÜK EKSİ / DÜŞÜŞTE"
+            
+        # Kural B: SON 1-2 HAFTADA ZATEN PATLAMIŞ OLANLAR (TRENİ KAÇANLAR)
+        # Eğer son 1 haftada %18'den fazla prim yaptıysa yeni giriş için R:R çok kötüdür!
+        elif perf_w > 18.0 or perf_1m > 45.0:
+            is_disqualified = True
+            disqualify_reason = "🚫 TREN KAÇTI (1-2 HAFTALIK AŞIRI PRİM)"
+            
+        # Kural C: Düşen Bıçak & Testere (6A < %15 veya 3A < %8)
+        elif perf_6m < 15.0 or perf_3m < 8.0:
+            is_disqualified = True
+            disqualify_reason = "🪤 DÜŞEN BIÇAK / TESTERE"
+            
+        # Kural D: Zarar eden şirketler
+        elif roe <= 0.0 or net_margin < 0.0:
+            is_disqualified = True
+            disqualify_reason = "🚨 ZOMBİ BİLANÇO"
 
-        # 2. FAKTÖR HESAPLAMALARI
+        # =========================================================================
+        # 2. DİNLENMİŞ ORTA VADELİ LİDERLİK SKORU
+        # =========================================================================
+        # İdeal Durum: 3A ve 6A çok güçlü (+), ama son 1-2 haftadır dinlenmiş (-%2 ile +%12 arası)
         trend_persistence = (
-            max(perf_1m, 0.0) * 0.25 + 
-            max(perf_3m, 0.0) * 0.35 + 
-            max(perf_6m, 0.0) * 0.25 + 
-            max(perf_1y * 0.1, 0.0) * 0.15
+            max(perf_1m, 0.0) * 0.20 + 
+            max(perf_3m, 0.0) * 0.40 + 
+            max(perf_6m, 0.0) * 0.30 + 
+            max(perf_1y * 0.1, 0.0) * 0.10
         )
         
+        # 1-2 haftadır dinlenip yeni kalkan hisseye bonus
+        if -2.0 <= perf_w <= 12.0 and perf_6m >= 15.0:
+            trend_persistence *= 1.30 # Dinlenmiş lider bonusu
+
         growth_discount = (roe / max(pb, 0.3)) if roe > 0 else 0.0
 
         range_span = high - low
@@ -76,7 +102,8 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         item['growth_discount'] = round(growth_discount, 2)
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
-        item['is_weak_or_trap'] = is_weak_or_trap
+        item['is_disqualified'] = is_disqualified
+        item['disqualify_reason'] = disqualify_reason
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
@@ -89,7 +116,6 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol_z'] = res_df['vol_z'].rank(pct=True) * 100.0
 
-    # 4. DİNAMİK YAPAY ZEKA AĞIRLIKLARIYLA NİHAİ SKOR HESABI
     w_p = dynamic_weights.get('persistence', 0.40)
     w_g = dynamic_weights.get('growth', 0.25)
     w_s = dynamic_weights.get('sweep', 0.25)
@@ -103,28 +129,26 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         1
     )
     
-    # Tuzakları Sıfırla
-    res_df['quant_score'] = np.where((~res_df['is_weak_or_trap']), raw_score, 0.0)
+    # DİSKALİFİYE EDİLENLERİ KESİNLİKLE SIFIRLA!
+    res_df['quant_score'] = np.where((~res_df['is_disqualified']), raw_score, 0.0)
 
-    # Rejim Sınıflandırması
+    # Rejim Tespiti
     conditions = [
-        res_df['is_weak_or_trap'],
-        (res_df['quant_score'] >= 75.0) & (res_df['perf_3m'] >= 15.0),
-        (res_df['quant_score'] >= 55.0),
-        (res_df['change_%'] < -2.0) & (res_df['vol_z'] >= 0.5)
+        res_df['is_disqualified'],
+        (res_df['quant_score'] >= 75.0) & (res_df['perf_w'] <= 12.0),
+        (res_df['quant_score'] >= 75.0)
     ]
     choices = [
-        "🪤 ZAYIF / TESTERE / TUZAK (UZAK DUR)",
-        "🏛️ ORTA VADELİ LİDER (RYGYO MODELİ)",
-        "⚡ POZİTİF TREND & AKIŞ",
-        "🚨 KURUMSAL BOŞALTIM (DUMP)"
+        res_df['disqualify_reason'],
+        "🚀 DİNLENMEDEN YENİ KALKAN LİDER (DAY-1/2)",
+        "🏛️ ORTA VADELİ LİDER (RYGYO MODELİ)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['is_weak_or_trap', 'trend_persistence']
+    drop_cols = ['trend_persistence', 'is_disqualified', 'disqualify_reason']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
-    # Düne göre fark
+    # Düne Göre Skor Farkı
     res_df['score_diff'] = 0.0
     if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
         son_tarih = df_gecmis['tarih'].max()
