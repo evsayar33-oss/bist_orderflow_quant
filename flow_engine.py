@@ -34,38 +34,47 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        high_1m = float(item.get('high_1m', close))
-        low_1m = float(item.get('low_1m', close))
+        high_3m = float(item.get('high_3m', close))
+        low_3m = float(item.get('low_3m', close))
+        perf_3m = float(item.get('perf_3m', 0.0))
+        perf_6m = float(item.get('perf_6m', 0.0))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. GERÇEK 1 AYLIK ZİRVE (PİVOT) UZAKLIĞI %
+        # 1. AGESA TİPİ ÖNCEDEN KOŞMUŞLARI İNFAZ ETME (STAGE-1 DİP FİLTRESİ)
         # =========================================================================
-        # Zirveye mesafe: -%2 ile +%4 arası = TAM KIRILIM ANI!
-        if high_1m > 0:
-            pivot_distance = ((close - high_1m) / high_1m) * 100.0
-        else:
-            pivot_distance = 0.0
+        is_prior_runner = False
+        
+        # A. 3 Aylık Dip Fiyattan Uzaklık (AGESA %35 uzaktaydı, elenir!)
+        dist_from_3m_low = ((close - low_3m) / (low_3m + 1e-9)) * 100.0 if low_3m > 0 else 50.0
+        if dist_from_3m_low > 20.0:  # Dipten %20'den fazla uzaklaşmışsa önceden koşmuştur!
+            is_prior_runner = True
             
-        base_width = ((high_1m - low_1m) / (close + 1e-9)) * 100.0 if close > 0 else 25.0
+        # B. 3A veya 6A Prim Tavanı (Daha önce ralli yapmış olanları sil)
+        if perf_3m > 20.0 or perf_6m > 30.0:
+            is_prior_runner = True
 
-        # Kırılım Tazelik Puanı
+        # =========================================================================
+        # 2. 3 AYLIK DİRENÇ KIRILIMI & SIKIŞMA PUANI
+        # =========================================================================
+        # 3 Aylık Zirveye Uzaklık (Tam bugün kırıyor mu?)
+        pivot_3m_dist = ((close - high_3m) / (high_3m + 1e-9)) * 100.0 if high_3m > 0 else 0.0
+        
+        # 3 Aylık Taban Genişliği (Ne kadar dar alanda uyumuşsa o kadar taze patlar)
+        base_width_3m = ((high_3m - low_3m) / (close + 1e-9)) * 100.0 if close > 0 else 30.0
+
         freshness_score = 0.0
-        if -3.0 <= pivot_distance <= 5.0:   # 1 Aylık zirveyi tam bugün kıranlar!
-            freshness_score += 65.0
-            if base_width <= 25.0:
-                freshness_score += 35.0
-            elif base_width <= 35.0:
-                freshness_score += 20.0
-        elif 5.0 < pivot_distance <= 10.0:  # Kırılımın 2. günü
-            freshness_score += 45.0
-        elif pivot_distance > 12.0:         # Tren kaçmış, aşırı primli
-            freshness_score = 5.0
-        else:
-            freshness_score = 20.0
+        if -3.0 <= pivot_3m_dist <= 5.0:    # 3 Aylık uykudan TAM BUGÜN uyananlar!
+            freshness_score += 70.0
+            if dist_from_3m_low <= 12.0:   # Dipten sadece %0-%12 yukarıda (TAM DİPTEN İLK KIRILIM)
+                freshness_score += 30.0
+            elif dist_from_3m_low <= 18.0:
+                freshness_score += 15.0
+        elif 5.0 < pivot_3m_dist <= 10.0 and dist_from_3m_low <= 18.0:
+            freshness_score += 50.0
 
-        # 2. SÜPÜRME VE HACİM
+        # 3. MİKROYAPI SÜPÜRME
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
@@ -78,19 +87,19 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         if roe >= 15.0: quality_score += 30.0
         if pb <= 5.0: quality_score += 20.0
 
-        item['pivot_distance'] = round(pivot_distance, 1)
-        item['base_width'] = round(base_width, 1)
+        item['pivot_3m_dist'] = round(pivot_3m_dist, 1)
+        item['dist_from_3m_low'] = round(dist_from_3m_low, 1)
         item['freshness_score'] = freshness_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
         item['quality_score'] = quality_score
+        item['is_prior_runner'] = is_prior_runner
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    # Yüzdelik Normalizasyon
     res_df['pct_fresh'] = res_df['freshness_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
@@ -104,32 +113,32 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         1
     )
     
-    # Sadece o gün pozitif kapatan ve 1 aylık zirveyi %12'den fazla aşmamış taze kırılımlar
+    # AGESA TİPİ ÖNCEDEN KOŞANLARI VE EKSİLERİ KESİNLİKLE SIFIRLA!
     res_df['quant_score'] = np.where(
-        (res_df['change_%'] > 0.0) & (res_df['pivot_distance'] <= 12.0),
+        (res_df['change_%'] > 0.0) & (~res_df['is_prior_runner']) & (res_df['freshness_score'] >= 50.0),
         raw_score,
         0.0
     )
 
     # Rejim Tespiti
     conditions = [
-        (res_df['pivot_distance'] > 12.0),
-        (res_df['quant_score'] >= 70.0) & (res_df['freshness_score'] >= 60.0),
+        res_df['is_prior_runner'],
+        (res_df['quant_score'] >= 70.0),
         (res_df['quant_score'] >= 50.0),
         (res_df['change_%'] < -1.5)
     ]
     choices = [
-        "🚫 TREN KAÇTI (PİVOTTAN AŞIRI UZAK)",
-        "🚀 TAZE TABAN KIRILIMI (DAY 1-2 PİVOT)",
-        "⚡ KIRILIM ADAYI (SIKIŞMA)",
+        "🚫 ÖNCEDEN KOŞMUŞ (AGESA TİPİ DİSKALİFİYE)",
+        "🚀 DİPTEN İLK KIRILIM (STAGE-1 PRIMARY BASE)",
+        "⚡ DİPTE SIKIŞMA (KIRILIM ADAYI)",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_fresh', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'freshness_score']
+    drop_cols = ['pct_fresh', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'freshness_score', 'is_prior_runner']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
-    # Düne Göre Skor Farkı
+    # Düne Göre Fark
     res_df['score_diff'] = 0.0
     if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
         son_tarih = df_gecmis['tarih'].max()
