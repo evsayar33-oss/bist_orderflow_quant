@@ -5,7 +5,7 @@ import concurrent.futures
 from datetime import datetime
 
 def get_bist_leader_data():
-    """TradingView üzerinden çoklu zaman dilimi trendleri ve bilanço verilerini çeker."""
+    """TradingView üzerinden çoklu zaman dilimi trendleri, haftalık prim ve bilanço verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
@@ -20,6 +20,7 @@ def get_bist_leader_data():
             "operating_margin",
             "net_margin",
             "total_revenue_growth_yoy",
+            "Perf.W",                  # 1 Haftalık Prim % (YENİ EKLENDİ)
             "Perf.1M",
             "Perf.3M",
             "Perf.6M",
@@ -56,11 +57,12 @@ def get_bist_leader_data():
                 "op_margin": float(d[11]) if d[11] is not None else 10.0,
                 "net_margin": float(d[12]) if d[12] is not None else 8.0,
                 "rev_growth": float(d[13]) if d[13] is not None else 15.0,
-                "perf_1m": float(d[14]) if d[14] is not None else 0.0,
-                "perf_3m": float(d[15]) if d[15] is not None else 0.0,
-                "perf_6m": float(d[16]) if d[16] is not None else 0.0,
-                "perf_1y": float(d[17]) if d[17] is not None else 0.0,
-                "rvol": float(d[18]) if len(d) > 18 and d[18] is not None else 1.0
+                "perf_w": float(d[14]) if d[14] is not None else 0.0,
+                "perf_1m": float(d[15]) if d[15] is not None else 0.0,
+                "perf_3m": float(d[16]) if d[16] is not None else 0.0,
+                "perf_6m": float(d[17]) if d[17] is not None else 0.0,
+                "perf_1y": float(d[18]) if d[18] is not None else 0.0,
+                "rvol": float(d[19]) if len(d) > 19 and d[19] is not None else 1.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
