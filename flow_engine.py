@@ -34,45 +34,40 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        high_3m = float(item.get('high_3m', close))
-        low_3m = float(item.get('low_3m', close))
+        high_6m = float(item.get('high_6m', close))
+        low_52w = float(item.get('low_52w', close))
         perf_3m = float(item.get('perf_3m', 0.0))
         perf_6m = float(item.get('perf_6m', 0.0))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. AGESA TİPİ ÖNCEDEN KOŞMUŞLARI İNFAZ ETME (STAGE-1 DİP FİLTRESİ)
+        # 1. KESİN AGESA İNFAZ FİLTRESİ (DİPTEN UZAKLIK KONTROLÜ)
         # =========================================================================
         is_prior_runner = False
         
-        # A. 3 Aylık Dip Fiyattan Uzaklık (AGESA %35 uzaktaydı, elenir!)
-        dist_from_3m_low = ((close - low_3m) / (low_3m + 1e-9)) * 100.0 if low_3m > 0 else 50.0
-        if dist_from_3m_low > 20.0:  # Dipten %20'den fazla uzaklaşmışsa önceden koşmuştur!
+        # A. 52 Haftalık Dip Fiyattan Uzaklık (AGESA %35 uzaktaydı, infaz edilir!)
+        dist_from_bottom = ((close - low_52w) / (low_52w + 1e-9)) * 100.0 if low_52w > 0 else 50.0
+        if dist_from_bottom > 22.0:  # Dipten %22'den fazla uzaklaşmış olanlar ÖNCEDEN KOŞMUŞTUR!
             is_prior_runner = True
             
-        # B. 3A veya 6A Prim Tavanı (Daha önce ralli yapmış olanları sil)
+        # B. 3A veya 6A Prim Tavanı
         if perf_3m > 20.0 or perf_6m > 30.0:
             is_prior_runner = True
 
         # =========================================================================
-        # 2. 3 AYLIK DİRENÇ KIRILIMI & SIKIŞMA PUANI
+        # 2. 6 AYLIK ZİRVE KIRILIMI & DİP SIKIŞMA PUANI
         # =========================================================================
-        # 3 Aylık Zirveye Uzaklık (Tam bugün kırıyor mu?)
-        pivot_3m_dist = ((close - high_3m) / (high_3m + 1e-9)) * 100.0 if high_3m > 0 else 0.0
-        
-        # 3 Aylık Taban Genişliği (Ne kadar dar alanda uyumuşsa o kadar taze patlar)
-        base_width_3m = ((high_3m - low_3m) / (close + 1e-9)) * 100.0 if close > 0 else 30.0
+        # 6 Aylık Zirveye Uzaklık (Tam bugün kırıyor mu?)
+        pivot_6m_dist = ((close - high_6m) / (high_6m + 1e-9)) * 100.0 if high_6m > 0 else 0.0
 
         freshness_score = 0.0
-        if -3.0 <= pivot_3m_dist <= 5.0:    # 3 Aylık uykudan TAM BUGÜN uyananlar!
-            freshness_score += 70.0
-            if dist_from_3m_low <= 12.0:   # Dipten sadece %0-%12 yukarıda (TAM DİPTEN İLK KIRILIM)
-                freshness_score += 30.0
-            elif dist_from_3m_low <= 18.0:
-                freshness_score += 15.0
-        elif 5.0 < pivot_3m_dist <= 10.0 and dist_from_3m_low <= 18.0:
-            freshness_score += 50.0
+        if -3.0 <= pivot_6m_dist <= 5.0 and dist_from_bottom <= 18.0:
+            freshness_score += 80.0  # Gerçek Dipten İlk Kırılım!
+            if dist_from_bottom <= 10.0:
+                freshness_score += 20.0
+        elif dist_from_bottom <= 15.0:
+            freshness_score += 40.0
 
         # 3. MİKROYAPI SÜPÜRME
         range_span = high - low
@@ -87,8 +82,8 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         if roe >= 15.0: quality_score += 30.0
         if pb <= 5.0: quality_score += 20.0
 
-        item['pivot_3m_dist'] = round(pivot_3m_dist, 1)
-        item['dist_from_3m_low'] = round(dist_from_3m_low, 1)
+        item['pivot_6m_dist'] = round(pivot_6m_dist, 1)
+        item['dist_from_bottom'] = round(dist_from_bottom, 1)
         item['freshness_score'] = freshness_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
@@ -113,7 +108,7 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         1
     )
     
-    # AGESA TİPİ ÖNCEDEN KOŞANLARI VE EKSİLERİ KESİNLİKLE SIFIRLA!
+    # AGESA TİPİ ÖNCEDEN KOŞANLARI SIFIRLA!
     res_df['quant_score'] = np.where(
         (res_df['change_%'] > 0.0) & (~res_df['is_prior_runner']) & (res_df['freshness_score'] >= 50.0),
         raw_score,
