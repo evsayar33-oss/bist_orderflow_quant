@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 import os
 
-st.set_page_config(page_title="BIST Bottom Accumulation Terminal", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="BIST Bottom Accumulation Terminal", layout="wide", page_icon="🎯")
 
-st.title("🏛️ BIST Dip Akümülasyon & Taban Uyanış Terminali")
-st.markdown("*Zirveye tırmanmış riskli hisseleri eleyen; **son 1 aylık destek tabanında sıkışıp kurumsal alımla İLK DEFA kalkan** hisseleri bulan Quant Motoru.*")
+st.title("🎯 BIST Dip Akümülasyon & Taban Uyanış Terminali")
+st.markdown("*Zirveye tırmanmış riskli hisseleri eleyen; **destek tabanında sıkışıp kurumsal alımla İLK DEFA kalkan** hisseleri bulan Quant Motoru.*")
 
 def load_data():
     if os.path.exists("gecmis_veri.csv"):
@@ -27,15 +27,12 @@ if not df_gecmis.empty:
     
     st.caption(f"🗓️ Son Tarama: **{son_tarih.strftime('%Y-%m-%d')}** | 📊 Taranan Hisse: **{len(df)}**")
 
-    required_cols = ['quant_score', 'score_diff', 'range_position', 'dist_from_support', 'sweep_ratio', 'vol_z', 'change_%', 'close']
-    for c in required_cols:
-        if c not in df.columns:
-            df[c] = 0.0
-        else:
-            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0).round(2)
+    # ÇÖKME ENGELLEYİCİ GÜVENLİK
+    for c in ['quant_score', 'score_diff', 'range_position', 'dist_from_support', 'sweep_ratio', 'vol_z', 'change_%', 'close']:
+        if c not in df.columns: df[c] = 0.0
+        else: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0).round(2)
 
-    if 'regime' not in df.columns:
-        df['regime'] = 'NÖTR'
+    if 'regime' not in df.columns: df['regime'] = 'NÖTR'
 
     # SIDEBAR
     st.sidebar.header("🔍 Hisse Dip Konumu Sorgu")
@@ -67,7 +64,7 @@ if not df_gecmis.empty:
 
     # 1. ANA TABLO: DİP AKÜMÜLASYON LİDERLERİ
     st.subheader("🎯 Dip Akümülasyon Liderleri (Tabandan Dönenler)")
-    st.markdown("*Kanalın alt taban bölgesinde (%10-%45) sıkışmış, dipten yeni dönen taze hisseler.*")
+    st.markdown("*Kanalın alt taban bölgesinde (%5-%45) sıkışmış, dipten yeni dönen taze hisseler.*")
     
     top_candidates = df[df['quant_score'] > 0.0].sort_values(by='quant_score', ascending=False).head(20)
     
