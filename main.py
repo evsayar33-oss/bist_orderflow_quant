@@ -28,7 +28,7 @@ def get_bist_raw_data():
         "columns": [
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
             "High.1M", "Low.1M", "relative_volume_10d_calc",
-            "return_on_equity_fq", "price_book_fq"
+            "return_on_equity_fq", "price_book_fq", "Perf.1M", "Perf.W"
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 300]
@@ -60,7 +60,9 @@ def get_bist_raw_data():
                 "low_1m": float(d[9]) if d[9] is not None else low_p,
                 "rvol": float(d[10]) if len(d) > 10 and d[10] is not None else 1.0,
                 "roe": float(d[11]) if len(d) > 11 and d[11] is not None else 15.0,
-                "pb": float(d[12]) if len(d) > 12 and d[12] is not None else 2.0
+                "pb": float(d[12]) if len(d) > 12 and d[12] is not None else 2.0,
+                "perf_1m": float(d[13]) if len(d) > 13 and d[13] is not None else 0.0,
+                "perf_w": float(d[14]) if len(d) > 14 and d[14] is not None else 0.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -109,7 +111,7 @@ def fetch_all_data():
     return df_final
 
 # =============================================================================
-# 2. DİP AKÜMÜLASYON QUANT MOTORU
+# 2. DÜŞEN BIÇAKLARI ELEYEN GERÇEK TABAN DÖNÜŞ MOTORU
 # =============================================================================
 
 def calculate_quant_scores(df, df_gecmis, dynamic_weights):
@@ -126,26 +128,50 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights):
         f_ratio = float(item.get('foreign_ratio', 20.0))
         high_1m = float(item.get('high_1m', close))
         low_1m = float(item.get('low_1m', close))
+        perf_1m = float(item.get('perf_1m', 0.0))
+        perf_w = float(item.get('perf_w', 0.0))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
-        # Taban Konumu (Kanalın neresinde? %0=Dip, %100=Tepe)
+        # =========================================================================
+        # DÜŞEN BIÇAK & SERBEST DÜŞÜŞ İNFAZ FİLTRESİ
+        # =========================================================================
+        is_falling_knife = False
+        
+        # Kural A: Son 1 ayda %18'den fazla çökmüşse (Serbest Düşüş Trendi)
+        if perf_1m < -18.0:
+            is_falling_knife = True
+            
+        # Kural B: Bugün yeni dip yapıyorsa (Düşüş devam ediyor)
+        if close <= low_1m * 1.005:
+            is_falling_knife = True
+            
+        # Kural C: Son 1 ayda zaten %35+ koşmuşsa (Tepede)
+        if perf_1m > 35.0 or perf_w > 18.0:
+            is_falling_knife = True
+
+        # =========================================================================
+        # GERÇEK TABAN DÖNÜŞÜ (WYCKOFF ACCUMULATION REVERSAL)
+        # =========================================================================
+        # Dipten Uzaklık (Yükselen Dip Kontrolü)
+        dist_from_bottom = ((close - low_1m) / (low_1m + 1e-9)) * 100.0 if low_1m > 0 else 0.0
+        
+        # 1 Aylık Kanal Genişliği (Dar Sıkışma = Güçlü Taban)
         channel_span = high_1m - low_1m
         range_pos = ((close - low_1m) / channel_span) * 100.0 if channel_span > 0 else 50.0
-        dist_from_supp = ((close - low_1m) / (low_1m + 1e-9)) * 100.0 if low_1m > 0 else 0.0
 
-        # Dip Akümülasyon Puanı
-        accum_score = 0.0
-        if 5.0 <= range_pos <= 45.0 and dist_from_supp <= 10.0:
-            accum_score = 85.0
-        elif range_pos < 60.0 and dist_from_supp <= 15.0:
-            accum_score = 65.0
-        elif range_pos >= 85.0:
-            accum_score = 10.0
+        # Taban Dönüş Puanı (Dipten %2-%10 yukarıda ve yatayda taban yapanlar)
+        reversal_score = 0.0
+        if 2.5 <= dist_from_bottom <= 12.0 and -15.0 <= perf_1m <= 10.0:
+            reversal_score = 85.0 # Mükemmel Taban Dönüşü!
+            if rvol >= 1.5:
+                reversal_score += 15.0 # Hacimli Kurumsal Ateşleme
+        elif dist_from_bottom <= 16.0 and range_pos <= 55.0:
+            reversal_score = 60.0
         else:
-            accum_score = 30.0
+            reversal_score = 20.0
 
-        # Mikroyapı Süpürme
+        # Mikroyapı Süpürme ve Kapanış Gücü
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = round(min(max((f_ratio * 0.40) + (max(clv, 0) * 60.0), 5.0), 98.5), 1)
@@ -153,39 +179,46 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights):
         quality_score = 50.0 + (30.0 if roe >= 15.0 else (15.0 if roe > 0 else 0.0)) + (20.0 if pb <= 5.0 else 0.0)
 
         item['range_position'] = round(range_pos, 1)
-        item['dist_from_support'] = round(dist_from_supp, 1)
-        item['accum_score'] = accum_score
+        item['dist_from_bottom'] = round(dist_from_bottom, 1)
+        item['reversal_score'] = reversal_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
         item['quality_score'] = quality_score
+        item['is_falling_knife'] = is_falling_knife
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: return res_df
 
-    res_df['pct_accum'] = res_df['accum_score'].rank(pct=True) * 100.0
+    res_df['pct_rev'] = res_df['reversal_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
     res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
 
-    w_a = dynamic_weights.get('accum', 0.45)
+    w_a = dynamic_weights.get('accum', 0.40)
     w_s = dynamic_weights.get('sweep', 0.25)
     w_v = dynamic_weights.get('vol_z', 0.20)
-    w_q = dynamic_weights.get('quality', 0.10)
+    w_q = dynamic_weights.get('quality', 0.15)
 
-    raw_score = np.round(res_df['pct_accum']*w_a + res_df['pct_sweep']*w_s + res_df['pct_vol']*w_v + res_df['pct_qual']*w_q, 1)
-    res_df['quant_score'] = np.where(res_df['change_%'] > 0.0, raw_score, 0.0)
+    raw_score = np.round(res_df['pct_rev']*w_a + res_df['pct_sweep']*w_s + res_df['pct_vol']*w_v + res_df['pct_qual']*w_q, 1)
+    
+    # Düşen Bıçakları ve Günlük Eksileri SIFIRLA!
+    res_df['quant_score'] = np.where(
+        (res_df['change_%'] > 0.0) & (~res_df['is_falling_knife']),
+        raw_score,
+        0.0
+    )
 
     conditions = [
-        (res_df['range_position'] >= 85.0),
-        (res_df['quant_score'] >= 70.0) & (res_df['range_position'] <= 50.0),
+        res_df['is_falling_knife'],
+        (res_df['quant_score'] >= 70.0) & (res_df['dist_from_bottom'].between(2.0, 12.0)),
         (res_df['quant_score'] >= 50.0),
         (res_df['change_%'] < -1.5)
     ]
-    choices = ["🚫 ZİRVEDE (RİSKLİ)", "🎯 DİP AKÜMÜLASYONU (TABANDAN DÖNÜŞ)", "⚡ TABANDA SIKIŞMA", "🚨 KURUMSAL BOŞALTIM"]
+    choices = ["🪤 DÜŞEN BIÇAK (SERBEST DÜŞÜŞ)", "🎯 TABANDAN DÖNÜŞ (DİP ATEŞLEMESİ)", "⚡ TABANDA SIKIŞMA", "🚨 KURUMSAL BOŞALTIM"]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_accum', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'accum_score']
+    drop_cols = ['pct_rev', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'reversal_score', 'is_falling_knife']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     res_df['score_diff'] = 0.0
@@ -198,20 +231,18 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights):
     return res_df.sort_values(by='quant_score', ascending=False).reset_index(drop=True)
 
 # =============================================================================
-# 3. YAPAY ZEKA GERİ BESLEME & ÖĞRENME
+# 3. YAPAY ZEKA VE TELEGRAM
 # =============================================================================
 
 def calibrate_and_learn(current_market_df):
-    default_w = {"accum": 0.45, "sweep": 0.25, "vol_z": 0.20, "quality": 0.10}
+    default_w = {"accum": 0.40, "sweep": 0.25, "vol_z": 0.20, "quality": 0.15}
     if not os.path.exists(SIGNAL_LOG_FILE):
         return default_w, "🕒 BAZ AĞIRLIKLAR AKTİF"
-    
     try:
         history_df = pd.read_csv(SIGNAL_LOG_FILE)
         history_df['tarih'] = pd.to_datetime(history_df['tarih'])
         price_map = dict(zip(current_market_df['ticker'], current_market_df['close']))
         today = pd.Timestamp.now().normalize()
-        
         for idx, row in history_df.iterrows():
             days = (today - pd.to_datetime(row['tarih'])).days
             ticker = row['ticker']
@@ -220,17 +251,15 @@ def calibrate_and_learn(current_market_df):
                 gain = ((price_map[ticker] - entry_p) / entry_p) * 100.0
                 history_df.at[idx, 'realized_3d'] = round(gain, 2)
         history_df.to_csv(SIGNAL_LOG_FILE, index=False)
-        
         valid = history_df.dropna(subset=['realized_3d'])
         if len(valid) >= 15:
             return default_w, f"🧠 AI ÖZ-ÖĞRENME AKTİF ({len(valid)} Sinyal)"
-    except:
-        pass
+    except: pass
     return default_w, "🕒 BAZ AĞIRLIKLAR AKTİF"
 
 def log_signals(df_scored):
     try:
-        signals = df_scored.head(10)[['ticker', 'close', 'quant_score', 'range_position', 'dist_from_support', 'sweep_ratio', 'tarih']].copy()
+        signals = df_scored.head(10)[['ticker', 'close', 'quant_score', 'range_position', 'dist_from_bottom', 'sweep_ratio', 'tarih']].copy()
         signals['realized_3d'] = np.nan
         if os.path.exists(SIGNAL_LOG_FILE):
             old = pd.read_csv(SIGNAL_LOG_FILE)
@@ -239,12 +268,7 @@ def log_signals(df_scored):
             pd.concat([old, signals], ignore_index=True).to_csv(SIGNAL_LOG_FILE, index=False)
         else:
             signals.to_csv(SIGNAL_LOG_FILE, index=False)
-    except:
-        pass
-
-# =============================================================================
-# 4. TELEGRAM VE ORKESTRASYON
-# =============================================================================
+    except: pass
 
 def send_telegram(message):
     token = os.environ.get('TELEGRAM_TOKEN')
@@ -256,29 +280,32 @@ def send_telegram(message):
         print(f"Telegram Hatası: {e}")
 
 def format_telegram_report(df_scored):
-    leaders = df_scored[df_scored['quant_score'] >= 50.0].head(10)
-    msg = "🎯 <b>BIST DİP AKÜMÜLASYON VE TABAN UYANIŞ RAPORU</b>\n"
-    msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Saat: 17:00</i>\n"
+    leaders = df_scored[df_scored['quant_score'] >= 60.0].head(10)
+    msg = "🎯 <b>BIST GERÇEK TABAN DÖNÜŞ RAPORU (TURNAROUND)</b>\n"
+    msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Saat: 17:00 Kapanış</i>\n"
+    msg += "<i>(Düşen bıçaklar elenmiş, tabanını yapıp İLK DEFA DÖNENLER seçilmiştir)</i>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
     
     if leaders.empty:
-        msg += "ℹ️ <i>Bugün taban bölgesinden uyanış yapan hisse tespit edilemedi.</i>"
+        msg += "ℹ️ <i>Bugün tabanından teyitli uyanış yapan hisse tespit edilemedi.</i>"
         return msg
 
     for idx, row in leaders.iterrows():
         s_diff = row.get('score_diff', 0)
         fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
+        
         msg += f"🎯 <b>#{row['ticker']}</b> ── <b>[Skor: {row['quant_score']:.1f}]</b> <i>({fark_str})</i>\n"
         msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (<b>%{row['change_%']:+.2f}</b>)\n"
-        msg += f"📍 Taban Konumu: <b>Kanalın %{row['range_position']:.0f}'si</b> | Dipten: <b>%{row['dist_from_support']:+.1f}</b>\n"
-        msg += f"📊 Süpürme: <b>%{row['sweep_ratio']:.1f}</b> | Durum: <code>{row['regime']}</code>\n\n"
+        msg += f"📍 Dipten Dönüş: <b>+%{row['dist_from_bottom']:.1f}</b> (Yükselen Dip!)\n"
+        msg += f"📊 Hacim Z: <b>+{row.get('vol_z', 0.0):.1f}σ</b> | Süpürme: <b>%{row.get('sweep_ratio', 0.0):.1f}</b>\n"
+        msg += f"🏷 Durum: <code>{row['regime']}</code>\n\n"
         
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "⚡ <i>Strateji: Zirveden Değil, Destek Tabanından Kurumsal Alışla Kalkanlar</i>"
+    msg += "⚡ <i>Strateji: Serbest Düşüşteki Değil, Tabanını Sağlamlaştıran Liderler</i>"
     return msg
 
 def main():
-    print("=== Tek Parça Zırhlı Quant Motoru Başlıyor ===")
+    print("=== Gerçek Taban Dönüş Motoru Başlıyor ===")
     df_current = fetch_all_data()
     if df_current.empty: return
 
@@ -307,7 +334,7 @@ def main():
     df_yeni[df_yeni['tarih'] >= limit_tarih].to_csv(GECMIS_DOSYA, index=False)
 
     send_telegram(format_telegram_report(df_scored))
-    print("Başarıyla Tamamlandı!")
+    print("İşlem Başarıyla Tamamlandı!")
 
 if __name__ == "__main__":
     main()
