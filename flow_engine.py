@@ -34,42 +34,36 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        high_6m = float(item.get('high_6m', close))
-        low_52w = float(item.get('low_52w', close))
-        perf_3m = float(item.get('perf_3m', 0.0))
-        perf_6m = float(item.get('perf_6m', 0.0))
+        high_1m = float(item.get('high_1m', close))
+        low_1m = float(item.get('low_1m', close))
+        perf_w = float(item.get('perf_w', 0.0))
+        perf_1m = float(item.get('perf_1m', 0.0))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. KESİN AGESA İNFAZ FİLTRESİ (DİPTEN UZAKLIK KONTROLÜ)
+        # 1. 20 GÜNLÜK PİVOT KIRILIM NOKTASI (DAY-1 / DAY-2 BREAKOUT)
         # =========================================================================
-        is_prior_runner = False
+        # 20 Günlük Zirveden Sapma % (0% = Tam Kırıyor, +3% = Yeni Kırdı)
+        pivot_dist = ((close - high_1m) / (high_1m + 1e-9)) * 100.0 if high_1m > 0 else 0.0
         
-        # A. 52 Haftalık Dip Fiyattan Uzaklık (AGESA %35 uzaktaydı, infaz edilir!)
-        dist_from_bottom = ((close - low_52w) / (low_52w + 1e-9)) * 100.0 if low_52w > 0 else 50.0
-        if dist_from_bottom > 22.0:  # Dipten %22'den fazla uzaklaşmış olanlar ÖNCEDEN KOŞMUŞTUR!
-            is_prior_runner = True
-            
-        # B. 3A veya 6A Prim Tavanı
-        if perf_3m > 20.0 or perf_6m > 30.0:
-            is_prior_runner = True
+        # Kırılım Tazelik Puanı (Kırılım noktasına ne kadar yakınsa o kadar yüksek puan)
+        # -%2 ile +%4 arasında olan hisseler 100 tam puan alır!
+        pivot_score = max(100.0 - abs(pivot_dist - 1.0) * 12.0, 10.0)
+
+        # 2. 20 Günlük Taban Sıkışma Genişliği (Dar Taban = Güçlü Enerji)
+        base_width = ((high_1m - low_1m) / (close + 1e-9)) * 100.0 if close > 0 else 25.0
+        tightness_score = max(100.0 - base_width * 2.5, 15.0)
 
         # =========================================================================
-        # 2. 6 AYLIK ZİRVE KIRILIMI & DİP SIKIŞMA PUANI
+        # 3. AŞIRI ŞİŞME CEZASI (SON 1 HAFTADA %18+ KOŞANLARI AŞAĞI BASTIRIR)
         # =========================================================================
-        # 6 Aylık Zirveye Uzaklık (Tam bugün kırıyor mu?)
-        pivot_6m_dist = ((close - high_6m) / (high_6m + 1e-9)) * 100.0 if high_6m > 0 else 0.0
+        # Son 1 haftada zaten çok primlenmiş hisselerin puanını kademeli kısar
+        extension_penalty = 1.0
+        if perf_w > 12.0:
+            extension_penalty = max(1.0 - (perf_w - 12.0) * 0.04, 0.20)
 
-        freshness_score = 0.0
-        if -3.0 <= pivot_6m_dist <= 5.0 and dist_from_bottom <= 18.0:
-            freshness_score += 80.0  # Gerçek Dipten İlk Kırılım!
-            if dist_from_bottom <= 10.0:
-                freshness_score += 20.0
-        elif dist_from_bottom <= 15.0:
-            freshness_score += 40.0
-
-        # 3. MİKROYAPI SÜPÜRME
+        # 4. KURUMSAL SÜPÜRME VE HACİM
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
@@ -82,55 +76,59 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         if roe >= 15.0: quality_score += 30.0
         if pb <= 5.0: quality_score += 20.0
 
-        item['pivot_6m_dist'] = round(pivot_6m_dist, 1)
-        item['dist_from_bottom'] = round(dist_from_bottom, 1)
-        item['freshness_score'] = freshness_score
+        item['pivot_dist'] = round(pivot_dist, 1)
+        item['base_width'] = round(base_width, 1)
+        item['pivot_score'] = pivot_score
+        item['tightness_score'] = tightness_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
         item['quality_score'] = quality_score
-        item['is_prior_runner'] = is_prior_runner
+        item['extension_penalty'] = extension_penalty
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
     if res_df.empty: 
         return res_df
 
-    res_df['pct_fresh'] = res_df['freshness_score'].rank(pct=True) * 100.0
+    # Yüzdelik Normalizasyon
+    res_df['pct_pivot'] = res_df['pivot_score'].rank(pct=True) * 100.0
+    res_df['pct_tight'] = res_df['tightness_score'].rank(pct=True) * 100.0
     res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
     res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
-    res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
 
-    raw_score = np.round(
-        res_df['pct_fresh'] * 0.45 + 
+    # NİHAİ PUAN: %35 Kırılım Noktası + %25 Taban Sıkışması + %25 Süpürme + %15 Hacim
+    raw_score = (
+        res_df['pct_pivot'] * 0.35 + 
+        res_df['pct_tight'] * 0.25 + 
         res_df['pct_sweep'] * 0.25 + 
-        res_df['pct_vol'] * 0.20 + 
-        res_df['pct_qual'] * 0.10, 
-        1
-    )
-    
-    # AGESA TİPİ ÖNCEDEN KOŞANLARI SIFIRLA!
+        res_df['pct_vol'] * 0.15
+    ) * res_df['extension_penalty']
+
+    raw_score = np.round(np.clip(raw_score, 0.0, 99.5), 1)
+
+    # Sadece o gün pozitif kapatanlar tam puan alır
     res_df['quant_score'] = np.where(
-        (res_df['change_%'] > 0.0) & (~res_df['is_prior_runner']) & (res_df['freshness_score'] >= 50.0),
+        res_df['change_%'] > 0.0,
         raw_score,
-        0.0
+        np.round(raw_score * 0.15, 1)
     )
 
     # Rejim Tespiti
     conditions = [
-        res_df['is_prior_runner'],
-        (res_df['quant_score'] >= 70.0),
-        (res_df['quant_score'] >= 50.0),
+        (res_df['perf_w'] > 20.0),
+        (res_df['quant_score'] >= 75.0) & (res_df['pivot_dist'].between(-2.0, 4.0)),
+        (res_df['quant_score'] >= 55.0),
         (res_df['change_%'] < -1.5)
     ]
     choices = [
-        "🚫 ÖNCEDEN KOŞMUŞ (AGESA TİPİ DİSKALİFİYE)",
-        "🚀 DİPTEN İLK KIRILIM (STAGE-1 PRIMARY BASE)",
-        "⚡ DİPTE SIKIŞMA (KIRILIM ADAYI)",
+        "🚫 TREN KAÇTI (HAFTALIK AŞIRI PRİM)",
+        "🚀 TAZE TABAN KIRILIMI (DAY 1-2 PİVOT)",
+        "⚡ KIRILIM ADAYI (SIKIŞMA)",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_fresh', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'freshness_score', 'is_prior_runner']
+    drop_cols = ['pct_pivot', 'pct_tight', 'pct_sweep', 'pct_vol', 'pivot_score', 'tightness_score', 'extension_penalty']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     # Düne Göre Fark
