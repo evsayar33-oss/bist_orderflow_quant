@@ -34,39 +34,38 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         rvol = float(item.get('rvol', 1.0))
         f_ratio = float(item.get('foreign_ratio', 20.0))
         
-        donch_upper = float(item.get('donch_upper', 0.0))
-        donch_lower = float(item.get('donch_lower', 0.0))
+        high_1m = float(item.get('high_1m', close))
+        low_1m = float(item.get('low_1m', close))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. DOĞRU PİVOT KIRILIM UZAKLIĞI (20 GÜNLÜK ZİRVEDEN SAPMA %)
+        # 1. GERÇEK 1 AYLIK ZİRVE (PİVOT) UZAKLIĞI %
         # =========================================================================
-        # Fiyatın 20 Günlük Kırılım Seviyesine (Pivot) Uzaklığı:
-        # %0 ile %5 arası = TAM BUGÜN KIRAN TAZE HİSSE!
-        pivot_distance = ((close - donch_upper) / (donch_upper + 1e-9)) * 100.0 if donch_upper > 0 else 0.0
-        
-        # 20 Günlük Taban Sıkışma Genişliği (Dar Taban = Güçlü Yay)
-        base_width = ((donch_upper - donch_lower) / (close + 1e-9)) * 100.0 if close > 0 else 30.0
+        # Zirveye mesafe: -%2 ile +%4 arası = TAM KIRILIM ANI!
+        if high_1m > 0:
+            pivot_distance = ((close - high_1m) / high_1m) * 100.0
+        else:
+            pivot_distance = 0.0
+            
+        base_width = ((high_1m - low_1m) / (close + 1e-9)) * 100.0 if close > 0 else 25.0
 
-        # --- KIRILIM TAZELİK PUANI ---
+        # Kırılım Tazelik Puanı
         freshness_score = 0.0
-        if -3.0 <= pivot_distance <= 6.0:  # Tam 20 günün zirvesinde veya yeni kırıyor!
+        if -3.0 <= pivot_distance <= 5.0:   # 1 Aylık zirveyi tam bugün kıranlar!
             freshness_score += 65.0
-            if base_width <= 25.0:         # Dar sıkışma tabanı bonusu
+            if base_width <= 25.0:
                 freshness_score += 35.0
             elif base_width <= 35.0:
                 freshness_score += 20.0
-        elif 6.0 < pivot_distance <= 12.0: # Kırılımın 2. günü
+        elif 5.0 < pivot_distance <= 10.0:  # Kırılımın 2. günü
             freshness_score += 45.0
-        elif pivot_distance > 15.0:        # Zaten %15+ primlenmişse tren kaçmıştır
+        elif pivot_distance > 12.0:         # Tren kaçmış, aşırı primli
             freshness_score = 5.0
         else:
-            freshness_score = 15.0
+            freshness_score = 20.0
 
-        # =========================================================================
-        # 2. KURUMSAL SÜPÜRME VE HACİM
-        # =========================================================================
+        # 2. SÜPÜRME VE HACİM
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
@@ -97,7 +96,6 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
     res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
     res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
 
-    # NİHAİ SKOR: %45 Kırılım Tazeliği + %25 Süpürme + %20 Hacim + %10 Kalite
     raw_score = np.round(
         res_df['pct_fresh'] * 0.45 + 
         res_df['pct_sweep'] * 0.25 + 
@@ -106,11 +104,11 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         1
     )
     
-    # Sadece o gün pozitif kapatan ve pivottan %12'den fazla uzaklaşmamış olanlar tam puan alır
+    # Sadece o gün pozitif kapatan ve 1 aylık zirveyi %12'den fazla aşmamış taze kırılımlar
     res_df['quant_score'] = np.where(
         (res_df['change_%'] > 0.0) & (res_df['pivot_distance'] <= 12.0),
         raw_score,
-        0.0 # Treni kaçanları ve negatifleri sıfırla
+        0.0
     )
 
     # Rejim Tespiti
