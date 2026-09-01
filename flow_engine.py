@@ -36,41 +36,36 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         
         donch_upper = float(item.get('donch_upper', 0.0))
         donch_lower = float(item.get('donch_lower', 0.0))
-        perf_w = float(item.get('perf_w', 0.0))
-        perf_1m = float(item.get('perf_1m', 0.0))
         roe = float(item.get('roe', 15.0))
         pb = float(item.get('pb', 2.0))
 
         # =========================================================================
-        # 1. TAZE PİVOT KIRILIMI & TABANDAN UZAKLIK HESABI (DAY 1-2 BREAKOUT)
+        # 1. DOĞRU PİVOT KIRILIM UZAKLIĞI (20 GÜNLÜK ZİRVEDEN SAPMA %)
         # =========================================================================
-        # 20 Günlük Zirveye Yakınlık Oranı (1.0 = Tam Zirvede/Kırıyor)
-        pivot_proximity = (close / donch_upper) if donch_upper > 0 else 0.8
+        # Fiyatın 20 Günlük Kırılım Seviyesine (Pivot) Uzaklığı:
+        # %0 ile %5 arası = TAM BUGÜN KIRAN TAZE HİSSE!
+        pivot_distance = ((close - donch_upper) / (donch_upper + 1e-9)) * 100.0 if donch_upper > 0 else 0.0
         
-        # 20 Günlük Tabandan Uzaklık (Ne kadar azsa patlama o kadar tazedir!)
-        base_range = donch_upper - donch_lower
-        distance_from_base = ((close - donch_lower) / (donch_lower + 1e-9)) * 100.0 if donch_lower > 0 else 50.0
-        
-        # 20 Günlük Taban Sıkışma Genişliği (Dar bant = Büyük Yaylanma)
-        base_tightness = (base_range / (close + 1e-9)) if close > 0 else 0.5
+        # 20 Günlük Taban Sıkışma Genişliği (Dar Taban = Güçlü Yay)
+        base_width = ((donch_upper - donch_lower) / (close + 1e-9)) * 100.0 if close > 0 else 30.0
 
-        # --- KIRILIM TAZELİK PUANI (0 - 100) ---
+        # --- KIRILIM TAZELİK PUANI ---
         freshness_score = 0.0
-        if pivot_proximity >= 0.98:  # 20 Günün Zirvesini Tam Bugün Kırıyor!
-            freshness_score += 50.0
-            if distance_from_base <= 12.0:  # Tabandan sadece %0-%12 uzakta (Yeni Başlıyor!)
-                freshness_score += 50.0
-            elif distance_from_base <= 20.0:
-                freshness_score += 30.0
-            else:
-                freshness_score += 10.0  # Zaten çok primlenmişse az puan ver
-        elif pivot_proximity >= 0.94:
-            freshness_score += 30.0
-            if distance_from_base <= 10.0:
-                freshness_score += 30.0
+        if -3.0 <= pivot_distance <= 6.0:  # Tam 20 günün zirvesinde veya yeni kırıyor!
+            freshness_score += 65.0
+            if base_width <= 25.0:         # Dar sıkışma tabanı bonusu
+                freshness_score += 35.0
+            elif base_width <= 35.0:
+                freshness_score += 20.0
+        elif 6.0 < pivot_distance <= 12.0: # Kırılımın 2. günü
+            freshness_score += 45.0
+        elif pivot_distance > 15.0:        # Zaten %15+ primlenmişse tren kaçmıştır
+            freshness_score = 5.0
+        else:
+            freshness_score = 15.0
 
         # =========================================================================
-        # 2. HACİMLİ ATEŞLEME & EMİR AKIŞI (IGNITION FLOW)
+        # 2. KURUMSAL SÜPÜRME VE HACİM
         # =========================================================================
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
@@ -80,14 +75,12 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
         vol_z = float((rvol - 1.0) * 1.85)
         vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
 
-        # Temel Sağlık Çarpanı (ROE pozitif olanlara destek)
         quality_score = 50.0
-        if roe >= 20.0: quality_score += 30.0
-        elif roe > 0.0: quality_score += 15.0
+        if roe >= 15.0: quality_score += 30.0
         if pb <= 5.0: quality_score += 20.0
 
-        item['pivot_proximity'] = round(pivot_proximity * 100.0, 1)
-        item['distance_from_base'] = round(distance_from_base, 1)
+        item['pivot_distance'] = round(pivot_distance, 1)
+        item['base_width'] = round(base_width, 1)
         item['freshness_score'] = freshness_score
         item['sweep_ratio'] = sweep_ratio
         item['vol_z'] = vol_z
@@ -104,34 +97,33 @@ def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
     res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
     res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
 
-    # NİHAİ TAZE KIRILIM SKORU:
-    # %40 Kırılım Tazeliği & Taban Yakınlığı + %25 Süpürme + %20 Hacim Şoku + %15 Temel Kalite
+    # NİHAİ SKOR: %45 Kırılım Tazeliği + %25 Süpürme + %20 Hacim + %10 Kalite
     raw_score = np.round(
-        res_df['pct_fresh'] * 0.40 + 
+        res_df['pct_fresh'] * 0.45 + 
         res_df['pct_sweep'] * 0.25 + 
         res_df['pct_vol'] * 0.20 + 
-        res_df['pct_qual'] * 0.15, 
+        res_df['pct_qual'] * 0.10, 
         1
     )
     
-    # Sadece o gün pozitif kapatanları ve tabandan %25'ten fazla uzaklaşmamışları ödüllendir
+    # Sadece o gün pozitif kapatan ve pivottan %12'den fazla uzaklaşmamış olanlar tam puan alır
     res_df['quant_score'] = np.where(
-        (res_df['change_%'] > 0.0) & (res_df['distance_from_base'] <= 35.0),
+        (res_df['change_%'] > 0.0) & (res_df['pivot_distance'] <= 12.0),
         raw_score,
-        np.round(raw_score * 0.10, 1) # Treni kaçmış olanları tabana at
+        0.0 # Treni kaçanları ve negatifleri sıfırla
     )
 
-    # Rejim Sınıflandırması
+    # Rejim Tespiti
     conditions = [
-        (res_df['distance_from_base'] > 35.0),
-        (res_df['quant_score'] >= 75.0) & (res_df['freshness_score'] >= 70.0),
-        (res_df['quant_score'] >= 60.0),
+        (res_df['pivot_distance'] > 12.0),
+        (res_df['quant_score'] >= 70.0) & (res_df['freshness_score'] >= 60.0),
+        (res_df['quant_score'] >= 50.0),
         (res_df['change_%'] < -1.5)
     ]
     choices = [
-        "🚫 TREN KAÇTI (TABANDAN AŞIRI UZAK)",
+        "🚫 TREN KAÇTI (PİVOTTAN AŞIRI UZAK)",
         "🚀 TAZE TABAN KIRILIMI (DAY 1-2 PİVOT)",
-        "⚡ KIRILIM ADAYI (SIKIŞMA BÖLGESİ)",
+        "⚡ KIRILIM ADAYI (SIKIŞMA)",
         "🚨 KURUMSAL BOŞALTIM (DUMP)"
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
