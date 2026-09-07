@@ -7,6 +7,7 @@ from scipy.stats import spearmanr
 from state_manager import load_ai_state, save_ai_state, load_lifecycle_signals, LIFECYCLE_LOG_FILE
 
 def fetch_current_market_snapshot():
+    """Tüm hisselerin güncel fiyat ve tepe/dip verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [{"left": "type", "operation": "equal", "right": "stock"}],
@@ -33,6 +34,10 @@ def fetch_current_market_snapshot():
     return {}
 
 def update_signal_lifecycle(df_signals, market_prices, state):
+    """
+    Sinyallerin kâr/zararını ölçer ve KÂR KORUMA / İZLEYEN STOP (TRAILING STOP)
+    mekanizmasıyla kurumsalın mal boşaltmasına karşı kârı kilitler.
+    """
     if df_signals.empty or not market_prices:
         return df_signals
 
@@ -48,6 +53,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         if entry_p <= 0:
             continue
 
+        initial_stop = float(row.get("stop_price", entry_p * (1.0 + stop_pct / 100.0)))
         curr_p = market_prices[ticker]["close"]
         curr_low = market_prices[ticker]["low"]
         curr_high = market_prices[ticker]["high"]
@@ -56,16 +62,18 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         low_from_entry = ((curr_low - entry_p) / entry_p) * 100.0
         high_from_entry = ((curr_high - entry_p) / entry_p) * 100.0
 
+        # Anlık ekstremum takibi
         prev_drawdown = float(row.get("max_drawdown", 0.0)) if pd.notna(row.get("max_drawdown")) else 0.0
         df_signals.at[idx, "max_drawdown"] = round(min(prev_drawdown, low_from_entry), 2)
 
         prev_peak = float(row.get("peak_gain", 0.0)) if pd.notna(row.get("peak_gain")) else 0.0
-        df_signals.at[idx, "peak_gain"] = round(max(prev_peak, high_from_entry), 2)
+        peak_gain = max(prev_peak, high_from_entry)
+        df_signals.at[idx, "peak_gain"] = round(peak_gain, 2)
 
         sig_date = pd.to_datetime(row["tarih"])
         days_passed = (today - sig_date).days
 
-        # Multi-Bagger Vade Pencereleri: T+30, T+90 (Çeyrek), T+180 (6 Ay)
+        # Vade Takibi
         if days_passed >= 30 and pd.isna(row.get("ret_30d")):
             df_signals.at[idx, "ret_30d"] = round(gain_from_entry, 2)
         if days_passed >= 90 and pd.isna(row.get("ret_90d")):
@@ -73,22 +81,46 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         if days_passed >= 180 and pd.isna(row.get("ret_180d")):
             df_signals.at[idx, "ret_180d"] = round(gain_from_entry, 2)
 
-        # Durum Analizi
-        if df_signals.at[idx, "max_drawdown"] <= stop_pct:
+        # =========================================================================
+        # 🛡️ ZIRHLI KÂR KİLİTLEME VE İZLEYEN STOP (TRAILING STOP) MATEMATİĞİ
+        # =========================================================================
+        trailing_stop = initial_stop
+
+        # 1. Aşama: Hisse %25 prim yaptıysa maliyetin üzerine geç (Zarar İhtimali Biter)
+        if peak_gain >= 25.0:
+            trailing_stop = max(trailing_stop, round(entry_p * 1.02, 2))
+
+        # 2. Aşama: Hisse %60 prim yaptıysa zirveden %18 çekilmeye kadar kârı kilitle
+        if peak_gain >= 60.0:
+            trailing_stop = max(trailing_stop, round(entry_p * (1.0 + (peak_gain - 18.0) / 100.0), 2))
+
+        # 3. Aşama: Hisse %100+ (Multi-Bagger) yaptıysa kârı sımsıkı kilitle (Zirvenin %14 altı)
+        if peak_gain >= 100.0:
+            trailing_stop = max(trailing_stop, round(entry_p * (1.0 + (peak_gain - 14.0) / 100.0), 2))
+
+        df_signals.at[idx, "stop_price"] = trailing_stop
+
+        # =========================================================================
+        # DURUM / ÇIKIŞ KARARI (OUTCOME EVALUATION)
+        # =========================================================================
+        if curr_low <= initial_stop and peak_gain < 20.0:
             df_signals.at[idx, "outcome"] = "FAIL_BASE_BREAKDOWN"
+        elif curr_low <= trailing_stop and peak_gain >= 25.0:
+            df_signals.at[idx, "outcome"] = "WIN_PROFIT_LOCKED"
         elif gain_from_entry >= 100.0:
             df_signals.at[idx, "outcome"] = "WIN_MULTI_BAGGER"
         elif gain_from_entry >= 50.0:
             df_signals.at[idx, "outcome"] = "WIN_CUP_BREAKOUT"
         else:
-            if row.get("outcome") != "FAIL_BASE_BREAKDOWN":
+            if row.get("outcome") not in ["FAIL_BASE_BREAKDOWN", "WIN_PROFIT_LOCKED"]:
                 df_signals.at[idx, "outcome"] = "INCUBATING"
 
     df_signals.to_csv(LIFECYCLE_LOG_FILE, index=False)
     return df_signals
 
 def run_feedback_loop_optimization(df_signals, state):
-    mature = df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "FAIL_BASE_BREAKDOWN"])]
+    """Geçmiş sinyaller olgunlaştığında faktör ağırlıklarını otonom optimize eder."""
+    mature = df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN"])]
     min_samples = state.get("learning_params", {}).get("min_sample_size", 10)
 
     if len(mature) < min_samples:
