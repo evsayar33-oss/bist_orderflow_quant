@@ -3,4 +3,4 @@ pandas
 numpy
 streamlit
 matplotlib
-scipy
+scipy>=1.10.0
