@@ -18,6 +18,7 @@ GECMIS_DOSYA = "gecmis_veri.csv"
 # =============================================================================
 
 def get_bist_raw_data():
+    """TradingView tarayıcısından piyasa, temel ve kanal verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
@@ -66,6 +67,7 @@ def get_bist_raw_data():
         return pd.DataFrame()
 
 def fetch_single_takas(ticker):
+    """İş Yatırım API üzerinden yabancı ve kurumsal pay oranını çeker."""
     url = "https://www.isyatirim.com.tr/_layouts/15/IsYatirim.YatirimDanismanligi/PiyasaVerileri.aspx/GetHisseTakasData"
     headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json; charset=utf-8", "X-Requested-With": "XMLHttpRequest"}
     try:
@@ -76,11 +78,12 @@ def fetch_single_takas(ticker):
                 foreign_banks = ["CITIBANK YABANCI", "DEUTSCHE YABANCI", "HSBC YATIRIM", "YATIRIM FINANSMAN", "QNB FINANS"]
                 f_ratio = sum([float(x.get("Yuzde", 0) or 0) for x in data if str(x.get("ALAN_ADI")).upper() in foreign_banks])
                 return ticker, round(f_ratio, 2)
-    except:
+    except Exception:
         pass
     return ticker, 0.0
 
 def fetch_all_market_data():
+    """Piyasa verilerini ve kurumsal takas akışını birleştirir."""
     df_market = get_bist_raw_data()
     if df_market.empty:
         return df_market
@@ -123,9 +126,7 @@ def calculate_quant_scores(df, df_gecmis, state):
     max_range_pos = thresholds.get("max_range_position", 40.0)
     min_dist = thresholds.get("min_dist_from_bottom", 1.5)
 
-    # 1. Piyasa Medyanını Hesapla (Endeks Rölatif Performansı için)
     market_perf_median = float(df['perf_1m'].median())
-
     scored_data = []
 
     for idx, row in df.iterrows():
@@ -148,26 +149,24 @@ def calculate_quant_scores(df, df_gecmis, state):
         range_pos = ((close - low_1m) / channel_span) * 100.0 if channel_span > 0 else 50.0
         dist_from_bottom = ((close - low_1m) / (low_1m + 1e-9)) * 100.0 if low_1m > 0 else 0.0
         
-        # Dinamik Stop ve Hedef Fiyatları (Her hissenin kendi tabanına göre)
-        stop_price = round(low_1m * 0.985, 2) # Desteğin %1.5 altı
+        stop_price = round(low_1m * 0.985, 2)
         target_price = round(close + max(channel_span * 0.70, close * 0.15), 2)
 
         # B. ENDEKS RÖLATİF DÜŞEN BIÇAK FİLTRESİ
         rel_perf_1m = perf_1m - market_perf_median
         is_falling_knife = False
         
-        if rel_perf_1m < max_rel_knife: # Piyasadan bağımsız negatif ayrışıp çöküyorsa
+        if rel_perf_1m < max_rel_knife:
             is_falling_knife = True
-        elif close <= low_1m * 1.004: # Yeni dip kırılımı yapıyorsa
+        elif close <= low_1m * 1.004:
             is_falling_knife = True
-        elif perf_1m > 40.0 or perf_w > 20.0: # Zirveye tırmanmışsa
+        elif perf_1m > 40.0 or perf_w > 20.0:
             is_falling_knife = True
 
-        # C. ZOMBİ ŞİRKET KALKANI (HARD QUALITY FLOOR)
-        # Zararda veya özkaynağı negatif olan hisselere BUY & HOLD kapalıdır
+        # C. ZOMBİ ŞİRKET KALKANI (Zarardaki şirketler swing lideri olamaz)
         is_zombie_company = (roe < min_roe_floor) or (pb <= 0.0)
 
-        # 1. Taban Akümülasyon Skoru (Kanal Pozisyonu Tabanlı)
+        # 1. Taban Akümülasyon Skoru
         score_accum = 20.0
         if (dist_from_bottom >= min_dist) and (range_pos <= max_range_pos):
             score_accum = 85.0
@@ -176,9 +175,9 @@ def calculate_quant_scores(df, df_gecmis, state):
         elif range_pos <= 55.0 and dist_from_bottom <= 16.0:
             score_accum = 50.0
 
-        # 2. Temel Kalite Skoru (Zombi Filtreli)
+        # 2. Temel Kalite Skoru
         if is_zombie_company:
-            score_fund = 10.0 # Zarardaki şirket cezalandırılır
+            score_fund = 10.0
         else:
             score_fund = 40.0
             if roe >= 25.0: score_fund += 35.0
@@ -236,14 +235,13 @@ def calculate_quant_scores(df, df_gecmis, state):
         1
     )
 
-    # İnfaz Şartı: Düşen Bıçaklar, Zombi Şirketler ve Negatif Kapanışlar Listeden Düşürülür
+    # İnfaz: Zombi şirketler, düşen bıçaklar ve eksi kapatanlar elenir
     res_df['quant_score'] = np.where(
         (res_df['change_%'] > 0.0) & (~res_df['is_falling_knife']) & (~res_df['is_zombie']),
         raw_score,
         0.0
     )
 
-    # Durum / Rejim Etiketleme
     conditions = [
         res_df['is_zombie'] & (res_df['change_%'] > 4.0),
         res_df['is_falling_knife'],
@@ -263,7 +261,6 @@ def calculate_quant_scores(df, df_gecmis, state):
     drop_cols = ['pct_accum', 'pct_fund', 'pct_sweep', 'pct_vol', 'is_falling_knife', 'is_zombie']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
-    # İvme Farkı
     res_df['score_diff'] = 0.0
     if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
         son_tarih = df_gecmis['tarih'].max()
@@ -274,17 +271,16 @@ def calculate_quant_scores(df, df_gecmis, state):
     return res_df.sort_values(by='quant_score', ascending=False).reset_index(drop=True)
 
 # =============================================================================
-# 3. SİNYAL YAŞAM DÖNGÜSÜ GÜNLÜĞÜ (DİNAMİK SEÇİM)
+# 3. SİNYAL YAŞAM DÖNGÜSÜ GÜNLÜĞÜ
 # =============================================================================
 
 def log_lifecycle_signals(df_scored, state):
     try:
-        # Dinamik Eşik: En üst %10'luk dilimdeki temiz hisseler
         valid = df_scored[(df_scored['quant_score'] > 0.0) & (df_scored['regime'].str.contains("SWING LİDERİ"))]
         if valid.empty:
             return
 
-        cutoff = float(np.percentile(valid['quant_score'], 60.0)) # Dilim içi en iyiler
+        cutoff = float(np.percentile(valid['quant_score'], 60.0))
         leaders = valid[valid['quant_score'] >= max(cutoff, 65.0)].head(8)
         if leaders.empty:
             return
@@ -328,36 +324,66 @@ def log_lifecycle_signals(df_scored, state):
         print(f"⚠️ Yaşam döngüsü kayıt hatası: {e}")
 
 # =============================================================================
-# 4. TELEGRAM BİLDİRİMİ
+# 4. TELEGRAM BİLDİRİMİ (HTML GÜVENLİ & OTOMATİK KURTARMA)
 # =============================================================================
 
 def send_telegram(message):
     token = os.environ.get('TELEGRAM_TOKEN')
     chat_id = os.environ.get('CHAT_ID')
     if not token or not chat_id:
+        print("⚠️ Telegram token veya CHAT_ID bulunamadı!")
         return
+    
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
     try:
-        requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
+        # 1. HTML Modunda Gönderim
+        res = requests.post(
+            url,
             json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
             timeout=10
         )
+        
+        # HTML reddedilirse anında düz metin fallback'e geç
+        if res.status_code != 200:
+            print(f"⚠️ Telegram HTML parse uyarısı (HTTP {res.status_code}): {res.text}")
+            print("🔄 Düz metin olarak tekrar gönderiliyor...")
+            
+            plain_text = (
+                message.replace("<b>", "").replace("</b>", "")
+                       .replace("<i>", "").replace("</i>", "")
+                       .replace("<code>", "").replace("</code>", "")
+            )
+            res_plain = requests.post(
+                url,
+                json={"chat_id": chat_id, "text": plain_text},
+                timeout=10
+            )
+            if res_plain.status_code == 200:
+                print("✅ Telegram mesajı düz metin olarak başarıyla iletildi.")
+            else:
+                print(f"❌ Telegram tamamen başarısız: {res_plain.text}")
+        else:
+            print("✅ Telegram raporu HTML olarak başarıyla iletildi.")
+            
     except Exception as e:
-        print(f"⚠️ Telegram Hatası: {e}")
+        print(f"⚠️ Telegram Bağlantı Hatası: {e}")
 
 def format_telegram_report(df_scored, state):
     leaders = df_scored[df_scored['regime'].str.contains("SWING LİDERİ")].head(6)
     audit = state.get("audit_summary", {})
     weights = state.get("weights", {})
     
-    msg = "🎯 <b>BIST ADAPTİF TABAN & SWING MOTORU</b>\n"
+    msg = "🎯 <b>BIST ADAPTİF TABAN VE SWING MOTORU</b>\n"
     msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Kapanış Raporu</i>\n"
     msg += f"🤖 <b>AI Durumu:</b> <code>{audit.get('status', 'AKTİF')}</code>\n"
     msg += f"⚖️ <b>Dinamik Ağırlık:</b> Taban: %{int(weights.get('accum', 0)*100)} | Temel: %{int(weights.get('fundamental', 0)*100)} | Takas: %{int(weights.get('sweep', 0)*100)} | Hacim: %{int(weights.get('vol_mom', 0)*100)}\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
     if leaders.empty:
-        msg += "ℹ️ <i>Bugün dinamik taban kriterlerine uyan, zararda olmayan kaliteli hisse tespit edilemedi.</i>\n"
+        msg += "ℹ️ <i>Bugün dinamik taban kriterlerine uyan, zararda olmayan kaliteli hisse tespit edilemedi.</i>\n\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🛡️ <i>Zombi Kalkanı: Zarardaki şirketler (ROE %5 altı) ve piyasadan negatif ayrışan düşen bıçaklar elenmiştir.</i>"
         return msg
 
     for idx, row in leaders.iterrows():
@@ -372,7 +398,7 @@ def format_telegram_report(df_scored, state):
         msg += f"🏷 Durum: <code>{row['regime']}</code>\n\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "🛡️ <i>Zombi Kalkanı: Zarardaki şirketler (ROE < %5) ve piyasadan negatif ayrışan düşen bıçaklar elenmiştir.</i>"
+    msg += "🛡️ <i>Zombi Kalkanı: Zarardaki şirketler (ROE %5 altı) ve piyasadan negatif ayrışan düşen bıçaklar elenmiştir.</i>"
     return msg
 
 # =============================================================================
@@ -419,7 +445,7 @@ def main():
     limit_tarih = pd.Timestamp.now().normalize() - pd.Timedelta(days=35)
     df_yeni[df_yeni['tarih'] >= limit_tarih].to_csv(GECMIS_DOSYA, index=False)
 
-    # 7. Telegram
+    # 7. Telegram Raporu
     send_telegram(format_telegram_report(df_scored, state))
     print("İşlem Başarıyla Tamamlandı!")
 
