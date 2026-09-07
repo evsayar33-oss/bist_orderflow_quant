@@ -14,11 +14,10 @@ warnings.filterwarnings('ignore')
 GECMIS_DOSYA = "gecmis_veri.csv"
 
 # =============================================================================
-# 1. 52 HAFTALIK VE BİLANÇO VERİLERİ (TRADINGVIEW & İŞ YATIRIM)
+# 1. PİYASA VE TAKAS VERİLERİ
 # =============================================================================
 
 def get_bist_macro_data():
-    """52 haftalık dip/zirve, piyasa değeri ve büyüme verilerini çeker."""
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [
@@ -27,14 +26,9 @@ def get_bist_macro_data():
         ],
         "columns": [
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
-            "price_52_week_high",      # 1 Yıllık Zirve (Çanak Hedefi)
-            "price_52_week_low",       # 1 Yıllık Dip (Kuluçka Tabanı)
-            "market_cap_basic",        # Piyasa Değeri (TL)
-            "return_on_equity_fq",     # ROE (Kârlılık)
-            "price_earnings_ttm",      # F/K
-            "price_book_fq",           # PD/DD
-            "Perf.Y",                  # 1 Yıllık Prim
-            "relative_volume_10d_calc" # RVOL
+            "price_52_week_high", "price_52_week_low", "market_cap_basic",
+            "return_on_equity_fq", "price_earnings_ttm", "price_book_fq",
+            "Perf.Y", "relative_volume_10d_calc"
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 400]
@@ -116,7 +110,7 @@ def fetch_all_market_data():
     return df_final
 
 # =============================================================================
-# 2. MULTI-BAGGER (KULUÇKA & BÜYÜME) PUANLAMA MOTORU
+# 2. MULTI-BAGGER PUANLAMA MOTORU
 # =============================================================================
 
 def calculate_quant_scores(df, df_gecmis, state):
@@ -126,8 +120,8 @@ def calculate_quant_scores(df, df_gecmis, state):
     weights = state.get("weights", {"macro_base": 0.35, "growth_quality": 0.30, "stealth_accumulation": 0.20, "volume_ignition": 0.15})
     thresholds = state.get("thresholds", {})
     
-    min_mcap = thresholds.get("min_market_cap_tl", 2000000000)      # Min 2 Milyar TL
-    max_mcap = thresholds.get("max_market_cap_tl", 40000000000)     # Max 40 Milyar TL (Atak Şirketler)
+    min_mcap = thresholds.get("min_market_cap_tl", 2000000000)
+    max_mcap = thresholds.get("max_market_cap_tl", 40000000000)
     min_roe = thresholds.get("min_roe", 18.0)
 
     scored_data = []
@@ -149,39 +143,26 @@ def calculate_quant_scores(df, df_gecmis, state):
         pb = float(item.get('pb', 2.0))
         perf_y = float(item.get('perf_y', 0.0))
 
-        # A. 52 HAFTALIK MAKRO TABAN GEOMETRİSİ
-        # 1 Yıllık Çanak genişliği ve dipten uzaklık
         dist_from_52w_low = ((close - low_52w) / (low_52w + 1e-9)) * 100.0 if low_52w > 0 else 0.0
-        dist_from_52w_high = ((high_52w - close) / (close + 1e-9)) * 100.0 if close > 0 else 0.0
-
-        # Dinamik %100 - %250 Hedef Projeksiyonu
-        target_cup = round(high_52w, 2)                                  # 1. Hedef: Eski Zirveye Dönüş (Çanak Tamamlama)
-        target_bagger = round(close * 2.50, 2)                           # 2. Hedef: Multi-Bagger (%150 Prim)
-        stop_price = round(low_52w * 0.96, 2)                            # Makro Dip Desteği Kırılırsa Stop
-
+        target_cup = round(high_52w, 2)
+        target_bagger = round(close * 2.50, 2)
+        stop_price = round(low_52w * 0.96, 2)
         potansiyel_cup = round(((target_cup - close) / close) * 100.0, 1)
-        potansiyel_bagger = 150.0
 
-        # B. DİSKALİFİYE FİLTRELERİ
-        # 1. Zombi / Zarardaki Şirketler elenir
         is_zombie = (roe < min_roe) or (pb <= 0.0)
-        
-        # 2. Dev Hisseler (50B+ TL) 3x yapamayacağı için elenir; sığ hisseler (<1.5B) batık riski nedeniyle elenir
         is_wrong_size = (mcap < min_mcap) or (mcap > max_mcap)
-
-        # 3. Zaten 1 yılda %300 koşmuş tepedeki hisseler elenir
         is_overextended = (perf_y > 150.0) or (dist_from_52w_low > 50.0)
 
-        # 1. Makro Taban Skoru (52 Haftalık Dipte Kuluçka)
+        # 1. Makro Taban
         score_base = 20.0
         if 4.0 <= dist_from_52w_low <= 28.0:
             score_base = 90.0
-            if dist_from_52w_high >= 60.0: # Önünde en az %60 çanak boşluğu olanlar
+            if potansiyel_cup >= 60.0:
                 score_base = 100.0
         elif dist_from_52w_low <= 35.0:
             score_base = 65.0
 
-        # 2. Temel Büyüme ve Kârlılık Skoru (Quality Engine)
+        # 2. Kalite
         score_quality = 30.0
         if roe >= 35.0: score_quality += 45.0
         elif roe >= 22.0: score_quality += 30.0
@@ -189,20 +170,15 @@ def calculate_quant_scores(df, df_gecmis, state):
 
         if 0 < pe <= 12.0: score_quality += 25.0
         elif 0 < pe <= 20.0: score_quality += 15.0
-
         score_quality = min(max(score_quality, 5.0), 100.0)
 
-        # 3. Kurumsal Sessiz Toplama (Stealth Accumulation)
+        # 3. Takas & Hacim
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
-        score_sweep = (f_ratio * 0.40) + (max(clv, 0.0) * 60.0)
-        score_sweep = round(min(max(score_sweep, 5.0), 98.5), 1)
-
-        # 4. Hacimli Ateşleme (Ignition)
+        score_sweep = round(min(max((f_ratio * 0.40) + (max(clv, 0.0) * 60.0), 5.0), 98.5), 1)
         score_ignition = round(min(max((rvol * 35.0) + (max(change, 0.0) * 5.0), 10.0), 100.0), 1)
 
         item['dist_from_52w_low'] = round(dist_from_52w_low, 1)
-        item['dist_from_52w_high'] = round(dist_from_52w_high, 1)
         item['stop_price'] = stop_price
         item['target_cup'] = target_cup
         item['target_bagger'] = target_bagger
@@ -319,7 +295,7 @@ def log_lifecycle_signals(df_scored, state):
         print(f"⚠️ Yaşam döngüsü hatası: {e}")
 
 # =============================================================================
-# 4. TELEGRAM RAPORU (MULTI-BAGGER PROJEKSİYONLU)
+# 4. TELEGRAM RAPORU (PORTFÖY ÇIKIŞ VE KÂR AL BİLDİRİMLİ)
 # =============================================================================
 
 def send_telegram(message):
@@ -333,43 +309,53 @@ def send_telegram(message):
         if res.status_code != 200:
             plain_text = message.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
             requests.post(url, json={"chat_id": chat_id, "text": plain_text}, timeout=10)
-            print("✅ Telegram mesajı düz metin olarak iletildi.")
-        else:
-            print("✅ Telegram raporu HTML olarak iletildi.")
     except Exception as e:
         print(f"⚠️ Telegram Hatası: {e}")
 
-def format_telegram_report(df_scored, state):
+def format_telegram_report(df_scored, state, exit_alerts):
     leaders = df_scored[df_scored['regime'].str.contains("KULUÇKA LİDERİ")].head(5)
     audit = state.get("audit_summary", {})
     weights = state.get("weights", {})
     
-    msg = "🦅 <b>BIST MULTI-BAGGER & KULUÇKA MOTORU</b>\n"
-    msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | 6-12 Aylık Makro Rapor</i>\n"
+    msg = "🦅 <b>BIST MULTI-BAGGER & KULUÇKA RAPORU</b>\n"
+    msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Portföy & Makro Takip</i>\n"
     msg += f"🤖 <b>AI Durumu:</b> <code>{audit.get('status', 'AKTİF')}</code>\n"
-    msg += f"⚖️ <b>Ağırlıklar:</b> 52H Taban: %{int(weights.get('macro_base', 0)*100)} | Büyüme: %{int(weights.get('growth_quality', 0)*100)} | Takas: %{int(weights.get('stealth_accumulation', 0)*100)}\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    if leaders.empty:
-        msg += "ℹ️ <i>Bugün 52 haftalık derin tabanında kuluçkaya yatmış, yüksek kârlı Small-Cap hisse bulunamadı.</i>\n\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━\n"
-        msg += "🛡️ <i>Filtre: Şişmiş devler (50 Milyar TL üstü) ve kârsız zombi şirketler elenmiştir.</i>"
-        return msg
+    # =========================================================================
+    # 🚨 1. BÖLÜM: ÇIKIŞ VE KÂR AL UYARILARI (PORTFÖY KORUMA)
+    # =========================================================================
+    if exit_alerts:
+        msg += "🚨 <b>PORTFÖY KORUMA & ÇIKIŞ SİNYALLERİ</b>\n"
+        for alert in exit_alerts:
+            icon = "🟢" if "TAKE_PROFIT" in alert["type"] or "TARGET" in alert["type"] else "🔴"
+            msg += f"{icon} <b>#{alert['ticker']}</b> ── {alert['msg']}\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    else:
+        msg += "🛡️ <b>Açık Pozisyonlar:</b> Tüm hisseler güvenli bölgede kuluçkaya devam ediyor.\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    for idx, row in leaders.iterrows():
-        s_diff = row.get('score_diff', 0.0)
-        fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
-        
-        msg += f"💎 <b>#{row['ticker']}</b> ── <b>Skor: {row['quant_score']:.1f}</b> <i>({fark_str})</i>\n"
-        msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (Piyasa Değeri: <b>{row['mcap_milyar']:.1f} Mr TL</b>)\n"
-        msg += f"📍 52 Haftalık Dip Mesafesi: <b>+%{row['dist_from_52w_low']:.1f}</b> (Derin Taban)\n"
-        msg += f"🎯 <b>1. Hedef (Çanak Tamamlama):</b> <b>{row['target_cup']:.2f} TL</b> (<b>+%{row['potansiyel_cup']:.0f}</b>)\n"
-        msg += f"🚀 <b>2. Hedef (Multi-Bagger 2.5x):</b> <b>{row['target_bagger']:.2f} TL</b> (<b>+%150</b>)\n"
-        msg += f"🛡️ Makro Destek Stopu: <b>{row['stop_price']:.2f} TL</b>\n"
-        msg += f"📊 ROE: <b>%{row.get('roe', 0):.1f}</b> | F/K: <b>{row.get('pe', 0):.1f}</b> | Takas: <b>%{row.get('score_sweep', 0):.1f}</b>\n\n"
+    # =========================================================================
+    # 💎 2. BÖLÜM: GÜNÜN YENİ KULUÇKA LİDERLERİ
+    # =========================================================================
+    msg += "💎 <b>GÜNÜN YENİ KULUÇKA ADAYLARI</b>\n"
+    if leaders.empty:
+        msg += "ℹ️ <i>Bugün 52 haftalık tabanda yeni uyanış yapan Small-Cap hisse bulunamadı.</i>\n\n"
+    else:
+        for idx, row in leaders.iterrows():
+            s_diff = row.get('score_diff', 0.0)
+            fark_str = f"+{s_diff:.1f}" if s_diff > 0 else f"{s_diff:.1f}"
+            
+            msg += f"⭐ <b>#{row['ticker']}</b> ── <b>Skor: {row['quant_score']:.1f}</b> <i>({fark_str})</i>\n"
+            msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (Piyasa Değeri: <b>{row['mcap_milyar']:.1f} Mr TL</b>)\n"
+            msg += f"📍 52H Dip Mesafesi: <b>+%{row['dist_from_52w_low']:.1f}</b>\n"
+            msg += f"🎯 1. Hedef (Çanak): <b>{row['target_cup']:.2f} TL</b> (<b>+%{row['potansiyel_cup']:.0f}</b>)\n"
+            msg += f"🚀 2. Hedef (2.5x): <b>{row['target_bagger']:.2f} TL</b> (<b>+%150</b>)\n"
+            msg += f"🛡️ Dinamik Taban Stop: <b>{row['stop_price']:.2f} TL</b>\n"
+            msg += f"📊 ROE: <b>%{row.get('roe', 0):.1f}</b> | F/K: <b>{row.get('pe', 0):.1f}</b> | Takas: <b>%{row.get('score_sweep', 0):.1f}</b>\n\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "⏳ <i>Yatırım Ufku: 6-12 Ay (Buy & Hold Sabır Stratejisi)</i>"
+    msg += "⏳ <i>Strateji: Kuluçkadan Al, Hedefe Kadar Taşı, Çıkış Uyarısı Gelince Sat!</i>"
     return msg
 
 # =============================================================================
@@ -378,11 +364,16 @@ def format_telegram_report(df_scored, state):
 
 def main():
     print("=== BIST Multi-Bagger Kuluçka Motoru Başlıyor ===")
-    state = audit_and_calibrate()
+    
+    # 1. Denetçiyi çalıştır ve varsa çıkış alarmlarını al
+    state, exit_alerts = audit_and_calibrate()
+    
+    # 2. Piyasa Verisi
     df_current = fetch_all_market_data()
     if df_current.empty:
         return
 
+    # 3. Geçmiş Veri
     df_gecmis = pd.DataFrame()
     if os.path.exists(GECMIS_DOSYA):
         try:
@@ -391,12 +382,15 @@ def main():
         except Exception:
             pass
 
+    # 4. Puanlama
     df_scored = calculate_quant_scores(df_current, df_gecmis, state)
     if df_scored.empty:
         return
 
+    # 5. Deftere Yaz
     log_lifecycle_signals(df_scored, state)
 
+    # 6. Streamlit Kaydı
     if not df_gecmis.empty:
         df_gecmis = df_gecmis[df_gecmis['tarih'] != pd.Timestamp.now().normalize()]
         df_yeni = pd.concat([df_gecmis, df_scored], ignore_index=True)
@@ -407,8 +401,9 @@ def main():
     limit_tarih = pd.Timestamp.now().normalize() - pd.Timedelta(days=60)
     df_yeni[df_yeni['tarih'] >= limit_tarih].to_csv(GECMIS_DOSYA, index=False)
 
-    send_telegram(format_telegram_report(df_scored, state))
-    print("Multi-Bagger Taraması Tamamlandı!")
+    # 7. Telegram Bildirimi (Yeni Girişler + Çıkış Alarmları)
+    send_telegram(format_telegram_report(df_scored, state, exit_alerts))
+    print("Multi-Bagger Taraması ve Çıkış Denetimi Başarıyla Tamamlandı!")
 
 if __name__ == "__main__":
     main()
