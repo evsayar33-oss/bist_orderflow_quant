@@ -7,7 +7,6 @@ STATE_FILE = "longterm_ai_state.json"
 LIFECYCLE_LOG_FILE = "signals_lifecycle.csv"
 
 def load_ai_state():
-    """Dinamik state dosyasını yükler."""
     if not os.path.exists(STATE_FILE):
         return {}
     try:
@@ -18,7 +17,6 @@ def load_ai_state():
         return {}
 
 def save_ai_state(state):
-    """State dosyasını atomic olarak kaydeder."""
     try:
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
@@ -28,12 +26,11 @@ def save_ai_state(state):
         return False
 
 def load_lifecycle_signals():
-    """Sinyal yaşam döngüsü defterini yükler."""
     if not os.path.exists(LIFECYCLE_LOG_FILE):
         cols = [
-            "tarih", "ticker", "entry_price", "stop_price", "target_price",
-            "quant_score", "regime", "score_accum", "score_fund", "score_sweep", "score_vol",
-            "ret_15d", "ret_30d", "ret_60d", "max_drawdown", "peak_gain", "outcome"
+            "tarih", "ticker", "entry_price", "stop_price", "target_cup", "target_bagger",
+            "quant_score", "regime", "score_base", "score_quality", "score_sweep", "score_ignition",
+            "ret_30d", "ret_90d", "ret_180d", "max_drawdown", "peak_gain", "outcome"
         ]
         return pd.DataFrame(columns=cols)
     try:
