@@ -1,0 +1,35 @@
+{
+  "version": "1.0.0",
+  "strategy": "BIST_SWING_ACCUMULATION",
+  "weights": {
+    "accum": 0.35,
+    "fundamental": 0.25,
+    "sweep": 0.25,
+    "vol_mom": 0.15
+  },
+  "thresholds": {
+    "min_quant_score": 65.0,
+    "max_falling_knife_drop_1m": -18.0,
+    "min_dist_from_bottom": 2.0,
+    "max_dist_from_bottom": 13.0,
+    "stop_loss_pct": -10.0,
+    "target_swing_30d_pct": 15.0,
+    "target_long_60d_pct": 30.0
+  },
+  "learning_params": {
+    "learning_rate": 0.05,
+    "min_weight": 0.08,
+    "max_weight": 0.55,
+    "min_sample_size": 12
+  },
+  "audit_summary": {
+    "last_audit_date": "2026-09-07",
+    "total_signals_audited": 0,
+    "win_rate_30d": 0.0,
+    "win_rate_60d": 0.0,
+    "avg_max_drawdown": 0.0,
+    "last_penalized_factor": null,
+    "last_rewarded_factor": null,
+    "status": "🕒 ÖĞRENME EVRESİNDE (Yetersiz Örneklem - Baz Ağırlıklar Aktif)"
+  }
+}
