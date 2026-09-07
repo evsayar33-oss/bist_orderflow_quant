@@ -3,8 +3,8 @@
   "strategy": "BIST_ADAPTIVE_SWING_ACCUMULATION",
   "weights": {
     "accum": 0.35,
-    "fundamental": 0.30,
-    "sweep": 0.20,
+    "fundamental": 0.3,
+    "sweep": 0.2,
     "vol_mom": 0.15
   },
   "thresholds": {
@@ -17,8 +17,8 @@
   },
   "learning_params": {
     "learning_rate": 0.05,
-    "min_weight": 0.10,
-    "max_weight": 0.50,
+    "min_weight": 0.1,
+    "max_weight": 0.5,
     "min_sample_size": 12
   },
   "audit_summary": {
@@ -29,6 +29,6 @@
     "avg_max_drawdown": 0.0,
     "last_penalized_factor": null,
     "last_rewarded_factor": null,
-    "status": "🕒 ÖĞRENME EVRESİNDE (Dinamik Eşikler & Rejim Koruması Aktif)"
+    "status": "🕒 ÖĞRENME EVRESİNDE (0/12 Olgun Sinyal)"
   }
 }
