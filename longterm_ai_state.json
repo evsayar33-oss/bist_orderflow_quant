@@ -3,8 +3,8 @@
   "strategy": "BIST_MULTI_BAGGER_GROWTH",
   "weights": {
     "macro_base": 0.35,
-    "growth_quality": 0.30,
-    "stealth_accumulation": 0.20,
+    "growth_quality": 0.3,
+    "stealth_accumulation": 0.2,
     "volume_ignition": 0.15
   },
   "thresholds": {
@@ -19,8 +19,8 @@
   },
   "learning_params": {
     "learning_rate": 0.05,
-    "min_weight": 0.10,
-    "max_weight": 0.50,
+    "min_weight": 0.1,
+    "max_weight": 0.5,
     "min_sample_size": 10
   },
   "audit_summary": {
@@ -28,6 +28,6 @@
     "total_signals_audited": 0,
     "win_rate_6m": 0.0,
     "avg_bagger_gain": 0.0,
-    "status": "🦅 MULTI-BAGGER KULUÇKA MODELİ AKTİF (Hedef: %100 - %250)"
+    "status": "🦅 KULUÇKA TAKİBİNDE (0/10 Olgun Sinyal)"
   }
 }
