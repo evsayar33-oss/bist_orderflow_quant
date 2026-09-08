@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 GECMIS_DOSYA = "gecmis_veri.csv"
 
 # =============================================================================
-# 1. PİYASA VE TAKAS VERİLERİ
+# 1. PİYASA, BİLANÇO VE ESAS FAALİYET KÂRI VERİSİ
 # =============================================================================
 
 def get_bist_macro_data():
@@ -28,7 +28,8 @@ def get_bist_macro_data():
             "name", "close", "open", "high", "low", "volume", "change", "Value.Traded",
             "price_52_week_high", "price_52_week_low", "market_cap_basic",
             "return_on_equity_fq", "price_earnings_ttm", "price_book_fq",
-            "Perf.Y", "relative_volume_10d_calc"
+            "Perf.Y", "relative_volume_10d_calc",
+            "operating_margin" # 🛡️ ESAS FAALİYET MARJI (ARSA SATIŞI KALKANI)
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 400]
@@ -60,7 +61,8 @@ def get_bist_macro_data():
                 "pe": float(d[12]) if d[12] is not None else 10.0,
                 "pb": float(d[13]) if d[13] is not None else 2.0,
                 "perf_y": float(d[14]) if d[14] is not None else 0.0,
-                "rvol": float(d[15]) if len(d) > 15 and d[15] is not None else 1.0
+                "rvol": float(d[15]) if len(d) > 15 and d[15] is not None else 1.0,
+                "oper_margin": float(d[16]) if len(d) > 16 and d[16] is not None else 12.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -110,7 +112,7 @@ def fetch_all_market_data():
     return df_final
 
 # =============================================================================
-# 2. MULTI-BAGGER PUANLAMA MOTORU
+# 2. MULTI-BAGGER QUANT PUANLAMA MOTORU (FAALİYET KÂRI KORUMALI)
 # =============================================================================
 
 def calculate_quant_scores(df, df_gecmis, state):
@@ -142,6 +144,7 @@ def calculate_quant_scores(df, df_gecmis, state):
         pe = float(item.get('pe', 10.0))
         pb = float(item.get('pb', 2.0))
         perf_y = float(item.get('perf_y', 0.0))
+        oper_margin = float(item.get('oper_margin', 12.0))
 
         dist_from_52w_low = ((close - low_52w) / (low_52w + 1e-9)) * 100.0 if low_52w > 0 else 0.0
         target_cup = round(high_52w, 2)
@@ -149,7 +152,10 @@ def calculate_quant_scores(df, df_gecmis, state):
         stop_price = round(low_52w * 0.96, 2)
         potansiyel_cup = round(((target_cup - close) / close) * 100.0, 1)
 
-        is_zombie = (roe < min_roe) or (pb <= 0.0)
+        # 🛡️ ESAS FAALİYET KÂRI KALKANI:
+        # Net kâr yüksek olsa bile şirket asıl işinden para kazanamıyorsa (oper_margin < %6) elenir!
+        is_fake_profit = (oper_margin < 6.0)
+        is_zombie = (roe < min_roe) or (pb <= 0.0) or is_fake_profit
         is_wrong_size = (mcap < min_mcap) or (mcap > max_mcap)
         is_overextended = (perf_y > 150.0) or (dist_from_52w_low > 50.0)
 
@@ -162,11 +168,11 @@ def calculate_quant_scores(df, df_gecmis, state):
         elif dist_from_52w_low <= 35.0:
             score_base = 65.0
 
-        # 2. Kalite
+        # 2. Kalite (Esas Faaliyet Marjı Destekli)
         score_quality = 30.0
-        if roe >= 35.0: score_quality += 45.0
-        elif roe >= 22.0: score_quality += 30.0
-        elif roe >= min_roe: score_quality += 15.0
+        if roe >= 35.0 and oper_margin >= 15.0: score_quality += 45.0
+        elif roe >= 22.0 and oper_margin >= 10.0: score_quality += 30.0
+        elif roe >= min_roe and oper_margin >= 6.0: score_quality += 15.0
 
         if 0 < pe <= 12.0: score_quality += 25.0
         elif 0 < pe <= 20.0: score_quality += 15.0
@@ -189,6 +195,7 @@ def calculate_quant_scores(df, df_gecmis, state):
         item['score_sweep'] = score_sweep
         item['score_ignition'] = score_ignition
         item['is_disqualified'] = is_zombie or is_wrong_size or is_overextended
+        item['is_fake_profit'] = is_fake_profit
         scored_data.append(item)
 
     res_df = pd.DataFrame(scored_data)
@@ -220,12 +227,14 @@ def calculate_quant_scores(df, df_gecmis, state):
     )
 
     conditions = [
+        res_df['is_fake_profit'],
         res_df['is_disqualified'] & (res_df['market_cap'] > max_mcap),
         res_df['is_disqualified'],
         (res_df['quant_score'] >= 65.0) & (res_df['potansiyel_cup'] >= 50.0),
         (res_df['quant_score'] >= 50.0)
     ]
     choices = [
+        "⚠️ SAHTE KÂR (ARSA/DURAN VARLIK SATIŞI)",
         "🏢 MEGA DEV (3X POTANSİYELİ DÜŞÜK)",
         "⚠️ ELENDİ (KULUÇKA ŞARTINA UYMUYOR)",
         "🦅 KULUÇKA LİDERİ (MULTI-BAGGER ADAYI)",
@@ -233,7 +242,7 @@ def calculate_quant_scores(df, df_gecmis, state):
     ]
     res_df['regime'] = np.select(conditions, choices, default="NÖTR")
 
-    drop_cols = ['pct_base', 'pct_qual', 'pct_sweep', 'pct_ign', 'is_disqualified']
+    drop_cols = ['pct_base', 'pct_qual', 'pct_sweep', 'pct_ign', 'is_disqualified', 'is_fake_profit']
     res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
 
     res_df['score_diff'] = 0.0
@@ -267,6 +276,7 @@ def log_lifecycle_signals(df_scored, state):
                 "stop_price": float(row["stop_price"]),
                 "target_cup": float(row["target_cup"]),
                 "target_bagger": float(row["target_bagger"]),
+                "last_seen_price": float(row["close"]),
                 "quant_score": float(row["quant_score"]),
                 "regime": row["regime"],
                 "score_base": float(row.get("score_base", 50.0)),
@@ -295,7 +305,7 @@ def log_lifecycle_signals(df_scored, state):
         print(f"⚠️ Yaşam döngüsü hatası: {e}")
 
 # =============================================================================
-# 4. TELEGRAM RAPORU (PORTFÖY ÇIKIŞ VE KÂR AL BİLDİRİMLİ)
+# 4. TELEGRAM RAPORU (PORTFÖY VE ÇIKIŞ ALARMLARI)
 # =============================================================================
 
 def send_telegram(message):
@@ -315,7 +325,6 @@ def send_telegram(message):
 def format_telegram_report(df_scored, state, exit_alerts):
     leaders = df_scored[df_scored['regime'].str.contains("KULUÇKA LİDERİ")].head(5)
     audit = state.get("audit_summary", {})
-    weights = state.get("weights", {})
     
     msg = "🦅 <b>BIST MULTI-BAGGER & KULUÇKA RAPORU</b>\n"
     msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Portföy & Makro Takip</i>\n"
@@ -323,12 +332,20 @@ def format_telegram_report(df_scored, state, exit_alerts):
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
     # =========================================================================
-    # 🚨 1. BÖLÜM: ÇIKIŞ VE KÂR AL UYARILARI (PORTFÖY KORUMA)
+    # 🚨 1. BÖLÜM: ÇIKIŞ VE KÂR AL UYARILARI
     # =========================================================================
     if exit_alerts:
         msg += "🚨 <b>PORTFÖY KORUMA & ÇIKIŞ SİNYALLERİ</b>\n"
         for alert in exit_alerts:
-            icon = "🟢" if "TAKE_PROFIT" in alert["type"] or "TARGET" in alert["type"] else "🔴"
+            a_type = alert.get("type", "")
+            if "TAKE_PROFIT" in a_type or "TARGET" in a_type:
+                icon = "🟢"
+            elif "TIME_STOP" in a_type:
+                icon = "🟡"
+            elif "SPLIT" in a_type:
+                icon = "🔵"
+            else:
+                icon = "🔴"
             msg += f"{icon} <b>#{alert['ticker']}</b> ── {alert['msg']}\n"
         msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
     else:
@@ -336,11 +353,11 @@ def format_telegram_report(df_scored, state, exit_alerts):
         msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
     # =========================================================================
-    # 💎 2. BÖLÜM: GÜNÜN YENİ KULUÇKA LİDERLERİ
+    # 💎 2. BÖLÜM: YENİ KULUÇKA LİDERLERİ
     # =========================================================================
     msg += "💎 <b>GÜNÜN YENİ KULUÇKA ADAYLARI</b>\n"
     if leaders.empty:
-        msg += "ℹ️ <i>Bugün 52 haftalık tabanda yeni uyanış yapan Small-Cap hisse bulunamadı.</i>\n\n"
+        msg += "ℹ️ <i>Bugün 52 haftalık tabanda yeni uyanış yapan kaliteli Small-Cap hisse bulunamadı.</i>\n\n"
     else:
         for idx, row in leaders.iterrows():
             s_diff = row.get('score_diff', 0.0)
@@ -348,14 +365,14 @@ def format_telegram_report(df_scored, state, exit_alerts):
             
             msg += f"⭐ <b>#{row['ticker']}</b> ── <b>Skor: {row['quant_score']:.1f}</b> <i>({fark_str})</i>\n"
             msg += f"💵 Fiyat: <b>{row['close']:.2f} TL</b> (Piyasa Değeri: <b>{row['mcap_milyar']:.1f} Mr TL</b>)\n"
-            msg += f"📍 52H Dip Mesafesi: <b>+%{row['dist_from_52w_low']:.1f}</b>\n"
+            msg += f"📍 52H Dip Mesafesi: <b>+%{row['dist_from_52w_low']:.1f}</b> (Derin Taban)\n"
             msg += f"🎯 1. Hedef (Çanak): <b>{row['target_cup']:.2f} TL</b> (<b>+%{row['potansiyel_cup']:.0f}</b>)\n"
             msg += f"🚀 2. Hedef (2.5x): <b>{row['target_bagger']:.2f} TL</b> (<b>+%150</b>)\n"
             msg += f"🛡️ Dinamik Taban Stop: <b>{row['stop_price']:.2f} TL</b>\n"
             msg += f"📊 ROE: <b>%{row.get('roe', 0):.1f}</b> | F/K: <b>{row.get('pe', 0):.1f}</b> | Takas: <b>%{row.get('score_sweep', 0):.1f}</b>\n\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "⏳ <i>Strateji: Kuluçkadan Al, Hedefe Kadar Taşı, Çıkış Uyarısı Gelince Sat!</i>"
+    msg += "🛡️ <i>3'lü Otomatik Zırh: Split Dedektörü, Esas Faaliyet Kalkanı ve 90 Gün Zaman Stopu devrededir.</i>"
     return msg
 
 # =============================================================================
@@ -364,16 +381,11 @@ def format_telegram_report(df_scored, state, exit_alerts):
 
 def main():
     print("=== BIST Multi-Bagger Kuluçka Motoru Başlıyor ===")
-    
-    # 1. Denetçiyi çalıştır ve varsa çıkış alarmlarını al
     state, exit_alerts = audit_and_calibrate()
-    
-    # 2. Piyasa Verisi
     df_current = fetch_all_market_data()
     if df_current.empty:
         return
 
-    # 3. Geçmiş Veri
     df_gecmis = pd.DataFrame()
     if os.path.exists(GECMIS_DOSYA):
         try:
@@ -382,15 +394,12 @@ def main():
         except Exception:
             pass
 
-    # 4. Puanlama
     df_scored = calculate_quant_scores(df_current, df_gecmis, state)
     if df_scored.empty:
         return
 
-    # 5. Deftere Yaz
     log_lifecycle_signals(df_scored, state)
 
-    # 6. Streamlit Kaydı
     if not df_gecmis.empty:
         df_gecmis = df_gecmis[df_gecmis['tarih'] != pd.Timestamp.now().normalize()]
         df_yeni = pd.concat([df_gecmis, df_scored], ignore_index=True)
@@ -401,7 +410,6 @@ def main():
     limit_tarih = pd.Timestamp.now().normalize() - pd.Timedelta(days=60)
     df_yeni[df_yeni['tarih'] >= limit_tarih].to_csv(GECMIS_DOSYA, index=False)
 
-    # 7. Telegram Bildirimi (Yeni Girişler + Çıkış Alarmları)
     send_telegram(format_telegram_report(df_scored, state, exit_alerts))
     print("Multi-Bagger Taraması ve Çıkış Denetimi Başarıyla Tamamlandı!")
 
