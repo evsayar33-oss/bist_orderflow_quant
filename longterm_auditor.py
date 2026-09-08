@@ -10,7 +10,7 @@ def fetch_current_market_snapshot():
     url = "https://scanner.tradingview.com/turkey/scan"
     payload = {
         "filter": [{"left": "type", "operation": "equal", "right": "stock"}],
-        "columns": ["name", "close", "high", "low"],
+        "columns": ["name", "close", "high", "low", "change"],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
         "range": [0, 500]
     }
@@ -26,7 +26,8 @@ def fetch_current_market_snapshot():
                 close_p = float(d[1]) if d[1] is not None else 0.0
                 high_p = float(d[2]) if d[2] is not None else close_p
                 low_p = float(d[3]) if d[3] is not None else close_p
-                price_map[ticker] = {"close": close_p, "high": high_p, "low": low_p}
+                change_p = float(d[4]) if len(d) > 4 and d[4] is not None else 0.0
+                price_map[ticker] = {"close": close_p, "high": high_p, "low": low_p, "change": change_p}
             return price_map
     except Exception as e:
         print(f"⚠️ Denetçi piyasa verisi çekemedi: {e}")
@@ -54,7 +55,36 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         curr_p = market_prices[ticker]["close"]
         curr_low = market_prices[ticker]["low"]
         curr_high = market_prices[ticker]["high"]
+        daily_chg = market_prices[ticker].get("change", 0.0)
 
+        # =====================================================================
+        # 🛡️ 1. ZIRH: OTOMATİK BÖLÜNME / BEDELSİZ DEDEKTÖRÜ (SPLIT GUARD)
+        # =====================================================================
+        last_p = float(row.get("last_seen_price", entry_p)) if pd.notna(row.get("last_seen_price")) and float(row.get("last_seen_price", 0)) > 0 else entry_p
+        
+        # BIST'te maksimum düşüş sınırı -%10'dur. Fiyat geceden sabaha >%18 düştüyse bu KESİNLİKLE BÖLÜNMEDİR!
+        if curr_p > 0 and last_p > 0:
+            drop_ratio = (last_p - curr_p) / last_p
+            if drop_ratio >= 0.18 and daily_chg >= -11.0:
+                split_factor = last_p / curr_p
+                entry_p = round(entry_p / split_factor, 2)
+                target_p = round(target_p / split_factor, 2)
+                initial_stop = round(initial_stop / split_factor, 2)
+                
+                df_signals.at[idx, "entry_price"] = entry_p
+                df_signals.at[idx, "target_cup"] = target_p
+                df_signals.at[idx, "stop_price"] = initial_stop
+                df_signals.at[idx, "target_bagger"] = round(entry_p * 2.5, 2)
+                
+                exit_alerts.append({
+                    "ticker": ticker,
+                    "type": "SPLIT_ADJUSTED",
+                    "msg": f"Hisse {split_factor:.1f}x bölündü (Bedelsiz/Split). Giriş ve hedef fiyatları otomatik uyarlandı!"
+                })
+
+        df_signals.at[idx, "last_seen_price"] = curr_p
+
+        # Getiri ve Ekstremumlar
         gain_from_entry = ((curr_p - entry_p) / entry_p) * 100.0
         low_from_entry = ((curr_low - entry_p) / entry_p) * 100.0
         high_from_entry = ((curr_high - entry_p) / entry_p) * 100.0
@@ -95,13 +125,26 @@ def update_signal_lifecycle(df_signals, market_prices, state):
 
         curr_status = row.get("outcome", "INCUBATING")
         if curr_status in ["INCUBATING", "PENDING"]:
-            if curr_low <= initial_stop and peak_gain < 15.0:
+            
+            # =================================================================
+            # 🛡️ 2. ZIRH: 90 GÜNLÜK ALGORTİMİK ZAMAN STOPU (TIME STOP)
+            # =================================================================
+            if days_passed >= 90 and peak_gain < 15.0:
+                df_signals.at[idx, "outcome"] = "TIMEOUT_DEAD_INCUBATION"
+                exit_alerts.append({
+                    "ticker": ticker,
+                    "type": "TIME_STOP",
+                    "msg": f"90 gündür tabandan uyanamadı (Ölü Kuluçka). Zaman stopu tetiklendi; sermayeyi yeni kuluçka hisselerine kaydırın."
+                })
+            # Taban Kırıldı
+            elif curr_low <= initial_stop and peak_gain < 15.0:
                 df_signals.at[idx, "outcome"] = "FAIL_BASE_BREAKDOWN"
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "STOP_LOSS",
                     "msg": f"Taban desteği kırıldı ({curr_p:.2f} TL). Zararı kesip çıkın."
                 })
+            # İzleyen Stop Tetiklendi (Kâr Al)
             elif curr_low <= trailing_stop and peak_gain >= 25.0:
                 df_signals.at[idx, "outcome"] = "WIN_PROFIT_LOCKED"
                 exit_alerts.append({
@@ -109,6 +152,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
                     "type": "TAKE_PROFIT",
                     "msg": f"İzleyen stop tetiklendi ({curr_p:.2f} TL). %+ {gain_from_entry:.1f} kârı cebe koyun!"
                 })
+            # Çanak Hedefine Ulaşıldı
             elif curr_high >= target_p:
                 df_signals.at[idx, "outcome"] = "WIN_CUP_BREAKOUT"
                 exit_alerts.append({
@@ -121,7 +165,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
     return df_signals, exit_alerts
 
 def run_feedback_loop_optimization(df_signals, state):
-    mature = df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN"])]
+    mature = df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN", "TIMEOUT_DEAD_INCUBATION"])]
     min_samples = state.get("learning_params", {}).get("min_sample_size", 10)
 
     if len(mature) < min_samples:
@@ -178,9 +222,7 @@ def audit_and_calibrate():
     state = load_ai_state()
     df_signals = load_lifecycle_signals()
     
-    # 🚨 OTOMATİK EĞİTİM (BOOTSTRAP) KONTROLÜ:
-    # Eğer hafızada henüz 10'dan az olgun sinyal varsa hemen geçmişi simüle et!
-    mature_count = len(df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN"])]) if not df_signals.empty else 0
+    mature_count = len(df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN", "TIMEOUT_DEAD_INCUBATION"])]) if not df_signals.empty else 0
     
     if mature_count < 10:
         try:
