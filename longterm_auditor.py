@@ -33,11 +33,6 @@ def fetch_current_market_snapshot():
     return {}
 
 def update_signal_lifecycle(df_signals, market_prices, state):
-    """
-    Sinyalleri denetler. Sabit eşik KULLANMAZ.
-    Hissenin kendi çanak hedefine olan ilerleme oranına (Progress Ratio) göre
-    dinamik izleyen stop hesaplar ve çıkış alarmlarını üretir.
-    """
     if df_signals.empty or not market_prices:
         return df_signals, []
 
@@ -74,7 +69,6 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         sig_date = pd.to_datetime(row["tarih"])
         days_passed = (today - sig_date).days
 
-        # Vade Takibi
         if days_passed >= 30 and pd.isna(row.get("ret_30d")):
             df_signals.at[idx, "ret_30d"] = round(gain_from_entry, 2)
         if days_passed >= 90 and pd.isna(row.get("ret_90d")):
@@ -82,9 +76,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         if days_passed >= 180 and pd.isna(row.get("ret_180d")):
             df_signals.at[idx, "ret_180d"] = round(gain_from_entry, 2)
 
-        # =========================================================================
-        # 🎯 DİNAMİK İLERLEME ORANI (PROGRESS RATIO) İLE İZLEYEN STOP
-        # =========================================================================
+        # İlerlemeye Göre Dinamik İzleyen Stop
         total_target_distance = target_p - entry_p
         trailing_stop = initial_stop
 
@@ -92,56 +84,36 @@ def update_signal_lifecycle(df_signals, market_prices, state):
             peak_price = entry_p * (1.0 + peak_gain / 100.0)
             target_progress = (peak_price - entry_p) / total_target_distance
 
-            # 1. Yolun %25'i tamamlandığında stop maliyete çekilir (Zarar Biter)
             if target_progress >= 0.25:
                 trailing_stop = max(trailing_stop, round(entry_p * 1.02, 2))
-
-            # 2. Yolun %50'si tamamlandığında kârın yarısı kilitlenir
             if target_progress >= 0.50:
-                locked_gain_price = entry_p + (total_target_distance * 0.30)
-                trailing_stop = max(trailing_stop, round(locked_gain_price, 2))
-
-            # 3. Yolun %80'i veya fazlası tamamlandığında zirveden oransal koruma
+                trailing_stop = max(trailing_stop, round(entry_p + (total_target_distance * 0.30), 2))
             if target_progress >= 0.80:
-                locked_gain_price = entry_p + (total_target_distance * 0.65)
-                trailing_stop = max(trailing_stop, round(locked_gain_price, 2))
+                trailing_stop = max(trailing_stop, round(entry_p + (total_target_distance * 0.65), 2))
 
         df_signals.at[idx, "stop_price"] = trailing_stop
 
-        # =========================================================================
-        # ÇIKIŞ ALARMI TESPİTİ (TELEGRAM BİLDİRİMİ İÇİN)
-        # =========================================================================
         curr_status = row.get("outcome", "INCUBATING")
-
         if curr_status in ["INCUBATING", "PENDING"]:
-            # A. Taban Kırıldı - STOP OL
             if curr_low <= initial_stop and peak_gain < 15.0:
                 df_signals.at[idx, "outcome"] = "FAIL_BASE_BREAKDOWN"
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "STOP_LOSS",
-                    "price": curr_p,
-                    "change": gain_from_entry,
-                    "msg": f"Taban desteği kırıldı ({curr_p:.2f} TL). Pozisyonu kapatıp zararı kesin."
+                    "msg": f"Taban desteği kırıldı ({curr_p:.2f} TL). Zararı kesip çıkın."
                 })
-            # B. Kâr Koruma Stopu Tetiklendi - KÂR AL
             elif curr_low <= trailing_stop and peak_gain >= 25.0:
                 df_signals.at[idx, "outcome"] = "WIN_PROFIT_LOCKED"
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "TAKE_PROFIT",
-                    "price": curr_p,
-                    "change": gain_from_entry,
-                    "msg": f"İzleyen stop tetiklendi ({curr_p:.2f} TL). %+ {gain_from_entry:.1f} kârı cebe koyup çıkın!"
+                    "msg": f"İzleyen stop tetiklendi ({curr_p:.2f} TL). %+ {gain_from_entry:.1f} kârı cebe koyun!"
                 })
-            # C. Çanak Hedefine Ulaşıldı
             elif curr_high >= target_p:
                 df_signals.at[idx, "outcome"] = "WIN_CUP_BREAKOUT"
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "TARGET_HIT",
-                    "price": curr_p,
-                    "change": gain_from_entry,
                     "msg": f"1. Çanak hedefine ({target_p:.2f} TL) ulaşıldı! Ana kârı realize edin."
                 })
 
@@ -155,7 +127,6 @@ def run_feedback_loop_optimization(df_signals, state):
     if len(mature) < min_samples:
         state["audit_summary"]["status"] = f"🦅 KULUÇKA TAKİBİNDE ({len(mature)}/{min_samples} Olgun Sinyal)"
         state["audit_summary"]["total_signals_audited"] = len(mature)
-        state["audit_summary"]["last_audit_date"] = datetime.now().strftime("%Y-%m-%d")
         save_ai_state(state)
         return state
 
@@ -183,7 +154,7 @@ def run_feedback_loop_optimization(df_signals, state):
     total_ic = sum(ic_scores.values())
     raw_weights = {k: ic_scores[k] / total_ic for k in ic_scores}
 
-    lr = state["learning_params"].get("learning_rate", 0.05)
+    lr = state["learning_params"].get("learning_rate", 0.08)
     current_weights = state["weights"]
 
     updated = {}
@@ -198,7 +169,7 @@ def run_feedback_loop_optimization(df_signals, state):
     state["audit_summary"]["total_signals_audited"] = len(mature)
     state["audit_summary"]["win_rate_6m"] = win_rate
     state["audit_summary"]["last_audit_date"] = datetime.now().strftime("%Y-%m-%d")
-    state["audit_summary"]["status"] = f"🧠 AI OPTİMİZE EDİLDİ (Win: %{win_rate})"
+    state["audit_summary"]["status"] = f"🧠 AI EĞİTİLDİ ({len(mature)} Sinyal | WinRate: %{win_rate})"
 
     save_ai_state(state)
     return state
@@ -206,11 +177,27 @@ def run_feedback_loop_optimization(df_signals, state):
 def audit_and_calibrate():
     state = load_ai_state()
     df_signals = load_lifecycle_signals()
+    
+    # 🚨 OTOMATİK EĞİTİM (BOOTSTRAP) KONTROLÜ:
+    # Eğer hafızada henüz 10'dan az olgun sinyal varsa hemen geçmişi simüle et!
+    mature_count = len(df_signals[df_signals["outcome"].isin(["WIN_MULTI_BAGGER", "WIN_CUP_BREAKOUT", "WIN_PROFIT_LOCKED", "FAIL_BASE_BREAKDOWN"])]) if not df_signals.empty else 0
+    
+    if mature_count < 10:
+        try:
+            from bootstrap_history import run_historical_bootstrap
+            success = run_historical_bootstrap()
+            if success:
+                df_signals = load_lifecycle_signals()
+        except Exception as e:
+            print(f"⚠️ Bootstrap hatası: {e}")
+
     if df_signals.empty:
         return state, []
+
     market_prices = fetch_current_market_snapshot()
     if not market_prices:
         return state, []
+
     df_updated, exit_alerts = update_signal_lifecycle(df_signals, market_prices, state)
     state = run_feedback_loop_optimization(df_updated, state)
     return state, exit_alerts
