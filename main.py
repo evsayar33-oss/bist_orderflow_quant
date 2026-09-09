@@ -29,10 +29,12 @@ def get_bist_macro_data():
             "price_52_week_high", "price_52_week_low", "market_cap_basic",
             "return_on_equity_fq", "price_earnings_ttm", "price_book_fq",
             "Perf.Y", "relative_volume_10d_calc",
-            "operating_margin" # 🛡️ ESAS FAALİYET MARJI (ARSA SATIŞI KALKANI)
+            "operating_margin", # 🛡️ ESAS FAALİYET MARJI KALKANI
+            "Perf.1M",
+            "Perf.W"
         ],
         "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
-        "range": [0, 400]
+        "range": [0, 450]
     }
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     try:
@@ -62,7 +64,9 @@ def get_bist_macro_data():
                 "pb": float(d[13]) if d[13] is not None else 2.0,
                 "perf_y": float(d[14]) if d[14] is not None else 0.0,
                 "rvol": float(d[15]) if len(d) > 15 and d[15] is not None else 1.0,
-                "oper_margin": float(d[16]) if len(d) > 16 and d[16] is not None else 12.0
+                "oper_margin": float(d[16]) if len(d) > 16 and d[16] is not None else 12.0,
+                "perf_1m": float(d[17]) if len(d) > 17 and d[17] is not None else 0.0,
+                "perf_w": float(d[18]) if len(d) > 18 and d[18] is not None else 0.0
             })
         return pd.DataFrame(rows)
     except Exception as e:
@@ -112,19 +116,31 @@ def fetch_all_market_data():
     return df_final
 
 # =============================================================================
-# 2. MULTI-BAGGER QUANT PUANLAMA MOTORU (FAALİYET KÂRI KORUMALI)
+# 2. REJİM DUYARLI QUANT PUANLAMA MOTORU
 # =============================================================================
 
 def calculate_quant_scores(df, df_gecmis, state):
     if df.empty:
         return df
 
-    weights = state.get("weights", {"macro_base": 0.35, "growth_quality": 0.30, "stealth_accumulation": 0.20, "volume_ignition": 0.15})
     thresholds = state.get("thresholds", {})
-    
     min_mcap = thresholds.get("min_market_cap_tl", 2000000000)
     max_mcap = thresholds.get("max_market_cap_tl", 40000000000)
     min_roe = thresholds.get("min_roe", 18.0)
+    min_oper_margin = thresholds.get("min_oper_margin", 6.0)
+
+    # 1. BIST GENEL PİYASA REJİMİ TESPİTİ
+    market_perf_median = float(df['perf_1m'].median())
+    if market_perf_median >= 0.0:
+        market_regime = "BOĞA / GENİŞLEME"
+        # Boğada hacimli kırılımlar ödüllendirilir
+        weights = {"macro_base": 0.35, "growth_quality": 0.25, "stealth_accumulation": 0.20, "volume_ignition": 0.20}
+    else:
+        market_regime = "AYI / DURGUNLUK"
+        # Ayıda hacim tuzaklarına karşı DEFANS MODU (Temel Kârlılık %40'a çıkarılır)
+        weights = {"macro_base": 0.35, "growth_quality": 0.40, "stealth_accumulation": 0.20, "volume_ignition": 0.05}
+
+    state["market_regime"] = market_regime
 
     scored_data = []
 
@@ -152,14 +168,13 @@ def calculate_quant_scores(df, df_gecmis, state):
         stop_price = round(low_52w * 0.96, 2)
         potansiyel_cup = round(((target_cup - close) / close) * 100.0, 1)
 
-        # 🛡️ ESAS FAALİYET KÂRI KALKANI:
-        # Net kâr yüksek olsa bile şirket asıl işinden para kazanamıyorsa (oper_margin < %6) elenir!
-        is_fake_profit = (oper_margin < 6.0)
+        # 🛡️ ESAS FAALİYET KÂRI VE ARSA SATIŞI KALKANI
+        is_fake_profit = (oper_margin < min_oper_margin)
         is_zombie = (roe < min_roe) or (pb <= 0.0) or is_fake_profit
         is_wrong_size = (mcap < min_mcap) or (mcap > max_mcap)
         is_overextended = (perf_y > 150.0) or (dist_from_52w_low > 50.0)
 
-        # 1. Makro Taban
+        # 1. Makro Taban Skoru
         score_base = 20.0
         if 4.0 <= dist_from_52w_low <= 28.0:
             score_base = 90.0
@@ -168,17 +183,17 @@ def calculate_quant_scores(df, df_gecmis, state):
         elif dist_from_52w_low <= 35.0:
             score_base = 65.0
 
-        # 2. Kalite (Esas Faaliyet Marjı Destekli)
+        # 2. Kalite Skoru (Esas Faaliyet Marjı Teyitli)
         score_quality = 30.0
         if roe >= 35.0 and oper_margin >= 15.0: score_quality += 45.0
         elif roe >= 22.0 and oper_margin >= 10.0: score_quality += 30.0
-        elif roe >= min_roe and oper_margin >= 6.0: score_quality += 15.0
+        elif roe >= min_roe and oper_margin >= min_oper_margin: score_quality += 15.0
 
         if 0 < pe <= 12.0: score_quality += 25.0
         elif 0 < pe <= 20.0: score_quality += 15.0
         score_quality = min(max(score_quality, 5.0), 100.0)
 
-        # 3. Takas & Hacim
+        # 3. Kurumsal Takas & Hacimli Ateşleme
         range_span = high - low
         clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
         score_sweep = round(min(max((f_ratio * 0.40) + (max(clv, 0.0) * 60.0), 5.0), 98.5), 1)
@@ -207,10 +222,10 @@ def calculate_quant_scores(df, df_gecmis, state):
     res_df['pct_sweep'] = res_df['score_sweep'].rank(pct=True) * 100.0
     res_df['pct_ign'] = res_df['score_ignition'].rank(pct=True) * 100.0
 
-    w_b = weights.get('macro_base', 0.35)
-    w_q = weights.get('growth_quality', 0.30)
-    w_s = weights.get('stealth_accumulation', 0.20)
-    w_i = weights.get('volume_ignition', 0.15)
+    w_b = weights["macro_base"]
+    w_q = weights["growth_quality"]
+    w_s = weights["stealth_accumulation"]
+    w_i = weights["volume_ignition"]
 
     raw_score = np.round(
         res_df['pct_base'] * w_b +
@@ -255,7 +270,7 @@ def calculate_quant_scores(df, df_gecmis, state):
     return res_df.sort_values(by='quant_score', ascending=False).reset_index(drop=True)
 
 # =============================================================================
-# 3. YAŞAM DÖNGÜSÜ GÜNLÜĞÜ
+# 3. SİNYAL YAŞAM DÖNGÜSÜ GÜNLÜĞÜ
 # =============================================================================
 
 def log_lifecycle_signals(df_scored, state):
@@ -305,7 +320,7 @@ def log_lifecycle_signals(df_scored, state):
         print(f"⚠️ Yaşam döngüsü hatası: {e}")
 
 # =============================================================================
-# 4. TELEGRAM RAPORU (PORTFÖY VE ÇIKIŞ ALARMLARI)
+# 4. TELEGRAM RAPORU (REJİM VE ÇIKIŞ BİLDİRİMLİ)
 # =============================================================================
 
 def send_telegram(message):
@@ -325,15 +340,14 @@ def send_telegram(message):
 def format_telegram_report(df_scored, state, exit_alerts):
     leaders = df_scored[df_scored['regime'].str.contains("KULUÇKA LİDERİ")].head(5)
     audit = state.get("audit_summary", {})
+    regime = state.get("market_regime", "BOĞA / GENİŞLEME")
     
     msg = "🦅 <b>BIST MULTI-BAGGER & KULUÇKA RAPORU</b>\n"
     msg += f"🗓 <i>{datetime.now().strftime('%Y-%m-%d')} | Portföy & Makro Takip</i>\n"
+    msg += f"📈 <b>Piyasa Rejimi:</b> <code>{regime}</code>\n"
     msg += f"🤖 <b>AI Durumu:</b> <code>{audit.get('status', 'AKTİF')}</code>\n"
     msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    # =========================================================================
-    # 🚨 1. BÖLÜM: ÇIKIŞ VE KÂR AL UYARILARI
-    # =========================================================================
     if exit_alerts:
         msg += "🚨 <b>PORTFÖY KORUMA & ÇIKIŞ SİNYALLERİ</b>\n"
         for alert in exit_alerts:
@@ -352,9 +366,6 @@ def format_telegram_report(df_scored, state, exit_alerts):
         msg += "🛡️ <b>Açık Pozisyonlar:</b> Tüm hisseler güvenli bölgede kuluçkaya devam ediyor.\n"
         msg += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    # =========================================================================
-    # 💎 2. BÖLÜM: YENİ KULUÇKA LİDERLERİ
-    # =========================================================================
     msg += "💎 <b>GÜNÜN YENİ KULUÇKA ADAYLARI</b>\n"
     if leaders.empty:
         msg += "ℹ️ <i>Bugün 52 haftalık tabanda yeni uyanış yapan kaliteli Small-Cap hisse bulunamadı.</i>\n\n"
@@ -372,7 +383,7 @@ def format_telegram_report(df_scored, state, exit_alerts):
             msg += f"📊 ROE: <b>%{row.get('roe', 0):.1f}</b> | F/K: <b>{row.get('pe', 0):.1f}</b> | Takas: <b>%{row.get('score_sweep', 0):.1f}</b>\n\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "🛡️ <i>3'lü Otomatik Zırh: Split Dedektörü, Esas Faaliyet Kalkanı ve 90 Gün Zaman Stopu devrededir.</i>"
+    msg += "🛡️ <i>Rejim Zırhı: Boğa/Ayı Adaptif Ağırlıklar, Dinamik Zaman Stopu (60-120G) ve Split Dedektörü devrededir.</i>"
     return msg
 
 # =============================================================================
@@ -410,8 +421,9 @@ def main():
     limit_tarih = pd.Timestamp.now().normalize() - pd.Timedelta(days=60)
     df_yeni[df_yeni['tarih'] >= limit_tarih].to_csv(GECMIS_DOSYA, index=False)
 
+    save_ai_state(state)
     send_telegram(format_telegram_report(df_scored, state, exit_alerts))
-    print("Multi-Bagger Taraması ve Çıkış Denetimi Başarıyla Tamamlandı!")
+    print("BIST Taraması Başarıyla Tamamlandı!")
 
 if __name__ == "__main__":
     main()
