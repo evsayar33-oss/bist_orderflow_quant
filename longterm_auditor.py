@@ -62,7 +62,6 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         # =====================================================================
         last_p = float(row.get("last_seen_price", entry_p)) if pd.notna(row.get("last_seen_price")) and float(row.get("last_seen_price", 0)) > 0 else entry_p
         
-        # BIST'te maksimum düşüş sınırı -%10'dur. Fiyat geceden sabaha >%18 düştüyse bu KESİNLİKLE BÖLÜNMEDİR!
         if curr_p > 0 and last_p > 0:
             drop_ratio = (last_p - curr_p) / last_p
             if drop_ratio >= 0.18 and daily_chg >= -11.0:
@@ -79,12 +78,11 @@ def update_signal_lifecycle(df_signals, market_prices, state):
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "SPLIT_ADJUSTED",
-                    "msg": f"Hisse {split_factor:.1f}x bölündü (Bedelsiz/Split). Giriş ve hedef fiyatları otomatik uyarlandı!"
+                    "msg": f"Hisse {split_factor:.1f}x bölündü (Bedelsiz/Split). Giriş, stop ve hedefler otomatik uyarlandı!"
                 })
 
         df_signals.at[idx, "last_seen_price"] = curr_p
 
-        # Getiri ve Ekstremumlar
         gain_from_entry = ((curr_p - entry_p) / entry_p) * 100.0
         low_from_entry = ((curr_low - entry_p) / entry_p) * 100.0
         high_from_entry = ((curr_high - entry_p) / entry_p) * 100.0
@@ -106,7 +104,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
         if days_passed >= 180 and pd.isna(row.get("ret_180d")):
             df_signals.at[idx, "ret_180d"] = round(gain_from_entry, 2)
 
-        # İlerlemeye Göre Dinamik İzleyen Stop
+        # İlerlemeye Göre Dinamik İzleyen Stop (Progress Ratio)
         total_target_distance = target_p - entry_p
         trailing_stop = initial_stop
 
@@ -123,20 +121,29 @@ def update_signal_lifecycle(df_signals, market_prices, state):
 
         df_signals.at[idx, "stop_price"] = trailing_stop
 
+        # =====================================================================
+        # 🛡️ 2. ZIRH: OYNAKLIĞA DUYARLI DİNAMİK ZAMAN STOPU (60 - 120 GÜN)
+        # =====================================================================
+        # Hissenin çanak potansiyeline göre maksimum sabır süresi
+        cup_pot = ((target_p - entry_p) / entry_p) * 100.0 if entry_p > 0 else 50.0
+        if cup_pot >= 120.0:
+            max_patience_days = 60   # Çok atak/volatil hisse 60 günde uyanmadıysa ölüdür
+        elif cup_pot <= 50.0:
+            max_patience_days = 120  # Ağır sanayi/defansif hisseye 120 gün kuluçka hakkı
+        else:
+            max_patience_days = 90   # Standart kuluçka süresi
+
         curr_status = row.get("outcome", "INCUBATING")
         if curr_status in ["INCUBATING", "PENDING"]:
-            
-            # =================================================================
-            # 🛡️ 2. ZIRH: 90 GÜNLÜK ALGORTİMİK ZAMAN STOPU (TIME STOP)
-            # =================================================================
-            if days_passed >= 90 and peak_gain < 15.0:
+            # Dinamik Zaman Stopu
+            if days_passed >= max_patience_days and peak_gain < 15.0:
                 df_signals.at[idx, "outcome"] = "TIMEOUT_DEAD_INCUBATION"
                 exit_alerts.append({
                     "ticker": ticker,
                     "type": "TIME_STOP",
-                    "msg": f"90 gündür tabandan uyanamadı (Ölü Kuluçka). Zaman stopu tetiklendi; sermayeyi yeni kuluçka hisselerine kaydırın."
+                    "msg": f"{max_patience_days} gündür tabandan uyanamadı (Ölü Kuluçka). Zaman stopu tetiklendi; sermayeyi serbest bırakın."
                 })
-            # Taban Kırıldı
+            # Taban Desteği Kırıldı
             elif curr_low <= initial_stop and peak_gain < 15.0:
                 df_signals.at[idx, "outcome"] = "FAIL_BASE_BREAKDOWN"
                 exit_alerts.append({
@@ -144,7 +151,7 @@ def update_signal_lifecycle(df_signals, market_prices, state):
                     "type": "STOP_LOSS",
                     "msg": f"Taban desteği kırıldı ({curr_p:.2f} TL). Zararı kesip çıkın."
                 })
-            # İzleyen Stop Tetiklendi (Kâr Al)
+            # İzleyen Kâr Stopu
             elif curr_low <= trailing_stop and peak_gain >= 25.0:
                 df_signals.at[idx, "outcome"] = "WIN_PROFIT_LOCKED"
                 exit_alerts.append({
@@ -204,7 +211,7 @@ def run_feedback_loop_optimization(df_signals, state):
     updated = {}
     for k in current_weights:
         new_w = (1.0 - lr) * current_weights[k] + lr * raw_weights[k]
-        updated[k] = min(max(new_w, 0.10), 0.50)
+        updated[k] = min(max(new_w, 0.08), 0.45)
 
     w_sum = sum(updated.values())
     final_weights = {k: round(v / w_sum, 3) for k, v in updated.items()}
