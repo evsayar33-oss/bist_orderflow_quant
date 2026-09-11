@@ -124,7 +124,23 @@ def update_signal_lifecycle(df_signals, market_prices, state):
             if target_progress >= 0.80:
                 trailing_stop = max(trailing_stop, round(entry_p + (total_target_distance * 0.65), 2))
 
+        prev_stop = float(row.get("stop_price", initial_stop))
         df_signals.at[idx, "stop_price"] = trailing_stop
+
+        # 🔔 TELEGRAM STOP GÜNCELLEME VE KÂR KİLİDİ UYARILARI
+        if trailing_stop > prev_stop:
+            if peak_gain >= 6.0 and prev_stop <= entry_p:
+                exit_alerts.append({
+                    "ticker": ticker,
+                    "type": "BREAKEVEN_STOP_RAISE",
+                    "msg": f"⚡ <b>HIZLI BAŞABAŞ:</b> Hisse +%{peak_gain:.1f} zirve gördü! Aracı kurumunuzdan stopunuzu <b>{trailing_stop:.2f} TL</b> (Maliyet + %1) seviyesine çekerek işlemi <b>TAMAMEN RİSKSİZ</b> hale getirin."
+                })
+            elif peak_gain >= 14.0:
+                exit_alerts.append({
+                    "ticker": ticker,
+                    "type": "PROFIT_STOP_RAISE",
+                    "msg": f"🔒 <b>KÂR KİLİDİ:</b> Hisse +%{peak_gain:.1f} zirve gördü! Stop seviyenizi <b>{trailing_stop:.2f} TL</b> seviyesine yükselterek kârınızı garantiye alın."
+                })
 
         # =====================================================================
         # 🛡️ 2. ZIRH: OYNAKLIĞA DUYARLI DİNAMİK ZAMAN STOPU (60 - 120 GÜN)
