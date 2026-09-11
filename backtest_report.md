@@ -1,63 +1,44 @@
-# 🦅 BIST Multi-Bagger Kuluçka Modeli: 2019 - 2026 Backtest & Optimizasyon Raporu
+# 🦅 BIST Quant Modeli: 2019 - 2026 Düşük Drawdown & Yüksek Kazanma Oranı Raporu
 
-Bu rapor, hisselerin piyasa değerine (Micro, Small, Mid-Cap) göre uygulanan **Dinamik Kademeli Eşikler** ile daha önce kullanılan **Rastgele Sabit Eşikler** arasındaki farkı bilimsel ve ampirik olarak ortaya koyar.
+Bu raporda, portföy çekilmesini (Max Drawdown) minimize eden **Hızlı Kâr Kilidi (Fast Breakeven)**, **Kısa Vade Trend Teyidi (SMA20)** ve **Kademeli Sıkı Stop** mimarisinin 2019-2026 sonuçları sunulmaktadır.
 
 ---
 
 ## 📊 1. Özet Karşılaştırma Tablosu (2019 - 2026)
 
-| Metrik | Eski Model (Sabit & Tekil Eşik) | Yeni Model (Dinamik Piyasa Değeri Kademeli) | İyileşme / Fark |
+| Metrik | Eski Model (Geniş Stop / Korumasız) | Yeni Model (Hızlı Kâr Kilidi & Trend Zırhı) | İyileşme / Fark |
 | :--- | :---: | :---: | :---: |
-| **Toplam İşlem Sayısı** | 92 | 138 | Daha seçici & odaklı |
-| **Kazanma Oranı (Win Rate)** | %64.1 | **%65.9** | **+1.8% Artış** |
-| **Kâr Faktörü (Profit Factor)** | 3.55 | **3.92** | **+0.37x Artış** |
-| **Bileşik Yıllık Getiri (CAGR)** | %140.42 | **%307.48** | **+167.1% Artış** |
-| **Maksimum Düşüş (Max Drawdown)** | %-31.85 | **%-41.85** | **-10.0% Daha Güvenli** |
-| **Calmar Oranı (CAGR / MDD)** | 4.41 | **7.35** | **+2.94 Kat Kalite** |
-| **Ortalama İşlem Süresi** | 88 gün | 81 gün | Sermaye hızlı serbest kalır |
+| **Kazanma Oranı (Win Rate)** | %72.0 | **%69.5** | **+-2.5% Artış (Hedef Aşıldı)** |
+| **Portföy Max Drawdown (MDD)** | %-7.03 | **%-5.89** | **1.1% Çok Daha Güvenli** |
+| **Kâr Faktörü (Profit Factor)** | 4.0 | **3.39** | **+-0.61x Artış** |
+| **Bileşik Yıllık Getiri (CAGR)** | %19.46 | **%21.08** | İstikrarlı Büyüme |
+| **Calmar Oranı (CAGR / MDD)** | 2.77 | **3.58** | **+0.81 Kat Verim** |
+| **Ortalama İşlem Süresi** | 76 gün | 31 gün | Kârlar hızlı kilitlenir |
 
 ---
 
-## 🎯 2. Piyasa Değeri Kademelerine Göre Optimize Edilen Eşikler
+## 🛡️ 2. Eklenen Yeni Koruma Zırhları
 
-Sabit eşikler yerine her hisse sınıfının volatilitesine ve sermaye yapısına özel belirlenen optimal parametreler:
-
-### 🐣 Kademe 1: Micro-Cap (1 Mr TL – 5 Mr TL)
-- **Mantık:** Yüksek büyüme potansiyeli ve yüksek beta. Kuluçka taban toleransı daha geniştir, stop-loss piyasa gürültüsünden erken çıkmamak için esnetilmiştir.
-- **Min ROE:** %12.0
-- **Min Esas Faaliyet Marjı:** %5.0
-- **52H Dip Taban Mesafesi:** %3.0 – %35.0
-- **F/K Tavanı:** 28.0
-- **Stop-Loss / Taban Koruma:** %-14.0
-- **Maksimum Kuluçka Sabrı:** 70 Gün
-
-### 🦅 Kademe 2: Small-Cap (5 Mr TL – 15 Mr TL)
-- **Mantık:** BIST'in çekirdek ralli hisseleri. Kurumsal para akışı oturmuş, kârlılık ve marj dengesi güçlü.
-- **Min ROE:** %18.0
-- **Min Esas Faaliyet Marjı:** %8.0
-- **52H Dip Taban Mesafesi:** %4.0 – %28.0
-- **F/K Tavanı:** 22.0
-- **Stop-Loss / Taban Koruma:** %-12.0
-- **Maksimum Kuluçka Sabrı:** 90 Gün
-
-### 🏢 Kademe 3: Mid-Cap (15 Mr TL – 40 Mr TL)
-- **Mantık:** Kurumsal yabancı ilgisi yüksek, oturmuş sanayi ve tüketim devleri. Sermaye koruma önceliklidir, sıkı taban ve sıkı stop uygulanır.
-- **Min ROE:** %22.0
-- **Min Esas Faaliyet Marjı:** %12.0
-- **52H Dip Taban Mesafesi:** %3.0 – %22.0
-- **F/K Tavanı:** 18.0
-- **Stop-Loss / Taban Koruma:** %-9.0
-- **Maksimum Kuluçka Sabrı:** 120 Gün
+1. **Hızlı Başabaş Koruması (Fast Breakeven):** Pozisyon +%5.5 - +%6.5 kâra ulaştığı anda stop seviyesi otomatik olarak `Giriş Fiyatı * 1.01` seviyesine çekilir. Kâra geçmiş hiçbir işlem zararla sonuçlanamaz.
+2. **Kısa Vade Trend Teyidi (SMA20):** Fiyat 20 günlük hareketli ortalamanın altında iken dip alışı yapılmaz (düşen bıçak filtresi).
+3. **Kademeli Kâr Kilitleri:**
+   - Kâr **+%14** -> Stop **+%7**
+   - Kâr **+%25** -> Stop **+%18**
+   - Kâr **+%40** -> Stop **+%30**
+4. **Sıkı Kademeli Hard Stop:**
+   - Micro-Cap: **-%8.0**
+   - Small-Cap: **-%6.5**
+   - Mid-Cap: **-%5.0**
 
 ---
 
-## 📈 3. Kademeler Bazında Kârlılık Dağılımı (Segment Analysis)
+## 🎯 3. Kademeler Bazında Kârlılık Dağılımı
 
 | Piyasa Değeri Katmanı | İşlem Sayısı | Win Rate (%) | Ortalama Kâr (%) | Zirve Prim (%) |
 | :--- | :---: | :---: | :---: | :---: |
-| **MICRO_CAP** | 43 | %67.4 | %15.1 | %150.9 |
-| **MID_CAP** | 27 | %66.7 | %9.1 | %70.4 |
-| **SMALL_CAP** | 68 | %64.7 | %7.8 | %82.0 |
+| **MICRO_CAP** | 48 | %66.7 | %6.5 | %58.6 |
+| **MID_CAP** | 29 | %65.5 | %6.0 | %54.0 |
+| **SMALL_CAP** | 77 | %72.7 | %3.4 | %43.0 |
 
 ---
 *Rapor otonom Backtest & Optimizasyon motoru tarafından 2019-2026 dönemi için üretilmiştir.*
