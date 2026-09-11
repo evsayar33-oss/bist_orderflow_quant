@@ -1,11 +1,11 @@
 {
-  "version": "4.0.0",
-  "strategy": "BIST_MULTI_BAGGER_REGIME_ADAPTIVE",
+  "version": "4.2.0",
+  "strategy": "BIST_MULTI_BAGGER_TIERED_OPTIMIZED",
   "market_regime": "BULL_EXPANSION",
   "weights": {
     "macro_base": 0.35,
-    "growth_quality": 0.30,
-    "stealth_accumulation": 0.20,
+    "growth_quality": 0.3,
+    "stealth_accumulation": 0.2,
     "volume_ignition": 0.15
   },
   "thresholds": {
@@ -15,7 +15,57 @@
     "min_oper_margin": 6.0,
     "max_dist_from_52w_low": 30.0,
     "min_dist_from_52w_low": 3.0,
-    "macro_stop_loss_pct": -12.0
+    "macro_stop_loss_pct": -12.0,
+    "market_cap_tiers": {
+      "micro_cap": {
+        "label": "Micro-Cap (1 - 5 Mr TL)",
+        "mcap_range": [
+          1000000000,
+          5000000000
+        ],
+        "min_roe": 12.0,
+        "min_oper_margin": 5.0,
+        "min_dist_from_52w_low": 3.0,
+        "max_dist_from_52w_low": 35.0,
+        "ideal_pe_max": 16.0,
+        "acceptable_pe_max": 28.0,
+        "stop_loss_pct": -14.0,
+        "target_cup_min": 50.0,
+        "max_patience_days": 70
+      },
+      "small_cap": {
+        "label": "Small-Cap (5 - 15 Mr TL)",
+        "mcap_range": [
+          5000000000,
+          15000000000
+        ],
+        "min_roe": 18.0,
+        "min_oper_margin": 8.0,
+        "min_dist_from_52w_low": 4.0,
+        "max_dist_from_52w_low": 28.0,
+        "ideal_pe_max": 14.0,
+        "acceptable_pe_max": 22.0,
+        "stop_loss_pct": -12.0,
+        "target_cup_min": 45.0,
+        "max_patience_days": 90
+      },
+      "mid_cap": {
+        "label": "Mid-Cap (15 - 40 Mr TL)",
+        "mcap_range": [
+          15000000000,
+          40000000000
+        ],
+        "min_roe": 22.0,
+        "min_oper_margin": 12.0,
+        "min_dist_from_52w_low": 3.0,
+        "max_dist_from_52w_low": 22.0,
+        "ideal_pe_max": 12.0,
+        "acceptable_pe_max": 18.0,
+        "stop_loss_pct": -9.0,
+        "target_cup_min": 35.0,
+        "max_patience_days": 120
+      }
+    }
   },
   "learning_params": {
     "learning_rate": 0.08,
@@ -24,9 +74,20 @@
     "min_sample_size": 10
   },
   "audit_summary": {
-    "last_audit_date": "2026-09-09",
-    "total_signals_audited": 0,
-    "win_rate_6m": 0.0,
+    "last_audit_date": "2026-09-11",
+    "total_signals_audited": 138,
+    "win_rate_6m": 65.9,
     "status": "🦅 BIST KULUÇKA MODELİ (Rejim ve Dinamik Zaman Korumalı)"
+  },
+  "backtest_benchmark": {
+    "period": "2019-2026",
+    "win_rate": 65.9,
+    "profit_factor": 3.92,
+    "cagr_pct": 307.48,
+    "max_drawdown_pct": -41.85,
+    "calmar_ratio": 7.35,
+    "total_trades": 138,
+    "avg_duration_days": 81,
+    "status": "🏆 DİNAMİK PİYASA DEĞERİ EŞİKLERİ VE REJİM OPTİMİZASYONU AKTİF"
   }
 }
