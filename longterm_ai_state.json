@@ -78,9 +78,9 @@
   },
   "audit_summary": {
     "last_audit_date": "2026-09-11",
-    "total_signals_audited": 154,
+    "total_signals_audited": 8,
     "win_rate_6m": 69.5,
-    "status": "🦅 BIST KULUÇKA MODELİ (Rejim ve Dinamik Zaman Korumalı)"
+    "status": "🦅 KULUÇKA TAKİBİNDE (8/10 Olgun Sinyal)"
   },
   "backtest_benchmark": {
     "period": "2019-2026",
