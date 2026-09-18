@@ -1,43 +1,42 @@
-name: BIST Accumulation Quant Daily Scan & Audit
+name: Adaptive BIST Orderflow Meta-Engine - Daily Scan
 
 on:
   schedule:
-    # Hafta içi her gün TSİ 18:35 (UTC 15:35)
-    - cron: '10 09 * * 1-5'
+    # Türkiye 10:35 (UTC+3 => 07:35 UTC), weekdays.
+    - cron: '35 7 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: adaptive-bist-daily-scan
+  cancel-in-progress: false
+
 jobs:
-  run-scan:
+  scan:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
-      - name: Kodu Repo'dan Çek
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Python Kurulumu
+      - name: Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
-      - name: Bağımlılıkları Yükle
+          cache: pip
+      - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Quant Motoru ve Denetçiyi Çalıştır
+      - name: Run Meta Engine
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: |
-          python main.py
-
-      - name: Güncellenen Verileri ve State'i Kaydet (Git Commit)
+        run: python main.py
+      - name: Commit State and Ledgers
         run: |
           git config --local user.email "quantbot@github.com"
           git config --local user.name "QuantBot AI"
-          git add -A
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 QuantBot AI Otonom Güncelleme: $(date -u)" && git push)
+          git add longterm_ai_state.json model_weights.json signals_log.csv signals_lifecycle.csv gecmis_veri.csv
+          git diff --cached --quiet || (git commit -m "🧠 Adaptive BIST Meta-Engine daily scan" && git push)
