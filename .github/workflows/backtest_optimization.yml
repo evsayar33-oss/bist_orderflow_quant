@@ -1,41 +1,35 @@
-name: BIST 2019-2026 Backtest & Threshold Optimization
+name: Adaptive BIST Orderflow Meta-Engine - Walk Forward Backtest
 
 on:
   workflow_dispatch:
   schedule:
-    # Her ayın 1'inde TSİ 03:00'te otomatik tam backtest & optimizasyon
-    - cron: '0 0 1 * *'
+    # Monthly at 00:30 UTC on the 1st. GitHub Actions scheduling is not exact-minute guaranteed.
+    - cron: '30 0 1 * *'
 
 permissions:
   contents: write
 
 jobs:
-  run-backtest:
+  backtest:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     steps:
-      - name: Kodu Repo'dan Çek
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Python Kurulumu
+      - name: Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-
-      - name: Bağımlılıkları Yükle
+          cache: pip
+      - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install yfinance
-
-      - name: 2019-2026 Backtest & Optimizasyon Motorunu Çalıştır
-        run: |
-          python backtest_optimizer.py --start-date 2019-01-01 --optimize --save
-
-      - name: Güncellenen Eşikleri ve Raporu Kaydet (Git Commit)
+      - name: Real Data Backtest
+        run: python backtest_optimizer.py --start-date 2022-01-01 --save
+      - name: Commit Report
         run: |
           git config --local user.email "quantbot@github.com"
           git config --local user.name "QuantBot AI"
-          git add -A
-          git diff --quiet && git diff --staged --quiet || (git commit -m "📊 Otonom 2019-2026 Backtest & Eşik Optimizasyonu: $(date -u)" && git push)
+          git add backtest_report.json
+          git diff --cached --quiet || (git commit -m "📊 Adaptive BIST walk-forward backtest" && git push)
