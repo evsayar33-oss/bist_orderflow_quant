@@ -137,6 +137,7 @@ def format_report(scored: pd.DataFrame, state: dict, alerts) -> str:
     msg = [
         f"🧠 <b>ADAPTIVE BIST ORDERFLOW META-ENGINE V1</b> | {datetime.now().strftime('%d.%m.%Y')}",
         f"🧭 Rejim: <b>{regime}</b> | Güven: <b>%{confidence:.1f}</b>",
+        f"🛡️ Otonomi: <b>{state.get('autonomy_guard', {}).get('mode', 'NORMAL')}</b> | Maruziyet x{state.get('autonomy_guard', {}).get('exposure_multiplier', 1.0):.2f}",
         f"📊 Breadth Up: %{stats.get('breadth_up', 0)*100:.1f} | Down: %{stats.get('breadth_down', 0)*100:.1f}",
         f"🛡️ Aktif Model: <b>{state.get('validation', {}).get('active_model_version', 'champion-1')}</b>",
         f"📚 Audit Win T+3: <b>%{state.get('audit_summary', {}).get('win_rate_t3', 0):.1f}</b>",
@@ -159,7 +160,6 @@ def format_report(scored: pd.DataFrame, state: dict, alerts) -> str:
 
 
 def self_test():
-    # Deliberately synthetic test data lives only in self-test; production data path never synthesizes facts.
     n = 120
     rng = np.random.default_rng(42)
     close = 100 * np.cumprod(1 + rng.normal(0, 0.01, n))
@@ -195,7 +195,6 @@ def main():
     state = load_ai_state()
     history = load_history()
 
-    # 1) Resolve previously logged outcomes before learning.
     if not history.empty:
         signals = load_signal_log()
         if not signals.empty:
@@ -204,7 +203,6 @@ def main():
 
     state, alerts = audit_and_calibrate(history=history)
 
-    # 2) Fresh current market data; fail closed if it cannot be validated.
     current = fetch_all_data()
     valid, quality = validate_market_frame(current, min_rows=30)
     if valid.empty or not quality.get("ok", False):
@@ -216,6 +214,28 @@ def main():
 
     state["data_quality"] = quality
     scored = score_market(valid, state)
+    signal_log_for_guard = load_signal_log()
+    from autonomy_guard import evaluate_autonomy_guard
+    guard_result = evaluate_autonomy_guard(
+        state,
+        features=scored,
+        regime=state.get("market_regime"),
+        regime_confidence=float(state.get("regime_confidence", 0.0)) / 100.0,
+        performance_returns=(signal_log_for_guard["ret_t3"] if "ret_t3" in signal_log_for_guard.columns else None),
+        data_quality_score=float(quality.get("score", 0.0)),
+        row_count=len(valid),
+        min_rows=30,
+        project="orderflow",
+    )
+    base_threshold = float(state.get("risk_guards", {}).get("min_signal_score", 72.0))
+    effective_threshold = base_threshold + float(guard_result.get("signal_threshold_add", 0.0))
+    if guard_result.get("block_new_entries"):
+        scored["eligible"] = False
+    else:
+        scored["eligible"] = scored["eligible"].astype(bool) & (
+            pd.to_numeric(scored["meta_score"], errors="coerce") >= effective_threshold
+        )
+
     signal_log = log_signals(scored, state)
     signal_log.to_csv("signals_log.csv", index=False)
     upsert_lifecycle(scored, state)

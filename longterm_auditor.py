@@ -9,6 +9,7 @@ import requests
 
 from learner_engine import apply_learning, resolve_forward_outcomes
 from state_manager import load_ai_state, load_lifecycle_signals, load_signal_log, save_ai_state, save_lifecycle_signals
+from autonomy_guard import evaluate_autonomy_guard
 
 
 def fetch_current_snapshot():
@@ -124,6 +125,17 @@ def audit_and_calibrate(history=None):
         # Outcomes are resolved against persisted daily history, not calendar-day elapsed time.
         signal_log = resolve_forward_outcomes(signal_log, history)
         state = apply_learning(signal_log, state)
+        evaluate_autonomy_guard(
+            state,
+            features=None,
+            regime=state.get("market_regime"),
+            regime_confidence=float(state.get("regime_confidence", 0.0)) / 100.0,
+            performance_returns=(signal_log["ret_t3"] if "ret_t3" in signal_log.columns else None),
+            data_quality_score=float(state.get("data_quality", {}).get("score", 100.0)),
+            row_count=state.get("data_quality", {}).get("rows"),
+            min_rows=30,
+            project="orderflow",
+        )
     else:
         state["audit_summary"]["status"] = state["audit_summary"].get("status", "LEARNING")
         save_ai_state(state)
