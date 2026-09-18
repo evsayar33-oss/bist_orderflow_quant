@@ -1,464 +1,191 @@
-"""
-BIST Multi-Bagger Kuluçka Backtest & Threshold Optimization Engine (2019 - 2026)
--------------------------------------------------------------------------------
-Gelişmiş Düşüş Koruması (Max Drawdown Minimizer), Hızlı Kâr Kilidi (Fast Breakeven)
-ve Trend Teyidi (SMA20 & RVOL) ile 2019-2026 Grid Search Optimizasyon Motoru.
-"""
+"""Real-data-only walk-forward optimizer for Adaptive BIST Orderflow Meta-Engine V1."""
+from __future__ import annotations
 
-import os
-import sys
-import json
 import argparse
-import requests
+from datetime import datetime
+import json
+from typing import Dict, List
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+import yfinance as yf
 
-BIST_UNIVERSE = {
-    # Micro-Cap (1 Mr - 5 Mr TL)
-    "ARDYZ.IS": {"tier": "micro_cap", "sector": "Technology", "mcap_tl": 3.2e9, "base_roe": 28.0, "base_margin": 14.0},
-    "KFEIN.IS": {"tier": "micro_cap", "sector": "Technology", "mcap_tl": 2.1e9, "base_roe": 22.0, "base_margin": 12.0},
-    "PAPIL.IS": {"tier": "micro_cap", "sector": "Technology", "mcap_tl": 2.8e9, "base_roe": 24.0, "base_margin": 16.0},
-    "CEMTS.IS": {"tier": "micro_cap", "sector": "Industrials", "mcap_tl": 4.5e9, "base_roe": 19.0, "base_margin": 9.5},
-    "BIOEN.IS": {"tier": "micro_cap", "sector": "Energy", "mcap_tl": 4.8e9, "base_roe": 16.0, "base_margin": 8.0},
-    "BUCIM.IS": {"tier": "micro_cap", "sector": "Materials", "mcap_tl": 4.9e9, "base_roe": 21.0, "base_margin": 11.0},
-    
-    # Small-Cap (5 Mr - 15 Mr TL)
-    "LOGO.IS": {"tier": "small_cap", "sector": "Technology", "mcap_tl": 8.5e9, "base_roe": 32.0, "base_margin": 18.0},
-    "BANVT.IS": {"tier": "small_cap", "sector": "Consumer", "mcap_tl": 9.2e9, "base_roe": 26.0, "base_margin": 9.0},
-    "ALFAS.IS": {"tier": "small_cap", "sector": "Energy", "mcap_tl": 12.4e9, "base_roe": 34.0, "base_margin": 13.5},
-    "GESAN.IS": {"tier": "small_cap", "sector": "Energy", "mcap_tl": 14.2e9, "base_roe": 31.0, "base_margin": 12.0},
-    "YEOTK.IS": {"tier": "small_cap", "sector": "Energy", "mcap_tl": 11.8e9, "base_roe": 30.0, "base_margin": 11.5},
-    "EUPWR.IS": {"tier": "small_cap", "sector": "Energy", "mcap_tl": 13.5e9, "base_roe": 29.0, "base_margin": 12.5},
-    "KCAER.IS": {"tier": "small_cap", "sector": "Industrials", "mcap_tl": 10.6e9, "base_roe": 25.0, "base_margin": 10.0},
-    "GWIND.IS": {"tier": "small_cap", "sector": "Energy", "mcap_tl": 8.9e9, "base_roe": 22.0, "base_margin": 15.0},
-    "TMSN.IS": {"tier": "small_cap", "sector": "Industrials", "mcap_tl": 11.2e9, "base_roe": 27.0, "base_margin": 11.0},
-    "MIATK.IS": {"tier": "small_cap", "sector": "Technology", "mcap_tl": 14.8e9, "base_roe": 38.0, "base_margin": 22.0},
+from backtest_validator import performance_metrics, validate_candidate, stability_check
 
-    # Mid-Cap (15 Mr - 40 Mr TL)
-    "VESBE.IS": {"tier": "mid_cap", "sector": "Consumer", "mcap_tl": 26.0e9, "base_roe": 24.0, "base_margin": 10.5},
-    "DOAS.IS": {"tier": "mid_cap", "sector": "Consumer", "mcap_tl": 36.5e9, "base_roe": 42.0, "base_margin": 14.0},
-    "TTRAK.IS": {"tier": "mid_cap", "sector": "Industrials", "mcap_tl": 38.0e9, "base_roe": 45.0, "base_margin": 15.5},
-    "OTKAR.IS": {"tier": "mid_cap", "sector": "Industrials", "mcap_tl": 24.0e9, "base_roe": 26.0, "base_margin": 12.0},
-    "MAVI.IS": {"tier": "mid_cap", "sector": "Consumer", "mcap_tl": 28.5e9, "base_roe": 36.0, "base_margin": 16.0},
-    "SOKM.IS": {"tier": "mid_cap", "sector": "Consumer", "mcap_tl": 22.0e9, "base_roe": 30.0, "base_margin": 7.5},
-    "CIMSA.IS": {"tier": "mid_cap", "sector": "Materials", "mcap_tl": 29.0e9, "base_roe": 33.0, "base_margin": 13.0},
-    "AKCNS.IS": {"tier": "mid_cap", "sector": "Materials", "mcap_tl": 25.5e9, "base_roe": 31.0, "base_margin": 12.5},
-    "BRSAN.IS": {"tier": "mid_cap", "sector": "Industrials", "mcap_tl": 32.0e9, "base_roe": 28.0, "base_margin": 11.0},
-    "ASTOR.IS": {"tier": "mid_cap", "sector": "Energy", "mcap_tl": 37.0e9, "base_roe": 44.0, "base_margin": 19.0},
-}
+UNIVERSE = [
+    "AKBNK.IS", "ASELS.IS", "BIMAS.IS", "EREGL.IS", "FROTO.IS", "GARAN.IS", "ISCTR.IS", "KCHOL.IS",
+    "KOZAL.IS", "ODAS.IS", "PETKM.IS", "SAHOL.IS", "SISE.IS", "TCELL.IS", "THYAO.IS", "TOASO.IS",
+    "TUPRS.IS", "YKBNK.IS", "ARCLK.IS", "CCOLA.IS", "DOAS.IS", "LOGO.IS", "MIATK.IS", "GESAN.IS",
+    "EUPWR.IS", "KFEIN.IS", "PAPIL.IS", "ARDYZ.IS", "BANVT.IS", "ALFAS.IS", "ASTOR.IS", "VESBE.IS",
+]
 
-STATE_FILE = "longterm_ai_state.json"
-REPORT_FILE = "backtest_report.md"
 
-def is_online():
+def download_history(tickers: List[str], start: str, end: str) -> Dict[str, pd.DataFrame]:
     try:
-        r = requests.get("https://query1.finance.yahoo.com", timeout=1.0)
-        return r.status_code == 200
-    except Exception:
-        return False
+        raw = yf.download(tickers, start=start, end=end, interval="1d", group_by="ticker", auto_adjust=False, progress=False, threads=True)
+    except Exception as exc:
+        raise RuntimeError(f"Gerçek tarihsel veri alınamadı: {exc}") from exc
+    if raw is None or raw.empty:
+        raise RuntimeError("Gerçek tarihsel veri alınamadı; backtest durduruldu.")
 
-def fetch_or_generate_historical_data(start_date="2019-01-01", end_date="2026-09-01"):
-    data = {}
-    online_success = False
-
-    if is_online():
+    out = {}
+    for ticker in tickers:
         try:
-            import yfinance as yf
-            tickers = list(BIST_UNIVERSE.keys())
-            df_all = yf.download(tickers, start=start_date, end=end_date, interval="1d", group_by="ticker", timeout=15)
-            if not df_all.empty and len(df_all) > 100:
-                for t in tickers:
-                    if t in df_all and not df_all[t].dropna().empty:
-                        data[t] = df_all[t].dropna()
-                if len(data) >= len(tickers) // 2:
-                    online_success = True
+            if len(tickers) > 1 and ticker in raw.columns.get_level_values(0):
+                g = raw[ticker].copy()
+            elif len(tickers) == 1:
+                g = raw.copy()
+            else:
+                continue
+            g = g.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+            g = g.dropna(subset=["open", "high", "low", "close", "volume"])
+            if len(g) >= 280:
+                out[ticker] = g
         except Exception:
-            online_success = False
+            continue
 
-    if not online_success:
-        print("ℹ️ Güvenli/Deterministik mod devrede: 2019-2026 BIST tarihsel fiyat ve hacim simülatörü çalıştırılıyor...")
-        dates = pd.date_range(start=start_date, end=end_date, freq="B")
-        n_days = len(dates)
-        np.random.seed(42)
-        base_market_drift = 0.0011
+    if len(out) < max(5, len(tickers) // 4):
+        raise RuntimeError(f"Gerçek veri kapsamı yetersiz: {len(out)} hisse.")
+    return out
 
-        for t, meta in BIST_UNIVERSE.items():
-            if meta["tier"] == "micro_cap":
-                vol, beta = 0.026, 1.30
-            elif meta["tier"] == "small_cap":
-                vol, beta = 0.021, 1.15
-            else:
-                vol, beta = 0.016, 0.95
 
-            daily_returns = np.random.normal(base_market_drift * beta, vol, n_days)
-            price_series = 15.0 * np.cumprod(1.0 + daily_returns)
+def prepare(df: pd.DataFrame) -> pd.DataFrame:
+    g = df.copy()
+    g.index = pd.to_datetime(g.index).tz_localize(None)
+    g["rvol"] = g["volume"] / g["volume"].rolling(20).mean()
+    g["high_1m"] = g["high"].rolling(21).max().shift(1)
+    g["low_1m"] = g["low"].rolling(21).min().shift(1)
+    g["perf_w"] = g["close"].pct_change(5) * 100
+    g["perf_1m"] = g["close"].pct_change(21) * 100
+    return g.dropna(subset=["rvol", "high_1m", "low_1m", "perf_w", "perf_1m"])
 
-            highs = price_series * (1.0 + np.abs(np.random.normal(0.012, 0.006, n_days)))
-            lows = price_series * (1.0 - np.abs(np.random.normal(0.012, 0.006, n_days)))
-            opens = lows + (highs - lows) * np.random.uniform(0.2, 0.8, n_days)
-            volumes = np.random.lognormal(14.0, 0.5, n_days)
 
-            df_ticker = pd.DataFrame({
-                "Open": opens, "High": highs, "Low": lows, "Close": price_series, "Volume": volumes
-            }, index=dates)
-            data[t] = df_ticker
+def simulate_prepared(g: pd.DataFrame, threshold: float, start_date=None, end_date=None, ticker="") -> pd.DataFrame:
+    if g is None or g.empty:
+        return pd.DataFrame()
+    if start_date is not None:
+        g = g[g.index >= pd.Timestamp(start_date)]
+    if end_date is not None:
+        g = g[g.index <= pd.Timestamp(end_date)]
+    if len(g) < 20:
+        return pd.DataFrame()
 
-    return data
-
-def simulate_strategy(data, tier_configs, default_fixed=False):
     trades = []
-
-    for ticker, df in data.items():
-        if len(df) < 250:
+    for i in range(len(g) - 3):
+        row = g.iloc[i]
+        span = float(row.high_1m - row.low_1m)
+        if span <= 0 or row.low_1m <= 0:
             continue
-
-        df = df.copy()
-        df["SMA20"] = df["Close"].rolling(20).mean()
-        df["VOL_SMA20"] = df["Volume"].rolling(20).mean()
-
-        meta = BIST_UNIVERSE.get(ticker, {"tier": "small_cap", "base_roe": 20.0, "base_margin": 10.0, "mcap_tl": 1e10})
-        tier = meta["tier"]
-
-        if default_fixed:
-            min_roe = 18.0
-            min_oper_margin = 6.0
-            min_dist = 4.0
-            max_dist = 28.0
-            stop_loss_pct = -12.0
-            be_trigger = 999.0 # Eski sistemde hızlı başabaş yoktu
-            target_cup_min = 50.0
-            max_patience_days = 90
-            use_trend_gate = False
-        else:
-            cfg = tier_configs.get(tier, tier_configs.get("small_cap", {}))
-            min_roe = cfg.get("min_roe", 16.0)
-            min_oper_margin = cfg.get("min_oper_margin", 6.0)
-            min_dist = cfg.get("min_dist_from_52w_low", 3.0)
-            max_dist = cfg.get("max_dist_from_52w_low", 28.0)
-            stop_loss_pct = cfg.get("stop_loss_pct", -6.5)
-            be_trigger = cfg.get("be_trigger_pct", 6.0)
-            target_cup_min = cfg.get("target_cup_min", 35.0)
-            max_patience_days = cfg.get("max_patience_days", 65)
-            use_trend_gate = True
-
-        if meta["base_roe"] < min_roe or meta["base_margin"] < min_oper_margin:
+        range_pos = (row.close - row.low_1m) / span * 100
+        dist = (row.close - row.low_1m) / row.low_1m * 100
+        score = (
+            np.clip(100 - abs(range_pos - 25) * 2, 0, 100) * 0.45
+            + np.clip(row.rvol / 2 * 100, 0, 100) * 0.30
+            + np.clip(100 - dist * 3, 0, 100) * 0.15
+            + np.clip(row.perf_w + 20, 0, 100) * 0.10
+        )
+        if score < threshold:
             continue
-
-        in_trade = False
-        entry_idx = 0
-        entry_price = 0.0
-        trailing_stop = 0.0
-        target_cup = 0.0
-        target_bagger = 0.0
-        peak_gain = 0.0
-
-        for i in range(250, len(df)):
-            curr_date = df.index[i]
-            curr_close = float(df["Close"].iloc[i])
-            curr_high = float(df["High"].iloc[i])
-            curr_low = float(df["Low"].iloc[i])
-            sma20 = float(df["SMA20"].iloc[i])
-            vol = float(df["Volume"].iloc[i])
-            vol_sma = float(df["VOL_SMA20"].iloc[i])
-            rvol = vol / (vol_sma + 1e-9)
-
-            if not in_trade:
-                past_window = df.iloc[i-250:i]
-                low_52w = float(past_window["Low"].min())
-                high_52w = float(past_window["High"].max())
-
-                if low_52w <= 0:
-                    continue
-
-                dist_from_low = ((curr_close - low_52w) / low_52w) * 100.0
-                potansiyel_cup = ((high_52w - curr_close) / curr_close) * 100.0
-
-                trend_ok = (curr_close > sma20) if use_trend_gate else True
-                vol_ok = (rvol >= 1.15) if use_trend_gate else True
-
-                if min_dist <= dist_from_low <= max_dist and potansiyel_cup >= target_cup_min and trend_ok and vol_ok:
-                    in_trade = True
-                    entry_idx = i
-                    entry_price = curr_close
-                    target_cup = high_52w
-                    target_bagger = entry_price * 2.50
-                    trailing_stop = entry_price * (1.0 + (stop_loss_pct / 100.0))
-                    peak_gain = 0.0
-            else:
-                days_held = (curr_date - df.index[entry_idx]).days
-                high_gain = ((curr_high - entry_price) / entry_price) * 100.0
-                peak_gain = max(peak_gain, high_gain)
-
-                # 🛡️ HIZLI KÂR KİLİTLEME VE BAŞABAŞ KORUMA ZIRHI
-                if peak_gain >= be_trigger:
-                    trailing_stop = max(trailing_stop, entry_price * 1.01) # Maliyet + %1
-                if peak_gain >= 14.0:
-                    trailing_stop = max(trailing_stop, entry_price * 1.07) # Kârın %7'sini kilitle
-                if peak_gain >= 25.0:
-                    trailing_stop = max(trailing_stop, entry_price * 1.18)
-                if peak_gain >= 40.0:
-                    trailing_stop = max(trailing_stop, entry_price * 1.30)
-
-                exit_trade = False
-                exit_price = curr_close
-                exit_reason = ""
-
-                if curr_high >= target_bagger:
-                    exit_trade = True
-                    exit_price = target_bagger
-                    exit_reason = "WIN_MULTI_BAGGER"
-                elif curr_high >= target_cup:
-                    exit_trade = True
-                    exit_price = target_cup
-                    exit_reason = "WIN_CUP_BREAKOUT"
-                elif curr_low <= trailing_stop:
-                    exit_trade = True
-                    exit_price = trailing_stop
-                    exit_reason = "STOP_TRIGGERED"
-                elif days_held >= max_patience_days and peak_gain < 8.0:
-                    exit_trade = True
-                    exit_price = curr_close
-                    exit_reason = "TIME_STOP"
-
-                if exit_trade or i == len(df) - 1:
-                    pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0
-                    trades.append({
-                        "ticker": ticker,
-                        "tier": tier,
-                        "entry_date": df.index[entry_idx].strftime("%Y-%m-%d"),
-                        "exit_date": curr_date.strftime("%Y-%m-%d"),
-                        "entry_price": entry_price,
-                        "exit_price": exit_price,
-                        "pnl_pct": pnl_pct,
-                        "peak_gain": peak_gain,
-                        "days_held": days_held,
-                        "exit_reason": exit_reason,
-                        "is_win": pnl_pct > 0
-                    })
-                    in_trade = False
-
+        future = g.iloc[i + 1 : i + 4]
+        if len(future) < 3:
+            continue
+        entry = float(row.close)
+        exit_p = float(future.iloc[-1].close)
+        pnl = (exit_p / entry - 1) * 100
+        trades.append({
+            "entry_date": row.name,
+            "exit_date": future.iloc[-1].name,
+            "pnl_pct": pnl,
+            "score": float(score),
+            "ticker": ticker.replace(".IS", ""),
+        })
     return pd.DataFrame(trades)
 
-def calculate_metrics(df_trades):
-    if df_trades.empty:
-        return {
-            "total_trades": 0, "win_rate": 0.0, "total_return": 0.0,
-            "cagr": 0.0, "profit_factor": 0.0, "max_drawdown": 0.0,
-            "portfolio_drawdown": 0.0, "calmar_ratio": 0.0,
-            "avg_trade_pnl": 0.0, "avg_duration_days": 0
-        }
 
-    n_trades = len(df_trades)
-    wins = df_trades[df_trades["pnl_pct"] > 0]
-    losses = df_trades[df_trades["pnl_pct"] <= 0]
+def collect_trades(data, threshold, start_date=None, end_date=None):
+    pieces = []
+    for ticker, raw in data.items():
+        g = prepare(raw)
+        t = simulate_prepared(g, threshold, start_date, end_date, ticker)
+        if not t.empty:
+            pieces.append(t)
+    return pd.concat(pieces, ignore_index=True) if pieces else pd.DataFrame()
 
-    win_rate = (len(wins) / n_trades) * 100.0
-    gross_profit = wins["pnl_pct"].sum() if not wins.empty else 0.0
-    gross_loss = abs(losses["pnl_pct"].sum()) if not losses.empty else 1e-6
-    profit_factor = round(gross_profit / gross_loss, 2)
 
-    # 1. Portföy Düzeyinde Risk Yönetimli Getiri (%20 Pozisyon Boyutu - 5 Slot)
-    portfolio_rets = df_trades["pnl_pct"].values * 0.20
-    eq_port = np.cumprod(1.0 + (portfolio_rets / 100.0))
-    peak_port = np.maximum.accumulate(eq_port)
-    port_mdd = round(float(((eq_port - peak_port) / peak_port * 100.0).min()), 2)
+def choose_threshold(train_trades: pd.DataFrame, thresholds) -> Dict:
+    candidates = []
+    for th in thresholds:
+        t = train_trades[train_trades["score"] >= th].copy() if not train_trades.empty else pd.DataFrame()
+        metrics = validate_candidate(t, min_trades=20)
+        metrics["threshold"] = th
+        candidates.append(metrics)
+    valid = [x for x in candidates if x.get("passed")]
+    if valid:
+        return max(valid, key=lambda x: (x["profit_factor"], x["avg_pnl"]))
+    return max(candidates, key=lambda x: (x.get("profit_factor", 0.0), x.get("avg_pnl", 0.0)))
 
-    # 2. Ham Kümülatif Getiri & Tek İşlem Max Çekilmesi
-    equity_raw = np.cumprod(1.0 + (df_trades["pnl_pct"].values / 100.0))
-    peak_raw = np.maximum.accumulate(equity_raw)
-    trade_mdd = round(float(((equity_raw - peak_raw) / peak_raw * 100.0).min()), 2)
 
-    total_return = round((eq_port[-1] - 1.0) * 100.0, 2)
-    cagr = round((((eq_port[-1]) ** (1.0 / 7.5)) - 1.0) * 100.0, 2)
-    calmar = round(abs(cagr / port_mdd), 2) if port_mdd != 0 else 0.0
+def run_walk_forward(data, thresholds=(70, 75, 80, 85, 90), min_train_days=250, test_days=90):
+    all_dates = sorted(set(d for g in data.values() for d in pd.to_datetime(g.index).tz_localize(None)))
+    if len(all_dates) < min_train_days + test_days:
+        raise RuntimeError("Walk-forward için yeterli gerçek işlem günü yok.")
 
-    return {
-        "total_trades": n_trades,
-        "win_rate": round(win_rate, 1),
-        "total_return": total_return,
-        "cagr": cagr,
-        "profit_factor": profit_factor,
-        "portfolio_drawdown": port_mdd,
-        "max_drawdown": port_mdd, # Kullanıcının izlediği portföy düşüşü
-        "trade_drawdown": trade_mdd,
-        "calmar_ratio": calmar,
-        "avg_trade_pnl": round(float(df_trades["pnl_pct"].mean()), 2),
-        "avg_duration_days": int(df_trades["days_held"].mean())
+    folds = []
+    cursor = min_train_days
+    while cursor < len(all_dates):
+        train_start = all_dates[0]
+        train_end = all_dates[cursor - 1]
+        test_end_idx = min(cursor + test_days - 1, len(all_dates) - 1)
+        test_start = all_dates[cursor]
+        test_end = all_dates[test_end_idx]
+        train = collect_trades(data, threshold=0, start_date=train_start, end_date=train_end)
+        chosen = choose_threshold(train, thresholds)
+        test = collect_trades(data, threshold=chosen["threshold"], start_date=test_start, end_date=test_end)
+        test_metrics = performance_metrics(test)
+        folds.append({
+            "train_start": str(train_start.date()), "train_end": str(train_end.date()),
+            "test_start": str(test_start.date()), "test_end": str(test_end.date()),
+            "selected_threshold": chosen["threshold"], "train": chosen, "test": test_metrics,
+        })
+        cursor = test_end_idx + 1
+
+    oos_pieces = []
+    for f in folds:
+        t = collect_trades(data, threshold=f["selected_threshold"], start_date=f["test_start"], end_date=f["test_end"])
+        if not t.empty:
+            oos_pieces.append(t)
+    oos = pd.concat(oos_pieces, ignore_index=True) if oos_pieces else pd.DataFrame()
+    return folds, performance_metrics(oos), stability_check([f["test"] for f in folds])
+
+
+def run(start: str, end: str, save: bool = False):
+    data = download_history(UNIVERSE, start, end)
+    folds, oos_metrics, stability = run_walk_forward(data)
+    report = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "period": f"{start}..{end}",
+        "universe_size": len(data),
+        "folds": folds,
+        "oos_metrics": oos_metrics,
+        "stability": stability,
+        "synthetic_data_used": False,
+        "data_source": "Yahoo Finance OHLCV",
     }
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if save:
+        with open("backtest_report.json", "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+    return report
 
-def optimize_tier_thresholds(data):
-    print("🔍 BIST 2019-2026 Gelişmiş Risk & Drawdown Optimizasyonu Yürütülüyor...")
-
-    test_configs = {
-        "micro_cap": {
-            "label": "Micro-Cap (1 - 5 Mr TL)",
-            "mcap_range": [1000000000, 5000000000],
-            "min_roe": 12.0,
-            "min_oper_margin": 5.0,
-            "min_dist_from_52w_low": 3.0,
-            "max_dist_from_52w_low": 30.0,
-            "ideal_pe_max": 20.0,
-            "acceptable_pe_max": 28.0,
-            "stop_loss_pct": -8.0, # Sıkı koruma stopu
-            "be_trigger_pct": 6.5, # +%6.5 kârda anında maliyet+komisyona çek
-            "target_cup_min": 35.0,
-            "max_patience_days": 50
-        },
-        "small_cap": {
-            "label": "Small-Cap (5 - 15 Mr TL)",
-            "mcap_range": [5000000000, 15000000000],
-            "min_roe": 16.0,
-            "min_oper_margin": 7.0,
-            "min_dist_from_52w_low": 3.5,
-            "max_dist_from_52w_low": 26.0,
-            "ideal_pe_max": 16.0,
-            "acceptable_pe_max": 22.0,
-            "stop_loss_pct": -6.5,
-            "be_trigger_pct": 6.0,
-            "target_cup_min": 35.0,
-            "max_patience_days": 65
-        },
-        "mid_cap": {
-            "label": "Mid-Cap (15 - 40 Mr TL)",
-            "mcap_range": [15000000000, 40000000000],
-            "min_roe": 20.0,
-            "min_oper_margin": 10.0,
-            "min_dist_from_52w_low": 3.0,
-            "max_dist_from_52w_low": 22.0,
-            "ideal_pe_max": 14.0,
-            "acceptable_pe_max": 18.0,
-            "stop_loss_pct": -5.0,
-            "be_trigger_pct": 5.5,
-            "target_cup_min": 30.0,
-            "max_patience_days": 80
-        }
-    }
-
-    df_fixed_trades = simulate_strategy(data, {}, default_fixed=True)
-    metrics_fixed = calculate_metrics(df_fixed_trades)
-
-    df_opt_trades = simulate_strategy(data, test_configs, default_fixed=False)
-    metrics_opt = calculate_metrics(df_opt_trades)
-
-    return test_configs, metrics_fixed, metrics_opt, df_opt_trades
-
-def save_optimized_state(tier_configs, metrics_opt):
-    state_path = STATE_FILE
-    if os.path.exists(state_path):
-        with open(state_path, "r", encoding="utf-8") as f:
-            state = json.load(f)
-    else:
-        state = {}
-
-    state["version"] = "4.3.0"
-    state["strategy"] = "BIST_MULTI_BAGGER_LOW_DRAWDOWN_OPTIMIZED"
-    state["weights"] = {
-        "macro_base": 0.30,
-        "growth_quality": 0.35, # Kalite kalkanı artırıldı
-        "stealth_accumulation": 0.20,
-        "volume_ignition": 0.15
-    }
-    state["thresholds"]["market_cap_tiers"] = tier_configs
-    state["risk_guards"] = {
-        "trend_gate": "SMA20_CONFIRMED",
-        "fast_breakeven_active": True,
-        "max_portfolio_risk_per_trade_pct": 2.0,
-        "position_size_pct": 20.0
-    }
-    state["backtest_benchmark"] = {
-        "period": "2019-2026",
-        "win_rate": metrics_opt["win_rate"],
-        "profit_factor": metrics_opt["profit_factor"],
-        "cagr_pct": metrics_opt["cagr"],
-        "max_drawdown_pct": metrics_opt["portfolio_drawdown"],
-        "calmar_ratio": metrics_opt["calmar_ratio"],
-        "total_trades": metrics_opt["total_trades"],
-        "avg_duration_days": metrics_opt["avg_duration_days"],
-        "status": "🛡️ DÜŞÜK DRAWDOWN VE HIZLI KÂR KİLİDİ ZIRHI AKTİF"
-    }
-    state["audit_summary"]["total_signals_audited"] = metrics_opt["total_trades"]
-    state["audit_summary"]["win_rate_6m"] = metrics_opt["win_rate"]
-    state["audit_summary"]["last_audit_date"] = datetime.now().strftime("%Y-%m-%d")
-
-    with open(state_path, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
-
-    print(f"✅ Optimize edilen düşük düşüşlü eşikler '{state_path}' dosyasına kaydedildi.")
-
-def generate_report(metrics_fixed, metrics_opt, tier_configs, df_opt_trades):
-    report = f"""# 🦅 BIST Quant Modeli: 2019 - 2026 Düşük Drawdown & Yüksek Kazanma Oranı Raporu
-
-Bu raporda, portföy çekilmesini (Max Drawdown) minimize eden **Hızlı Kâr Kilidi (Fast Breakeven)**, **Kısa Vade Trend Teyidi (SMA20)** ve **Kademeli Sıkı Stop** mimarisinin 2019-2026 sonuçları sunulmaktadır.
-
----
-
-## 📊 1. Özet Karşılaştırma Tablosu (2019 - 2026)
-
-| Metrik | Eski Model (Geniş Stop / Korumasız) | Yeni Model (Hızlı Kâr Kilidi & Trend Zırhı) | İyileşme / Fark |
-| :--- | :---: | :---: | :---: |
-| **Kazanma Oranı (Win Rate)** | %{metrics_fixed['win_rate']} | **%{metrics_opt['win_rate']}** | **+{round(metrics_opt['win_rate'] - metrics_fixed['win_rate'], 1)}% Artış (Hedef Aşıldı)** |
-| **Portföy Max Drawdown (MDD)** | %{metrics_fixed['portfolio_drawdown']} | **%{metrics_opt['portfolio_drawdown']}** | **{round(abs(metrics_fixed['portfolio_drawdown']) - abs(metrics_opt['portfolio_drawdown']), 1)}% Çok Daha Güvenli** |
-| **Kâr Faktörü (Profit Factor)** | {metrics_fixed['profit_factor']} | **{metrics_opt['profit_factor']}** | **+{round(metrics_opt['profit_factor'] - metrics_fixed['profit_factor'], 2)}x Artış** |
-| **Bileşik Yıllık Getiri (CAGR)** | %{metrics_fixed['cagr']} | **%{metrics_opt['cagr']}** | İstikrarlı Büyüme |
-| **Calmar Oranı (CAGR / MDD)** | {metrics_fixed['calmar_ratio']} | **{metrics_opt['calmar_ratio']}** | **+{round(metrics_opt['calmar_ratio'] - metrics_fixed['calmar_ratio'], 2)} Kat Verim** |
-| **Ortalama İşlem Süresi** | {metrics_fixed['avg_duration_days']} gün | {metrics_opt['avg_duration_days']} gün | Kârlar hızlı kilitlenir |
-
----
-
-## 🛡️ 2. Eklenen Yeni Koruma Zırhları
-
-1. **Hızlı Başabaş Koruması (Fast Breakeven):** Pozisyon +%5.5 - +%6.5 kâra ulaştığı anda stop seviyesi otomatik olarak `Giriş Fiyatı * 1.01` seviyesine çekilir. Kâra geçmiş hiçbir işlem zararla sonuçlanamaz.
-2. **Kısa Vade Trend Teyidi (SMA20):** Fiyat 20 günlük hareketli ortalamanın altında iken dip alışı yapılmaz (düşen bıçak filtresi).
-3. **Kademeli Kâr Kilitleri:**
-   - Kâr **+%14** -> Stop **+%7**
-   - Kâr **+%25** -> Stop **+%18**
-   - Kâr **+%40** -> Stop **+%30**
-4. **Sıkı Kademeli Hard Stop:**
-   - Micro-Cap: **-%8.0**
-   - Small-Cap: **-%6.5**
-   - Mid-Cap: **-%5.0**
-
----
-
-## 🎯 3. Kademeler Bazında Kârlılık Dağılımı
-"""
-    if not df_opt_trades.empty:
-        tier_grp = df_opt_trades.groupby("tier").agg(
-            trades=("pnl_pct", "count"),
-            win_rate=("is_win", lambda x: round(x.mean() * 100, 1)),
-            avg_pnl=("pnl_pct", lambda x: round(x.mean(), 1)),
-            max_gain=("peak_gain", lambda x: round(x.max(), 1))
-        ).reset_index()
-
-        report += "\n| Piyasa Değeri Katmanı | İşlem Sayısı | Win Rate (%) | Ortalama Kâr (%) | Zirve Prim (%) |\n| :--- | :---: | :---: | :---: | :---: |\n"
-        for _, r in tier_grp.iterrows():
-            report += f"| **{r['tier'].upper()}** | {r['trades']} | %{r['win_rate']} | %{r['avg_pnl']} | %{r['max_gain']} |\n"
-
-    report += """
----
-*Rapor otonom Backtest & Optimizasyon motoru tarafından 2019-2026 dönemi için üretilmiştir.*
-"""
-    with open(REPORT_FILE, "w", encoding="utf-8") as f:
-        f.write(report)
-    print(f"📄 Detaylı rapor '{REPORT_FILE}' dosyasına kaydedildi.")
 
 def main():
-    parser = argparse.ArgumentParser(description="BIST Quant Low Drawdown Backtest & Optimizer")
-    parser.add_argument("--start-date", default="2019-01-01")
-    parser.add_argument("--end-date", default="2026-09-01")
-    parser.add_argument("--optimize", action="store_true", default=True)
-    parser.add_argument("--save", action="store_true", default=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start-date", default="2022-01-01")
+    parser.add_argument("--end-date", default=datetime.now().strftime("%Y-%m-%d"))
+    parser.add_argument("--save", action="store_true")
     args = parser.parse_args()
+    run(args.start_date, args.end_date, args.save)
 
-    data = fetch_or_generate_historical_data(args.start_date, args.end_date)
-    tier_configs, metrics_fixed, metrics_opt, df_opt_trades = optimize_tier_thresholds(data)
-
-    if args.save:
-        save_optimized_state(tier_configs, metrics_opt)
-
-    generate_report(metrics_fixed, metrics_opt, tier_configs, df_opt_trades)
-    print("\n🏁 BIST Düşük Drawdown Optimizasyonu Başarıyla Tamamlandı!")
 
 if __name__ == "__main__":
     main()

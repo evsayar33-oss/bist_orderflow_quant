@@ -1,143 +1,114 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import os
-from datetime import datetime, timedelta
-from state_manager import load_ai_state, save_ai_state, load_lifecycle_signals, LIFECYCLE_LOG_FILE
+"""Bootstrap lifecycle signals from real historical OHLCV only.
 
-# Son 1-2 yılda BIST'te işlem hacmi ve derinliği olan Small/Mid-Cap hisse sepeti
+This module intentionally FAILS CLOSED when remote historical data is unavailable.
+It never creates synthetic market data.
+"""
+from __future__ import annotations
+
+import json
+import os
+from datetime import datetime
+from typing import List
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
+from state_manager import LIFECYCLE_LOG_FILE, load_lifecycle_signals, save_lifecycle_signals
+
 BOOTSTRAP_TICKERS = [
-    "ARDYZ.IS", "LOGO.IS", "KFEIN.IS", "PAPIL.IS", "BANVT.IS", "CWENE.IS",
-    "ALFAS.IS", "GESAN.IS", "KONTR.IS", "YEOTK.IS", "EUPWR.IS", "TMSN.IS",
-    "VESBE.IS", "CEMTS.IS", "BIOEN.IS", "KCAER.IS", "GWIND.IS", "DOAS.IS",
-    "TTRAK.IS", "OTKAR.IS", "MAVI.IS", "SOKM.IS", "CIMSA.IS", "AKCNS.IS",
-    "BUCIM.IS", "BRSAN.IS", "MIATK.IS", "ASTOR.IS"
+    "AKBNK.IS", "ASELS.IS", "BIMAS.IS", "EREGL.IS", "FROTO.IS", "GARAN.IS", "ISCTR.IS", "KCHOL.IS",
+    "KOZAL.IS", "ODAS.IS", "PETKM.IS", "SAHOL.IS", "SISE.IS", "TCELL.IS", "THYAO.IS", "TOASO.IS",
+    "TUPRS.IS", "YKBNK.IS", "ARCLK.IS", "CCOLA.IS", "DOAS.IS", "LOGO.IS", "MIATK.IS", "GESAN.IS",
+    "EUPWR.IS", "KFEIN.IS", "PAPIL.IS", "ARDYZ.IS", "BANVT.IS", "ALFAS.IS", "ASTOR.IS", "VESBE.IS",
 ]
 
-def run_historical_bootstrap():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] ⏳ Son 1 yıllık BIST geçmiş simülasyonu başlatılıyor...")
-    
-    # 1.5 yıllık günlük veriyi toplu olarak indir
+
+def run_historical_bootstrap(start="2022-01-01", end=None, max_symbols=33) -> bool:
+    end = end or datetime.now().strftime("%Y-%m-%d")
+    tickers = BOOTSTRAP_TICKERS[:max_symbols]
     try:
-        data = yf.download(BOOTSTRAP_TICKERS, period="18mo", interval="1d", group_by="ticker", progress=False)
-    except Exception as e:
-        print(f"⚠️ Veri indirme hatası: {e}")
+        raw = yf.download(tickers, start=start, end=end, interval="1d", group_by="ticker", auto_adjust=False, progress=False, threads=True)
+    except Exception as exc:
+        print(f"⚠️ Bootstrap veri çekemedi: {exc}")
+        return False
+    if raw is None or raw.empty:
+        print("⚠️ Gerçek tarihsel veri yok; bootstrap iptal edildi.")
         return False
 
-    historical_signals = []
-    
-    # 6 ay ile 9 ay öncesindeki bir tarihe git (Simülasyon Giriş Noktası)
-    # Böylece hisselerin sonraki 6-9 aydaki gerçek sonuçlarını (kâr/zarar) görebiliriz
-    for ticker_raw in BOOTSTRAP_TICKERS:
-        ticker = ticker_raw.replace(".IS", "")
+    rows = []
+    for ticker in tickers:
         try:
-            df = data[ticker_raw].dropna()
-            if len(df) < 250:
-                continue
-
-            # Simülasyon giriş tarihi: Günümüzden ~180 gün (6 ay) öncesi
-            eval_idx = len(df) - 130
-            if eval_idx < 120:
-                continue
-
-            # Giriş anındaki veriler
-            entry_date = df.index[eval_idx].strftime("%Y-%m-%d")
-            entry_p = float(df["Close"].iloc[eval_idx])
-            
-            # O andaki geriye dönük 52 haftalık (250 günlük) dip ve zirve
-            lookback_df = df.iloc[max(0, eval_idx - 250):eval_idx]
-            low_52w = float(lookback_df["Low"].min())
-            high_52w = float(lookback_df["High"].max())
-
-            if low_52w <= 0:
-                continue
-
-            # Giriş kriteri kontrolü: 52H dipten %4 ile %28 yukarıda mıydı?
-            dist_from_low = ((entry_p - low_52w) / low_52w) * 100.0
-            target_cup = high_52w
-            potansiyel_cup = ((target_cup - entry_p) / entry_p) * 100.0
-            stop_price = round(low_52w * 0.96, 2)
-
-            # Sadece taban kuralımıza uyan hisseleri simüle et
-            if 3.0 <= dist_from_low <= 30.0 and potansiyel_cup >= 40.0:
-                
-                # Girişten sonraki 6 aylık geleceğe bak
-                future_df = df.iloc[eval_idx + 1:]
-                if future_df.empty:
+            if len(tickers) == 1:
+                g = raw.copy()
+            else:
+                if ticker not in raw.columns.get_level_values(0):
                     continue
-
-                min_post_price = float(future_df["Low"].min())
-                max_post_price = float(future_df["High"].max())
-
-                max_drawdown = round(((min_post_price - entry_p) / entry_p) * 100.0, 2)
-                peak_gain = round(((max_post_price - entry_p) / entry_p) * 100.0, 2)
-
-                # Vade getirileri
-                ret_30d = round(((float(future_df["Close"].iloc[min(20, len(future_df)-1)]) - entry_p) / entry_p) * 100.0, 2)
-                ret_90d = round(((float(future_df["Close"].iloc[min(60, len(future_df)-1)]) - entry_p) / entry_p) * 100.0, 2)
-                ret_180d = round(((float(future_df["Close"].iloc[-1]) - entry_p) / entry_p) * 100.0, 2)
-
-                # Çıkış durumu belirleme
-                if min_post_price <= stop_price and peak_gain < 15.0:
-                    outcome = "FAIL_BASE_BREAKDOWN"
-                elif max_post_price >= target_cup or peak_gain >= 100.0:
-                    outcome = "WIN_MULTI_BAGGER"
-                elif peak_gain >= 50.0:
-                    outcome = "WIN_CUP_BREAKOUT"
-                elif peak_gain >= 25.0 and max_drawdown > -12.0:
-                    outcome = "WIN_PROFIT_LOCKED"
-                else:
-                    outcome = "CONSOLIDATING"
-
-                # Faktör puanlarını hesapla
-                score_base = 90.0 if dist_from_low <= 15.0 else 75.0
-                score_quality = 85.0 if outcome.startswith("WIN") else 55.0
-                score_sweep = 70.0 + np.random.uniform(-10, 15)
-                score_ignition = 75.0 if peak_gain >= 40.0 else 50.0
-                quant_score = round(score_base * 0.35 + score_quality * 0.30 + score_sweep * 0.20 + score_ignition * 0.15, 1)
-
-                historical_signals.append({
-                    "tarih": entry_date,
-                    "ticker": ticker,
-                    "entry_price": round(entry_p, 2),
-                    "stop_price": stop_price,
-                    "target_cup": round(target_cup, 2),
-                    "target_bagger": round(entry_p * 2.5, 2),
-                    "quant_score": quant_score,
-                    "regime": "🦅 KULUÇKA LİDERİ (MULTI-BAGGER ADAYI)",
-                    "score_base": score_base,
-                    "score_quality": score_quality,
-                    "score_sweep": round(score_sweep, 1),
-                    "score_ignition": score_ignition,
-                    "ret_30d": ret_30d,
-                    "ret_90d": ret_90d,
-                    "ret_180d": ret_180d,
-                    "max_drawdown": max_drawdown,
-                    "peak_gain": peak_gain,
-                    "outcome": outcome
+                g = raw[ticker].copy()
+            g = g.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}).dropna(subset=["close", "high", "low"])
+            if len(g) < 260:
+                continue
+            g["date"] = pd.to_datetime(g.index).normalize()
+            g["rvol"] = g["volume"] / g["volume"].rolling(20).mean()
+            g["high_1m"] = g["high"].rolling(21).max().shift(1)
+            g["low_1m"] = g["low"].rolling(21).min().shift(1)
+            g["perf_w"] = g["close"].pct_change(5) * 100
+            g["perf_1m"] = g["close"].pct_change(21) * 100
+            g = g.dropna(subset=["rvol", "high_1m", "low_1m"])
+            for i in range(max(260, 21), len(g) - 10):
+                row = g.iloc[i]
+                span = float(row.high_1m - row.low_1m)
+                if span <= 0:
+                    continue
+                range_position = float((row.close - row.low_1m) / span * 100)
+                dist_support = float((row.close - row.low_1m) / row.low_1m * 100) if row.low_1m > 0 else 999.0
+                # Research-only pre-move trigger; no future values are used in features.
+                pre_score = (
+                    float(np.clip(100 - abs(range_position - 25) * 2, 0, 100)) * 0.45
+                    + float(np.clip(row.rvol / 2 * 100, 0, 100)) * 0.30
+                    + float(np.clip(row.perf_1m + 20, 0, 100)) * 0.10
+                    + float(np.clip(100 - dist_support * 3, 0, 100)) * 0.15
+                )
+                if pre_score < 70:
+                    continue
+                future = g.iloc[i + 1 : i + 11]
+                entry = float(row.close)
+                ret3 = np.nan if len(future) < 3 else float((future.iloc[2].close / entry - 1) * 100)
+                ret5 = np.nan if len(future) < 5 else float((future.iloc[4].close / entry - 1) * 100)
+                ret10 = np.nan if len(future) < 10 else float((future.iloc[9].close / entry - 1) * 100)
+                mfe = float((future.high.max() / entry - 1) * 100)
+                mae = float((future.low.min() / entry - 1) * 100)
+                rows.append({
+                    "tarih": row.date, "ticker": ticker.replace(".IS", ""), "entry_price": entry,
+                    "pre_move_score": round(pre_score, 1), "flow_score": round(np.clip(row.rvol * 45, 0, 100), 1),
+                    "resilience_score": round(np.clip(50 + row.perf_w * 1.5, 0, 100), 1),
+                    "regime_fit_score": 60.0, "quality_score": 75.0, "risk_score": round(np.clip(50 - mae * 1.2, 0, 100), 1),
+                    "data_quality": 90.0, "market_regime": "BOOTSTRAP", "regime_confidence": 50.0,
+                    "model_version": "bootstrap-v1", "initial_stop_price": round(entry * 0.92, 4),
+                    "current_stop_price": round(entry * 0.92, 4), "target_price": round(entry * 1.20, 4),
+                    "ret_t1": np.nan if len(future) < 1 else float((future.iloc[0].close / entry - 1) * 100),
+                    "ret_t3": ret3, "ret_t5": ret5, "ret_t10": ret10,
+                    "max_favorable_excursion": mfe, "max_adverse_excursion": mae,
+                    "peak_price": float(future.high.max()), "trough_price": float(future.low.min()), "outcome": "BOOTSTRAP_RESOLVED" if np.isfinite(ret3) else "PENDING",
                 })
-        except Exception:
-            continue
+        except Exception as exc:
+            print(f"⚠️ Bootstrap {ticker} atlandı: {exc}")
 
-    if not historical_signals:
-        print("⚠️ Geçmiş sinyal üretilemedi.")
+    if not rows:
+        print("⚠️ Yeterli gerçek geçmiş sinyali üretilemedi; bootstrap kaydedilmedi.")
         return False
 
-    df_hist = pd.DataFrame(historical_signals)
-    
-    # Mevcut defterle birleştir
-    df_existing = load_lifecycle_signals()
-    if not df_existing.empty:
-        # Daha önce bootstrap edilmiş olanları mükerrer ekleme
-        existing_tickers = set(df_existing["ticker"].tolist())
-        df_hist = df_hist[~df_hist["ticker"].isin(existing_tickers)]
-        combined = pd.concat([df_existing, df_hist], ignore_index=True)
+    new = pd.DataFrame(rows)
+    old = load_lifecycle_signals()
+    if not old.empty:
+        combined = pd.concat([old, new], ignore_index=True)
+        combined = combined.drop_duplicates(subset=["tarih", "ticker"], keep="last")
     else:
-        combined = df_hist
-
-    combined.to_csv(LIFECYCLE_LOG_FILE, index=False)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ {len(df_hist)} adet gerçek geçmiş işlem hafızaya eklendi!")
+        combined = new
+    save_lifecycle_signals(combined)
+    print(f"✅ Gerçek tarihsel bootstrap tamamlandı: {len(new)} sinyal.")
     return True
+
 
 if __name__ == "__main__":
     run_historical_bootstrap()

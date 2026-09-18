@@ -1,102 +1,81 @@
 {
-  "version": "4.3.0",
-  "strategy": "BIST_MULTI_BAGGER_LOW_DRAWDOWN_OPTIMIZED",
-  "market_regime": "BULL_EXPANSION",
+  "version": "5.0.0",
+  "strategy": "ADAPTIVE_BIST_ORDERFLOW_META_ENGINE_V1",
+  "market_regime": "NEUTRAL",
+  "regime_confidence": 35.0,
   "weights": {
-    "macro_base": 0.3,
-    "growth_quality": 0.35,
-    "stealth_accumulation": 0.2,
-    "volume_ignition": 0.15
+    "pre_move": 0.4,
+    "flow": 0.25,
+    "resilience": 0.15,
+    "regime_fit": 0.1,
+    "quality": 0.1
   },
-  "thresholds": {
-    "min_market_cap_tl": 2000000000,
-    "max_market_cap_tl": 40000000000,
-    "min_roe": 18.0,
-    "min_oper_margin": 6.0,
-    "max_dist_from_52w_low": 30.0,
-    "min_dist_from_52w_low": 3.0,
-    "macro_stop_loss_pct": -12.0,
-    "market_cap_tiers": {
-      "micro_cap": {
-        "label": "Micro-Cap (1 - 5 Mr TL)",
-        "mcap_range": [
-          1000000000,
-          5000000000
-        ],
-        "min_roe": 12.0,
-        "min_oper_margin": 5.0,
-        "min_dist_from_52w_low": 3.0,
-        "max_dist_from_52w_low": 30.0,
-        "ideal_pe_max": 20.0,
-        "acceptable_pe_max": 28.0,
-        "stop_loss_pct": -8.0,
-        "be_trigger_pct": 6.5,
-        "target_cup_min": 35.0,
-        "max_patience_days": 50
-      },
-      "small_cap": {
-        "label": "Small-Cap (5 - 15 Mr TL)",
-        "mcap_range": [
-          5000000000,
-          15000000000
-        ],
-        "min_roe": 16.0,
-        "min_oper_margin": 7.0,
-        "min_dist_from_52w_low": 3.5,
-        "max_dist_from_52w_low": 26.0,
-        "ideal_pe_max": 16.0,
-        "acceptable_pe_max": 22.0,
-        "stop_loss_pct": -6.5,
-        "be_trigger_pct": 6.0,
-        "target_cup_min": 35.0,
-        "max_patience_days": 65
-      },
-      "mid_cap": {
-        "label": "Mid-Cap (15 - 40 Mr TL)",
-        "mcap_range": [
-          15000000000,
-          40000000000
-        ],
-        "min_roe": 20.0,
-        "min_oper_margin": 10.0,
-        "min_dist_from_52w_low": 3.0,
-        "max_dist_from_52w_low": 22.0,
-        "ideal_pe_max": 14.0,
-        "acceptable_pe_max": 18.0,
-        "stop_loss_pct": -5.0,
-        "be_trigger_pct": 5.5,
-        "target_cup_min": 30.0,
-        "max_patience_days": 80
-      }
-    }
+  "shadow_weights": {
+    "pre_move": 0.4,
+    "flow": 0.25,
+    "resilience": 0.15,
+    "regime_fit": 0.1,
+    "quality": 0.1
   },
+  "regime_weights": {},
   "learning_params": {
     "learning_rate": 0.08,
-    "min_weight": 0.08,
-    "max_weight": 0.45,
-    "min_sample_size": 10
+    "min_sample_size": 30,
+    "shadow_min_sample": 20,
+    "promotion_margin": 0.05,
+    "max_weight_shift": 0.08,
+    "min_weight": 0.05,
+    "max_weight": 0.55,
+    "cooldown_days": 5
   },
-  "audit_summary": {
-    "last_audit_date": "2026-09-11",
-    "total_signals_audited": 8,
-    "win_rate_6m": 69.5,
-    "status": "🦅 KULUÇKA TAKİBİNDE (8/10 Olgun Sinyal)"
-  },
-  "backtest_benchmark": {
-    "period": "2019-2026",
-    "win_rate": 69.5,
-    "profit_factor": 3.39,
-    "cagr_pct": 21.08,
-    "max_drawdown_pct": -5.89,
-    "calmar_ratio": 3.58,
-    "total_trades": 154,
-    "avg_duration_days": 31,
-    "status": "🛡️ DÜŞÜK DRAWDOWN VE HIZLI KÂR KİLİDİ ZIRHI AKTİF"
+  "validation": {
+    "active_model_version": "champion-1",
+    "shadow_model_version": "shadow-1",
+    "active_oos_score": 0.0,
+    "shadow_oos_score": 0.0,
+    "last_validation_date": null,
+    "last_promotion_date": null,
+    "rollback_count": 0,
+    "previous_weights": {},
+    "score_at_promotion": 0.0
   },
   "risk_guards": {
-    "trend_gate": "SMA20_CONFIRMED",
-    "fast_breakeven_active": true,
-    "max_portfolio_risk_per_trade_pct": 2.0,
-    "position_size_pct": 20.0
+    "min_data_quality": 70.0,
+    "min_liquidity_tl": 8000000.0,
+    "max_overnight_risk": 65.0,
+    "max_sector_like_concentration": 0.35,
+    "max_candidates": 8,
+    "min_signal_score": 72.0
+  },
+  "audit_summary": {
+    "last_audit_date": null,
+    "total_signals_audited": 0,
+    "win_rate_t3": 0.0,
+    "status": "BOOTSTRAP / LEARNING"
+  },
+  "data_quality": {
+    "ok": true,
+    "score": 98.0,
+    "rows": 80,
+    "invalid_rows": 0,
+    "missing_optional": [
+      "foreign_ratio_source"
+    ],
+    "missing_rate": 0.0
+  },
+  "regime_stats": {
+    "breadth_up": 0.5125,
+    "breadth_down": 0.4875,
+    "median_daily": 0.108,
+    "median_monthly": -0.669,
+    "dispersion": 0.899,
+    "high_rvol_share": 0.4375
+  },
+  "effective_weights": {
+    "pre_move": 0.4,
+    "flow": 0.25,
+    "resilience": 0.15,
+    "regime_fit": 0.1,
+    "quality": 0.1
   }
 }

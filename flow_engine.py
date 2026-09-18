@@ -1,134 +1,83 @@
+"""Feature engineering for Adaptive BIST Orderflow Meta-Engine V1."""
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
-import os
-import warnings
 
-warnings.filterwarnings('ignore')
 
-GECMIS_DOSYA = "gecmis_veri.csv"
+def _rank(s: pd.Series) -> pd.Series:
+    s = pd.to_numeric(s, errors="coerce")
+    if s.notna().sum() <= 1:
+        return pd.Series(50.0, index=s.index)
+    return (s.rank(pct=True, method="average").fillna(0.5) * 100.0).clip(0, 100)
 
-def gecmis_veriyi_yukle():
-    if os.path.exists(GECMIS_DOSYA):
-        try:
-            df = pd.read_csv(GECMIS_DOSYA)
-            if 'tarih' in df.columns:
-                df['tarih'] = pd.to_datetime(df['tarih'])
-            return df
-        except: 
-            return pd.DataFrame()
-    return pd.DataFrame()
 
-def calculate_quant_scores(df, df_gecmis, dynamic_weights=None):
-    if df.empty: 
-        return df
+def build_flow_features(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.copy()
 
-    scored_data = []
+    # Structure / location, not directional momentum.
+    span_1m = (out["high_1m"] - out["low_1m"]).replace(0, np.nan)
+    out["range_position"] = (((out["close"] - out["low_1m"]) / span_1m) * 100.0).replace([np.inf, -np.inf], np.nan).fillna(50.0).clip(0, 100)
+    out["dist_from_support"] = (((out["close"] - out["low_1m"]) / out["low_1m"]) * 100.0).replace([np.inf, -np.inf], np.nan)
 
-    for idx, row in df.iterrows():
-        item = row.to_dict()
-        
-        close = float(item.get('close', 0.0))
-        high = float(item.get('high', close))
-        low = float(item.get('low', close))
-        change = float(item.get('change_%', 0.0))
-        rvol = float(item.get('rvol', 1.0))
-        f_ratio = float(item.get('foreign_ratio', 20.0))
-        
-        high_1m = float(item.get('high_1m', close))
-        low_1m = float(item.get('low_1m', close))
-        roe = float(item.get('roe', 15.0))
-        pb = float(item.get('pb', 2.0))
+    span = (out["high"] - out["low"]).replace(0, np.nan)
+    out["clv"] = (((out["close"] - out["low"]) - (out["high"] - out["close"])) / span).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-1, 1)
+    out["body_efficiency"] = ((out["close"] - out["open"]) / span).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-1, 1)
 
-        # 1. TABAN KONUMU VE DİP MESAFESİ HESABI
-        channel_span = high_1m - low_1m
-        if channel_span > 0:
-            range_position = ((close - low_1m) / channel_span) * 100.0
-        else:
-            range_position = 50.0
-            
-        dist_from_support = ((close - low_1m) / (low_1m + 1e-9)) * 100.0 if low_1m > 0 else 0.0
+    # Flow proxies are labeled as proxies; real Takas data remains separate.
+    out["flow_proxy"] = (out["clv"].clip(lower=0) * 0.55 + out["body_efficiency"].clip(lower=0) * 0.25 + ((out["rvol"] - 1.0).clip(lower=0) / 3.0) * 0.20).clip(0, 1)
+    out["absorption_proxy"] = ((1.0 - out["range_position"] / 100.0).clip(0, 1) * out["rvol"].clip(lower=0).clip(upper=3.0) / 3.0).clip(0, 1)
+    out["activity_anomaly"] = ((out["rvol"] - 1.0) / 2.0).clip(-1, 1)
 
-        # Dip Akümülasyon Puanı (Kanalın alt %10-%45 tabanında olanlara tam puan)
-        accumulation_score = 0.0
-        if 5.0 <= range_position <= 45.0 and dist_from_support <= 10.0:
-            accumulation_score = 80.0
-        elif range_position < 60.0 and dist_from_support <= 15.0:
-            accumulation_score = 60.0
-        elif range_position >= 85.0:
-            accumulation_score = 10.0
-        else:
-            accumulation_score = 30.0
-
-        # 2. DİPTE KURUMSAL SÜPÜRME VE HACİM
-        range_span = high - low
-        clv = ((close - low) - (high - close)) / range_span if range_span > 0 else 0.0
-        sweep_ratio = (f_ratio * 0.40) + (max(clv, 0) * 60.0)
-        sweep_ratio = round(min(max(sweep_ratio, 5.0), 98.5), 1)
-
-        vol_z = float((rvol - 1.0) * 1.85)
-        vol_z = round(min(max(vol_z, -2.0), 5.0), 2)
-
-        quality_score = 50.0
-        if roe >= 15.0: quality_score += 30.0
-        if pb <= 5.0: quality_score += 20.0
-
-        item['range_position'] = round(range_position, 1)
-        item['dist_from_support'] = round(dist_from_support, 1)
-        item['accumulation_score'] = accumulation_score
-        item['sweep_ratio'] = sweep_ratio
-        item['vol_z'] = vol_z
-        item['quality_score'] = quality_score
-        scored_data.append(item)
-
-    res_df = pd.DataFrame(scored_data)
-    if res_df.empty: 
-        return res_df
-
-    # Yüzdelik Normalizasyon
-    res_df['pct_accum'] = res_df['accumulation_score'].rank(pct=True) * 100.0
-    res_df['pct_sweep'] = res_df['sweep_ratio'].rank(pct=True) * 100.0
-    res_df['pct_vol'] = res_df['vol_z'].rank(pct=True) * 100.0
-    res_df['pct_qual'] = res_df['quality_score'].rank(pct=True) * 100.0
-
-    raw_score = np.round(
-        res_df['pct_accum'] * 0.45 + 
-        res_df['pct_sweep'] * 0.25 + 
-        res_df['pct_vol'] * 0.20 + 
-        res_df['pct_qual'] * 0.10, 
-        1
-    )
-    
-    # Sadece o gün pozitif kapatanlar tam puan alır
-    res_df['quant_score'] = np.where(
-        res_df['change_%'] > 0.0,
-        raw_score,
-        0.0
+    # Favor base/accumulation zone but do not require positive daily price change.
+    out["accumulation_score"] = np.select(
+        [
+            out["range_position"].between(5, 45) & (out["dist_from_support"] <= 10),
+            out["range_position"].between(0, 60) & (out["dist_from_support"] <= 18),
+            out["range_position"] >= 85,
+        ],
+        [85.0, 65.0, 15.0],
+        default=40.0,
     )
 
-    # Rejim Tespiti
-    conditions = [
-        (res_df['range_position'] >= 85.0),
-        (res_df['quant_score'] >= 70.0) & (res_df['range_position'] <= 50.0),
-        (res_df['quant_score'] >= 50.0),
-        (res_df['change_%'] < -1.5)
-    ]
-    choices = [
-        "🚫 ZİRVEDE (RİSKLİ BÖLGE)",
-        "🎯 DİP AKÜMÜLASYONU (TABANDAN DÖNÜŞ)",
-        "⚡ TABANDA SIKIŞMA (ADAY)",
-        "🚨 KURUMSAL BOŞALTIM (DUMP)"
-    ]
-    res_df['regime'] = np.select(conditions, choices, default="NÖTR")
+    out["volume_ignition"] = (out["rvol"].clip(lower=0) * 35.0 + out["activity_anomaly"].clip(lower=0) * 25.0).clip(0, 100)
+    out["takas_quality"] = pd.to_numeric(out.get("foreign_ratio_confidence", 0.0), errors="coerce").fillna(0.0).clip(0, 100)
+    out["takas_flow"] = _rank(pd.to_numeric(out.get("foreign_ratio", np.nan), errors="coerce"))
 
-    drop_cols = ['pct_accum', 'pct_sweep', 'pct_vol', 'pct_qual', 'quality_score', 'accumulation_score']
-    res_df = res_df.drop(columns=[col for col in drop_cols if col in res_df.columns])
+    out["pct_accum"] = _rank(out["accumulation_score"])
+    out["pct_flow_proxy"] = _rank(out["flow_proxy"])
+    out["pct_absorption"] = _rank(out["absorption_proxy"])
+    out["pct_volume"] = _rank(out["volume_ignition"])
+    out["pct_takas"] = _rank(out["takas_flow"])
+    out["pct_liquidity"] = _rank(np.log1p(out["value_traded"].clip(lower=0)))
 
-    # Düne Göre Fark
-    res_df['score_diff'] = 0.0
-    if not df_gecmis.empty and 'quant_score' in df_gecmis.columns:
-        son_tarih = df_gecmis['tarih'].max()
-        df_son = df_gecmis[df_gecmis['tarih'] == son_tarih]
-        eski_map = dict(zip(df_son['ticker'], df_son['quant_score']))
-        res_df['score_diff'] = np.round(res_df['quant_score'] - res_df['ticker'].map(eski_map).fillna(res_df['quant_score']), 1)
+    out["pre_move_score"] = (
+        out["pct_accum"] * 0.30
+        + out["pct_flow_proxy"] * 0.20
+        + out["pct_absorption"] * 0.20
+        + out["pct_volume"] * 0.15
+        + out["pct_takas"] * 0.10
+        + out["pct_liquidity"] * 0.05
+    ).clip(0, 100).round(1)
 
-    return res_df.sort_values(by='quant_score', ascending=False).reset_index(drop=True)
+    out["flow_score"] = (
+        out["pct_flow_proxy"] * 0.35
+        + out["pct_absorption"] * 0.25
+        + out["pct_volume"] * 0.20
+        + out["pct_takas"] * 0.15
+        + out["pct_liquidity"] * 0.05
+    ).clip(0, 100).round(1)
+
+    out["structural_risk"] = np.select(
+        [
+            out["range_position"] >= 85,
+            out["dist_from_support"] > 30,
+            out["rvol"] < 0.60,
+        ],
+        [80.0, 65.0, 70.0],
+        default=25.0,
+    )
+
+    return out
