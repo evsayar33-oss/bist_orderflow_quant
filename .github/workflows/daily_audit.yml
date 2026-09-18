@@ -1,0 +1,42 @@
+name: Adaptive BIST Orderflow Meta-Engine - Daily Audit
+
+on:
+  schedule:
+    # Türkiye 17:45 (UTC+3 => 14:45 UTC), weekdays.
+    - cron: '45 14 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: adaptive-bist-daily-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Audit and Learner
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python longterm_auditor.py
+      - name: Commit Audit State
+        run: |
+          git config --local user.email "quantbot@github.com"
+          git config --local user.name "QuantBot AI"
+          git add longterm_ai_state.json model_weights.json signals_log.csv signals_lifecycle.csv
+          git diff --cached --quiet || (git commit -m "🧪 Adaptive BIST Meta-Engine audit" && git push)
