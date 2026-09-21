@@ -31,15 +31,15 @@
   "validation": {
     "active_model_version": "champion-1",
     "shadow_model_version": "shadow-1",
-    "active_oos_score": -0.184545,
-    "shadow_oos_score": -0.184545,
+    "active_oos_score": -0.179139,
+    "shadow_oos_score": -0.179139,
     "last_validation_date": "2026-09-21",
     "last_promotion_date": null,
     "rollback_count": 0,
     "previous_weights": {},
     "score_at_promotion": 0.0,
-    "holdout_samples": 783,
-    "train_samples": 2252
+    "holdout_samples": 749,
+    "train_samples": 2689
   },
   "risk_guards": {
     "min_data_quality": 70.0,
@@ -51,9 +51,9 @@
   },
   "audit_summary": {
     "last_audit_date": "2026-09-21",
-    "total_signals_audited": 3035,
-    "win_rate_t3": 32.6,
-    "status": "SHADOW_PROPOSED (2252 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED"
+    "total_signals_audited": 3438,
+    "win_rate_t3": 29.8,
+    "status": "SHADOW_PROPOSED (2689 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED"
   },
   "data_quality": {
     "ok": true,
