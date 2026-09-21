@@ -1,1 +1,11 @@
-{"version":"5.0.0","weights":{"pre_move":0.4,"flow":0.25,"resilience":0.15,"regime_fit":0.1,"quality":0.1},"status":"BOOTSTRAP / CHAMPION ACTIVE"}
+{
+  "weights": {
+    "pre_move": 0.384,
+    "flow": 0.246,
+    "resilience": 0.154,
+    "regime_fit": 0.108,
+    "quality": 0.108
+  },
+  "status": "SHADOW_PROPOSED (2252 samples; 0 regime models)",
+  "version": "5.0.0"
+}

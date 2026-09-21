@@ -1,8 +1,8 @@
 {
   "version": "5.0.0",
   "strategy": "ADAPTIVE_BIST_ORDERFLOW_META_ENGINE_V1",
-  "market_regime": "NEUTRAL",
-  "regime_confidence": 35.0,
+  "market_regime": "BROAD_SELL_OFF",
+  "regime_confidence": 90.0,
   "weights": {
     "pre_move": 0.4,
     "flow": 0.25,
@@ -11,11 +11,11 @@
     "quality": 0.1
   },
   "shadow_weights": {
-    "pre_move": 0.4,
-    "flow": 0.25,
-    "resilience": 0.15,
-    "regime_fit": 0.1,
-    "quality": 0.1
+    "pre_move": 0.384,
+    "flow": 0.246,
+    "resilience": 0.154,
+    "regime_fit": 0.108,
+    "quality": 0.108
   },
   "regime_weights": {},
   "learning_params": {
@@ -31,13 +31,15 @@
   "validation": {
     "active_model_version": "champion-1",
     "shadow_model_version": "shadow-1",
-    "active_oos_score": 0.0,
-    "shadow_oos_score": 0.0,
-    "last_validation_date": null,
+    "active_oos_score": -0.184545,
+    "shadow_oos_score": -0.184545,
+    "last_validation_date": "2026-09-21",
     "last_promotion_date": null,
     "rollback_count": 0,
     "previous_weights": {},
-    "score_at_promotion": 0.0
+    "score_at_promotion": 0.0,
+    "holdout_samples": 783,
+    "train_samples": 2252
   },
   "risk_guards": {
     "min_data_quality": 70.0,
@@ -48,34 +50,154 @@
     "min_signal_score": 72.0
   },
   "audit_summary": {
-    "last_audit_date": null,
-    "total_signals_audited": 0,
-    "win_rate_t3": 0.0,
-    "status": "BOOTSTRAP / LEARNING"
+    "last_audit_date": "2026-09-21",
+    "total_signals_audited": 3035,
+    "win_rate_t3": 32.6,
+    "status": "SHADOW_PROPOSED (2252 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED"
   },
   "data_quality": {
     "ok": true,
-    "score": 98.0,
-    "rows": 80,
-    "invalid_rows": 0,
-    "missing_optional": [
-      "foreign_ratio_source"
-    ],
+    "score": 99.9,
+    "rows": 449,
+    "invalid_rows": 1,
+    "missing_optional": [],
     "missing_rate": 0.0
   },
   "regime_stats": {
-    "breadth_up": 0.5125,
-    "breadth_down": 0.4875,
-    "median_daily": 0.108,
-    "median_monthly": -0.669,
-    "dispersion": 0.899,
-    "high_rvol_share": 0.4375
+    "breadth_up": 0.2316,
+    "breadth_down": 0.755,
+    "median_daily": -2.216,
+    "median_monthly": -16.423,
+    "dispersion": 7.962,
+    "high_rvol_share": 0.1247
   },
   "effective_weights": {
-    "pre_move": 0.4,
+    "pre_move": 0.322,
     "flow": 0.25,
-    "resilience": 0.15,
+    "resilience": 0.228,
     "regime_fit": 0.1,
     "quality": 0.1
+  },
+  "autonomy_guard": {
+    "version": "1.0.0",
+    "mode": "NORMAL",
+    "exposure_multiplier": 1.0,
+    "signal_threshold_add": 0.0,
+    "block_new_entries": false,
+    "drift_score": 0.0,
+    "performance_drift": 0.0,
+    "ops_score": 99.93,
+    "regime_stress": 0.25,
+    "risk_score": 0.25,
+    "watch_streak": 0,
+    "safe_streak": 0,
+    "recovery_streak": 0,
+    "healthy_streak": 2,
+    "last_transition": null,
+    "last_evaluation": "2026-09-21T14:27:18.345468+00:00",
+    "reason": "HEALTHY",
+    "recent_regimes": [
+      "NEUTRAL",
+      "BROAD_SELL_OFF"
+    ],
+    "feature_baseline": {
+      "pre_move_score": {
+        "n": 449,
+        "mean": 50.110468,
+        "std": 14.879452,
+        "median": 51.4,
+        "q25": 41.1,
+        "q75": 61.9,
+        "mad": 10.5
+      },
+      "flow_score": {
+        "n": 449,
+        "mean": 50.112695,
+        "std": 17.454834,
+        "median": 52.6,
+        "q25": 39.0,
+        "q75": 62.7,
+        "mad": 11.8
+      },
+      "resilience_score": {
+        "n": 449,
+        "mean": 50.110022,
+        "std": 19.392106,
+        "median": 49.5,
+        "q25": 36.1,
+        "q75": 64.5,
+        "mad": 14.2
+      },
+      "risk_score": {
+        "n": 449,
+        "mean": 35.554343,
+        "std": 12.014909,
+        "median": 32.5,
+        "q25": 27.2,
+        "q75": 40.3,
+        "mad": 6.2
+      },
+      "quality_score": {
+        "n": 449,
+        "mean": 81.097996,
+        "std": 3.998799,
+        "median": 85.0,
+        "q25": 77.0,
+        "q75": 85.0,
+        "mad": 0.0
+      },
+      "overnight_risk": {
+        "n": 449,
+        "mean": 37.926949,
+        "std": 12.34693,
+        "median": 37.3,
+        "q25": 28.8,
+        "q75": 45.2,
+        "mad": 8.2
+      },
+      "rvol": {
+        "n": 449,
+        "mean": 1.07649,
+        "std": 1.114578,
+        "median": 0.929393,
+        "q25": 0.692517,
+        "q75": 1.25295,
+        "mad": 0.260411
+      },
+      "perf_w": {
+        "n": 449,
+        "mean": -15.262917,
+        "std": 11.423787,
+        "median": -14.331008,
+        "q25": -20.332717,
+        "q75": -8.947368,
+        "mad": 5.72965
+      },
+      "perf_1m": {
+        "n": 449,
+        "mean": -17.291031,
+        "std": 15.884716,
+        "median": -16.422594,
+        "q25": -26.222222,
+        "q75": -7.330961,
+        "mad": 9.340627
+      }
+    },
+    "stress_test": {
+      "passed": true,
+      "version": "1.0.0",
+      "timestamp": "2026-09-21T14:27:18.339864+00:00",
+      "cases": 7,
+      "passed_cases": 7
+    },
+    "performance_detail": {
+      "samples": 0,
+      "status": "WARMUP"
+    }
+  },
+  "autonomy": {
+    "version": "1.0.0",
+    "last_mode": "NORMAL",
+    "last_reason": "HEALTHY"
   }
 }
