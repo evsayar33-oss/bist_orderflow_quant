@@ -1,0 +1,297 @@
+{
+  "generated_at": "2026-09-22T10:06:01.170191Z",
+  "period": "2022-01-01..2026-09-22",
+  "universe_size": 31,
+  "folds": [
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2022-12-28",
+      "test_start": "2022-12-29",
+      "test_end": "2023-05-11",
+      "selected_threshold": 70,
+      "train": {
+        "trades": 280,
+        "win_rate": 56.79,
+        "profit_factor": 1.38,
+        "avg_pnl": 0.556,
+        "mdd": -59.854,
+        "passed": true,
+        "reasons": [],
+        "threshold": 70
+      },
+      "test": {
+        "trades": 141,
+        "win_rate": 41.84,
+        "profit_factor": 0.816,
+        "avg_pnl": -0.505,
+        "mdd": -70.397
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2023-05-11",
+      "test_start": "2023-05-12",
+      "test_end": "2023-09-21",
+      "selected_threshold": 70,
+      "train": {
+        "trades": 423,
+        "win_rate": 51.77,
+        "profit_factor": 1.11,
+        "avg_pnl": 0.207,
+        "mdd": -75.149,
+        "passed": true,
+        "reasons": [],
+        "threshold": 70
+      },
+      "test": {
+        "trades": 90,
+        "win_rate": 57.78,
+        "profit_factor": 1.846,
+        "avg_pnl": 1.791,
+        "mdd": -23.69
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2023-09-21",
+      "test_start": "2023-09-22",
+      "test_end": "2024-01-26",
+      "selected_threshold": 85,
+      "train": {
+        "trades": 20,
+        "win_rate": 70.0,
+        "profit_factor": 4.041,
+        "avg_pnl": 2.494,
+        "mdd": -13.191,
+        "passed": true,
+        "reasons": [],
+        "threshold": 85
+      },
+      "test": {
+        "trades": 3,
+        "win_rate": 33.33,
+        "profit_factor": 0.339,
+        "avg_pnl": -3.043,
+        "mdd": -9.875
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2024-01-26",
+      "test_start": "2024-01-29",
+      "test_end": "2024-06-07",
+      "selected_threshold": 85,
+      "train": {
+        "trades": 23,
+        "win_rate": 65.22,
+        "profit_factor": 2.349,
+        "avg_pnl": 1.772,
+        "mdd": -20.308,
+        "passed": true,
+        "reasons": [],
+        "threshold": 85
+      },
+      "test": {
+        "trades": 4,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "avg_pnl": -4.886,
+        "mdd": -10.7
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2024-06-07",
+      "test_start": "2024-06-10",
+      "test_end": "2024-10-18",
+      "selected_threshold": 85,
+      "train": {
+        "trades": 27,
+        "win_rate": 55.56,
+        "profit_factor": 1.426,
+        "avg_pnl": 0.785,
+        "mdd": -20.546,
+        "passed": true,
+        "reasons": [],
+        "threshold": 85
+      },
+      "test": {
+        "trades": 11,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "avg_pnl": -2.824,
+        "mdd": -24.459
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2024-10-18",
+      "test_start": "2024-10-21",
+      "test_end": "2025-02-25",
+      "selected_threshold": 70,
+      "train": {
+        "trades": 1082,
+        "win_rate": 47.41,
+        "profit_factor": 0.96,
+        "avg_pnl": -0.081,
+        "mdd": -96.62,
+        "passed": false,
+        "reasons": [
+          "PF_TOO_LOW",
+          "NEGATIVE_EXPECTANCY"
+        ],
+        "threshold": 70
+      },
+      "test": {
+        "trades": 244,
+        "win_rate": 43.44,
+        "profit_factor": 1.068,
+        "avg_pnl": 0.091,
+        "mdd": -49.598
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2025-02-25",
+      "test_start": "2025-02-26",
+      "test_end": "2025-07-10",
+      "selected_threshold": 70,
+      "train": {
+        "trades": 1347,
+        "win_rate": 46.47,
+        "profit_factor": 0.959,
+        "avg_pnl": -0.078,
+        "mdd": -97.476,
+        "passed": false,
+        "reasons": [
+          "PF_TOO_LOW",
+          "NEGATIVE_EXPECTANCY"
+        ],
+        "threshold": 70
+      },
+      "test": {
+        "trades": 227,
+        "win_rate": 50.22,
+        "profit_factor": 1.319,
+        "avg_pnl": 0.663,
+        "mdd": -41.051
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2025-07-10",
+      "test_start": "2025-07-11",
+      "test_end": "2025-11-17",
+      "selected_threshold": 90,
+      "train": {
+        "trades": 1,
+        "win_rate": 100.0,
+        "profit_factor": 999.0,
+        "avg_pnl": 5.662,
+        "mdd": 0.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_SAMPLE"
+        ],
+        "threshold": 90
+      },
+      "test": {
+        "trades": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "avg_pnl": 0.0,
+        "mdd": 0.0
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2025-11-17",
+      "test_start": "2025-11-18",
+      "test_end": "2026-03-25",
+      "selected_threshold": 90,
+      "train": {
+        "trades": 1,
+        "win_rate": 100.0,
+        "profit_factor": 999.0,
+        "avg_pnl": 5.662,
+        "mdd": 0.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_SAMPLE"
+        ],
+        "threshold": 90
+      },
+      "test": {
+        "trades": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "avg_pnl": 0.0,
+        "mdd": 0.0
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2026-03-25",
+      "test_start": "2026-03-26",
+      "test_end": "2026-07-31",
+      "selected_threshold": 90,
+      "train": {
+        "trades": 1,
+        "win_rate": 100.0,
+        "profit_factor": 999.0,
+        "avg_pnl": 5.662,
+        "mdd": 0.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_SAMPLE"
+        ],
+        "threshold": 90
+      },
+      "test": {
+        "trades": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "avg_pnl": 0.0,
+        "mdd": 0.0
+      }
+    },
+    {
+      "train_start": "2022-01-03",
+      "train_end": "2026-07-31",
+      "test_start": "2026-08-03",
+      "test_end": "2026-09-21",
+      "selected_threshold": 85,
+      "train": {
+        "trades": 83,
+        "win_rate": 50.6,
+        "profit_factor": 1.227,
+        "avg_pnl": 0.432,
+        "mdd": -34.544,
+        "passed": true,
+        "reasons": [],
+        "threshold": 85
+      },
+      "test": {
+        "trades": 7,
+        "win_rate": 28.57,
+        "profit_factor": 1.789,
+        "avg_pnl": 0.74,
+        "mdd": -6.392
+      }
+    }
+  ],
+  "oos_metrics": {
+    "trades": 727,
+    "win_rate": 45.94,
+    "profit_factor": 1.144,
+    "avg_pnl": 0.286,
+    "mdd": -70.397
+  },
+  "stability": {
+    "stable": false,
+    "pf_dispersion": 0.7713,
+    "wr_dispersion": 0.6354
+  },
+  "synthetic_data_used": false,
+  "data_source": "Yahoo Finance OHLCV"
+}
