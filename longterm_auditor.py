@@ -7,9 +7,10 @@ import numpy as np
 import pandas as pd
 import requests
 
-from learner_engine import apply_learning, resolve_forward_outcomes, summarize_six_month_performance
+from learner_engine import apply_learning, resolve_forward_outcomes
 from state_manager import load_ai_state, load_lifecycle_signals, load_signal_log, save_ai_state, save_lifecycle_signals
 from autonomy_guard import evaluate_autonomy_guard
+from win_rate_optimizer import optimize_win_rate, summary as winrate_optimizer_summary
 
 
 def fetch_current_snapshot():
@@ -125,6 +126,11 @@ def audit_and_calibrate(history=None):
         # Outcomes are resolved against persisted daily history, not calendar-day elapsed time.
         signal_log = resolve_forward_outcomes(signal_log, history)
         state = apply_learning(signal_log, state)
+        state = optimize_win_rate(
+            state, signal_log,
+            current_threshold=float(state.get("win_rate_optimizer", {}).get("active_threshold", state.get("risk_guards", {}).get("min_signal_score", 72.0))),
+        )
+        state.setdefault("audit_summary", {})["winrate_optimizer_status"] = winrate_optimizer_summary(state)
         evaluate_autonomy_guard(
             state,
             features=None,

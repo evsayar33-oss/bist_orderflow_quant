@@ -10,13 +10,12 @@ import pandas as pd
 
 from data_integrity import validate_market_frame
 from flow_fetcher import fetch_all_data
-from learner_engine import resolve_forward_outcomes, summarize_six_month_performance, SIX_MONTH_TRADING_DAYS
+from learner_engine import resolve_forward_outcomes
 from longterm_auditor import audit_and_calibrate
 from meta_engine import score_market
 from state_manager import load_ai_state, load_signal_log, load_lifecycle_signals, save_ai_state, save_lifecycle_signals
 
 GECMIS_DOSYA = "gecmis_veri.csv"
-MAX_HISTORY_CALENDAR_DAYS = 430
 
 
 def load_history() -> pd.DataFrame:
@@ -57,7 +56,7 @@ def log_signals(scored: pd.DataFrame, state: dict) -> pd.DataFrame:
             "market_regime": r["regime"],
             "regime_confidence": float(r["regime_confidence"]),
             "model_version": r.get("model_version", "champion-1"),
-            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan, "ret_t126": np.nan,
+            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan,
             "mfe_t10": np.nan, "mae_t10": np.nan, "outcome": "PENDING",
         })
     new = pd.DataFrame(rows)
@@ -73,26 +72,17 @@ def log_signals(scored: pd.DataFrame, state: dict) -> pd.DataFrame:
 def log_history(scored: pd.DataFrame) -> None:
     if scored is None or scored.empty:
         return
-
     old = load_history()
     today = pd.Timestamp.now(tz="Europe/Istanbul").normalize().tz_localize(None)
     new = scored.copy()
     new["tarih"] = today
-
     if not old.empty:
-        old["tarih"] = pd.to_datetime(old["tarih"], errors="coerce").dt.normalize()
-        old = old[~old["tarih"].eq(today)]
-        all_df = pd.concat([old, new], ignore_index=True, sort=False)
+        old = old[~pd.to_datetime(old["tarih"], errors="coerce").dt.normalize().eq(today)]
+        all_df = pd.concat([old, new], ignore_index=True)
     else:
         all_df = new
-
-    # Keep enough real trading history to resolve 126-session forward outcomes.
-    # Do not truncate at 120 days; that made a genuine 6-month metric impossible.
-    cutoff = today - pd.Timedelta(days=MAX_HISTORY_CALENDAR_DAYS)
-    all_df["tarih"] = pd.to_datetime(all_df["tarih"], errors="coerce").dt.normalize()
-    all_df = all_df[all_df["tarih"].notna() & (all_df["tarih"] >= cutoff)]
-    all_df = all_df.drop_duplicates(subset=["tarih", "ticker"], keep="last")
     all_df.to_csv(GECMIS_DOSYA, index=False)
+
 
 
 def upsert_lifecycle(scored: pd.DataFrame, state: dict) -> None:
@@ -117,7 +107,7 @@ def upsert_lifecycle(scored: pd.DataFrame, state: dict) -> None:
             "market_regime": r["regime"], "regime_confidence": float(r["regime_confidence"]),
             "model_version": r.get("model_version", "champion-1"), "peak_price": float(r["close"]),
             "trough_price": float(r["close"]), "max_adverse_excursion": 0.0, "max_favorable_excursion": 0.0,
-            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan, "ret_t126": np.nan, "outcome": "OPEN"
+            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan, "outcome": "OPEN"
         })
     new = pd.DataFrame(rows)
     if current.empty:
@@ -151,7 +141,6 @@ def format_report(scored: pd.DataFrame, state: dict, alerts) -> str:
         f"📊 Breadth Up: %{stats.get('breadth_up', 0)*100:.1f} | Down: %{stats.get('breadth_down', 0)*100:.1f}",
         f"🛡️ Aktif Model: <b>{state.get('validation', {}).get('active_model_version', 'champion-1')}</b>",
         f"📚 Audit Win T+3: <b>%{state.get('audit_summary', {}).get('win_rate_t3', 0):.1f}</b>",
-        f"🗓️ Forward Win 6A: <b>%{state.get('audit_summary', {}).get('win_rate_6m', 0):.1f}</b> | N={state.get('audit_summary', {}).get('six_month_outcomes', 0)}",
     ]
     if alerts:
         msg.append("🚨 <b>RİSK UYARILARI</b>")
@@ -206,12 +195,11 @@ def main():
     state = load_ai_state()
     history = load_history()
 
-    # Resolve the actual signal ledger against persisted daily market history.
-    signals = load_signal_log()
-    if not signals.empty:
-        resolved = resolve_forward_outcomes(signals, history)
-        resolved.to_csv("signals_log.csv", index=False)
-        state["audit_summary"].update(summarize_six_month_performance(resolved))
+    if not history.empty:
+        signals = load_signal_log()
+        if not signals.empty:
+            resolved = resolve_forward_outcomes(signals, history)
+            resolved.to_csv("signals_log.csv", index=False)
 
     state, alerts = audit_and_calibrate(history=history)
 
@@ -240,6 +228,8 @@ def main():
         project="orderflow",
     )
     base_threshold = float(state.get("risk_guards", {}).get("min_signal_score", 72.0))
+    wr_threshold = float(state.get("win_rate_optimizer", {}).get("active_threshold", base_threshold))
+    base_threshold = max(base_threshold, wr_threshold)
     effective_threshold = base_threshold + float(guard_result.get("signal_threshold_add", 0.0))
     if guard_result.get("block_new_entries"):
         scored["eligible"] = False

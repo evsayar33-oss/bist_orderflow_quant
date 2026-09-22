@@ -1,57 +1,94 @@
-# BIST Orderflow — 6 Ay Win Rate / Backtest UI Fix V1
+# KUR-UNUT V1 — PROJECT-SPECIFIC WIN-RATE OPTIMIZATION
 
-Bu paket mevcut `bist_orderflow_quant` snapshot'ı temel alınarak hazırlanmıştır.
+Bu paket dört projenin her birine **kendi operasyonel hedef ufkunda** win-rate odaklı, walk-forward doğrulamalı bir optimizer ekler.
 
-## Düzeltilen sorunlar
+## Temel ilke
 
-1. Streamlit `6 Aylık Win Rate` kartı artık `win_rate_6m` alanını gerçek forward outcome'dan okur.
-2. 6 aylık sonuç tanımı: **sinyal tarihinden sonraki 126 işlem günü kapanış getirisi** (`ret_t126`).
-3. Çözülmemiş 6 aylık sinyaller 0% veya zarar olarak sayılmaz. UI bunları `Hazırlanıyor`/Warmup olarak gösterir.
-4. `gecmis_veri.csv` artık 120 gün ile kesilmez; 126 işlem günlük forward outcome üretmeye yetecek yaklaşık 430 takvim günü tutulur.
-5. Eski `signals_log.csv` dosyaları `ret_t126` kolonu yok diye çöpe atılmaz; eksik kolon geriye dönük uyumlu şekilde eklenir.
-6. `signals_lifecycle.csv` da yeni kolonlar nedeniyle eski kayıtlarını kaybetmez.
-7. Akşam audit artık öğrenmeyi full market history tablosu yerine gerçek `signals_log.csv` üzerinden yapar. Böylece market snapshot satırları "denetlenmiş sinyal" gibi sayılmaz.
-8. Backtest kartı `backtest_report.json -> oos_metrics.win_rate` değerini öncelikli okur. Rapor henüz oluşmamışsa `Bekliyor` gösterir; sahte 0 üretmez.
+Amaç `win rate = %100` gibi bir hedefi körlemesine kovalamak değildir. Her proje:
 
-## Önemli gerçek durum
+1. Geçmiş sonuçları toplar.
+2. Mevcut score threshold çevresinde dar ve kontrollü adaylar dener.
+3. Kronolojik walk-forward OOS testleri yapar.
+4. **Primary objective = OOS win rate** kullanır.
+5. Küçük örneklemi Wilson lower bound ile cezalandırır.
+6. Gerçek getiri mevcutsa PF ve ortalama getiri bozulma korumaları uygular.
+7. Yalnızca doğrulanmış iyileşmeyi `active_threshold` olarak promote eder.
+8. Yeterli kanıt yoksa mevcut threshold'u değiştirmez.
 
-Verilen snapshot içindeki `gecmis_veri.csv` yalnızca 2026-08-31 ile 2026-09-21 arasını kapsıyor. Bu nedenle bugün itibarıyla gerçek bir 6 aylık forward örneklem çıkarmak mümkün değildir.
+Dolayısıyla sistemler kendi başlarına performanslarını iyileştirmeye çalışır; ancak aynı anda overfit riskini sınırlamaya devam eder.
 
-Yeni kod:
-- geçmişi artık uzun tutacak,
-- her yeni sinyali 126 işlem günü sonra çözümleyecek,
-- yeterli sayıda gerçek 6 aylık sonuç oluştuğunda `win_rate_6m` değerini gösterecektir.
+## Proje hedefleri
 
-Geçmiş verisi olmayan dönemi tahmin ederek bir yüzde üretmez.
+- `bist_orderflow_quant`: T+3 win-rate
+- `bist_shock_quant`: T+5 win-rate
+- `sp500_shock_quant`: T+5 win-rate
+- `us_smallcap_quant`: mature lifecycle WIN-rate (projenin mevcut 6 aylık operational metric'i)
 
 ## Kurulum
 
-Repo kökündeki aşağıdaki dosyaları `01_REPLACE_FILES` klasöründeki aynı isimli dosyalarla değiştir:
+Her klasördeki dosyaları aynı repo köküne kopyalayın.
 
-- app.py
-- learner_engine.py
-- main.py
-- longterm_auditor.py
-- state_manager.py
-- backtest_optimizer.py
+### BIST Orderflow
 
-`longterm_ai_state.json`, `signals_log.csv`, `signals_lifecycle.csv`, `gecmis_veri.csv` üzerine paket içindeki eski örnek dosyalarla yazmayın.
+Yeni:
+- `win_rate_optimizer.py`
 
-## Kontrol
+Değişen:
+- `longterm_auditor.py`
+- `main.py`
+
+### BIST Shock
+
+Yeni:
+- `win_rate_optimizer.py`
+
+Değişen:
+- `shock_auditor.py`
+- `main.py`
+
+### S&P 500 Shock
+
+Yeni:
+- `win_rate_optimizer.py`
+
+Değişen:
+- `sp_auditor.py`
+- `main.py`
+
+### US Small-Cap
+
+Yeni:
+- `win_rate_optimizer.py`
+
+Değişen:
+- `longterm_auditor.py`
+- `main.py`
+
+Mevcut `app.py`, UI veya tarihsel CSV/JSON dosyalarına bu paket içinde dokunulmaz.
+
+## Çalışma mantığı
+
+Optimizer her audit döngüsünde çalışır. Eğer OOS sonuçları mevcut threshold'a göre anlamlı biçimde daha yüksek win-rate göstermezse hiçbir şey değiştirmez.
+
+Promosyon için temel korumalar:
+
+- minimum örneklem
+- +2.0 yüzde puanı ham OOS win-rate artışı
+- +1.5 yüzde puanı Wilson lower-bound artışı
+- varsa PF'nin %10'dan fazla bozulmaması
+- varsa ortalama getirinin 0.25 yüzde puanından fazla bozulmaması
+
+## Test
+
+Repo kökünde ilgili proje için:
 
 ```bash
-python main.py --self-test
-python -m py_compile app.py learner_engine.py main.py longterm_auditor.py state_manager.py backtest_optimizer.py
+python -m py_compile win_rate_optimizer.py main.py <audit_file>.py
+python -c "from win_rate_optimizer import wilson_lower_bound; print(wilson_lower_bound(45, 60))"
 ```
 
-Gerçek OOS backtest:
+Bu optimizer mevcut sistemi değiştirmeden önce yalnızca `state["win_rate_optimizer"]` içine aday/karar bilgisi yazar.
 
-```bash
-python backtest_optimizer.py --start-date 2022-01-01 --save
-```
+## Önemli
 
-Bu komut başarılı gerçek veri çekerse `backtest_report.json` oluşturur. Streamlit Backtest Win Rate kartı bu raporu otomatik okuyacaktır.
-
-## Site görünümü
-
-Mevcut Streamlit yerleşimi korunmuştur. Bu düzeltmede görsel düzen yeniden tasarlanmamıştır; yalnızca 6 aylık kartın doğru veri kaynağına bağlanması ve backtest kartının sahte `0.0`/`Veri yok` üretmemesi düzeltilmiştir.
+Bu katman gelecekteki win-rate'i garanti etmez. Görevi, mevcut proje için **doğrulanmış** win-rate iyileştirmelerini otomatik olarak bulmak ve güvenli koşullarda uygulamaktır.
