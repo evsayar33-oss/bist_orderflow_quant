@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from learner_engine import apply_learning, resolve_forward_outcomes
+from learner_engine import apply_learning, resolve_forward_outcomes, summarize_six_month_performance
 from state_manager import load_ai_state, load_lifecycle_signals, load_signal_log, save_ai_state, save_lifecycle_signals
 from autonomy_guard import evaluate_autonomy_guard
 

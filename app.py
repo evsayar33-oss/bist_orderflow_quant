@@ -11,16 +11,24 @@ st.set_page_config(
 )
 
 @st.cache_data(ttl=60)
-@st.cache_data(ttl=60)
 def load_backtest_win_rate():
-    """Gerçek OOS backtest kazanma oranını okur; sonuç yoksa None döner."""
+    """Read the latest real OOS walk-forward backtest metric."""
+    candidates = []
+
     if os.path.exists("backtest_report.json"):
         try:
             with open("backtest_report.json", "r", encoding="utf-8") as f:
                 report = json.load(f)
-            value = report.get("oos_metrics", {}).get("win_rate")
+            oos = report.get("oos_metrics", {}) if isinstance(report, dict) else {}
+            value = oos.get("win_rate")
+            trades = oos.get("trades")
             if value is not None:
-                return float(value)
+                candidates.append({
+                    "win_rate": float(value),
+                    "trades": int(trades) if trades is not None else None,
+                    "source": "OOS Walk-Forward",
+                    "generated_at": report.get("generated_at"),
+                })
         except Exception:
             pass
 
@@ -28,12 +36,54 @@ def load_backtest_win_rate():
         try:
             with open("longterm_ai_state.json", "r", encoding="utf-8") as f:
                 state = json.load(f)
-            value = state.get("backtest_benchmark", {}).get("win_rate")
+            bench = state.get("backtest_benchmark", {})
+            value = bench.get("win_rate")
             if value is not None:
-                return float(value)
+                candidates.append({
+                    "win_rate": float(value),
+                    "trades": int(bench["trades"]) if bench.get("trades") is not None else None,
+                    "source": "Stored Benchmark",
+                    "generated_at": bench.get("generated_at"),
+                })
         except Exception:
             pass
-    return None
+
+    return candidates[0] if candidates else None
+
+
+@st.cache_data(ttl=60)
+def load_six_month_win_rate():
+    """Read the genuine forward 6-month signal outcome metric."""
+    if not os.path.exists("longterm_ai_state.json"):
+        return {
+            "win_rate": None,
+            "outcomes": 0,
+            "pending": 0,
+            "status": "WARMUP",
+            "horizon_days": 126,
+        }
+    try:
+        with open("longterm_ai_state.json", "r", encoding="utf-8") as f:
+            state = json.load(f)
+        audit = state.get("audit_summary", {})
+        outcomes = int(audit.get("six_month_outcomes", 0) or 0)
+        value = audit.get("win_rate_6m")
+        return {
+            "win_rate": float(value) if value is not None and outcomes > 0 else None,
+            "outcomes": outcomes,
+            "pending": int(audit.get("six_month_pending", 0) or 0),
+            "status": str(audit.get("six_month_status", "WARMUP")),
+            "horizon_days": int(audit.get("six_month_horizon_trading_days", 126) or 126),
+        }
+    except Exception:
+        return {
+            "win_rate": None,
+            "outcomes": 0,
+            "pending": 0,
+            "status": "WARMUP",
+            "horizon_days": 126,
+        }
+
 
 def load_historical_data():
     if os.path.exists("gecmis_veri.csv"):
@@ -70,7 +120,8 @@ def load_lifecycle_signals():
 df_gecmis = load_historical_data()
 ai_state = load_ai_state()
 df_lifecycle = load_lifecycle_signals()
-backtest_win_rate = load_backtest_win_rate()
+backtest_info = load_backtest_win_rate()
+six_month_info = load_six_month_win_rate()
 
 # =============================================================================
 # BAŞLIK VE METRİKLER
@@ -86,10 +137,22 @@ audit = ai_state.get("audit_summary", {})
 with col1:
     st.metric("🤖 Model Durumu", "Aktif", audit.get("status", "Kuluçka Takibinde")[:22] + "...")
 with col2:
-    st.metric("🏆 6 Aylık Win Rate", f"%{audit.get('win_rate_6m', 0.0):.1f}", f"Denetlenen: {audit.get('total_signals_audited', 0)}")
+    sixm_value = six_month_info.get("win_rate")
+    sixm_label = f"%{sixm_value:.1f}" if sixm_value is not None else "Hazırlanıyor"
+    sixm_sub = (
+        f"Çözülen: {six_month_info.get('outcomes', 0)} | 126 seans"
+        if sixm_value is not None
+        else f"Warmup: {six_month_info.get('outcomes', 0)} tamamlandı | 126 seans"
+    )
+    st.metric("🏆 6 Aylık Win Rate", sixm_label, sixm_sub)
 with col3:
-    bt_label = f"%{backtest_win_rate:.1f}" if backtest_win_rate is not None else "Veri yok"
-    st.metric("📊 Backtest Win Rate", bt_label, "OOS Walk-Forward")
+    bt_label = f"%{backtest_info['win_rate']:.1f}" if backtest_info else "Bekliyor"
+    bt_sub = (
+        f"OOS | N={backtest_info['trades']}"
+        if backtest_info and backtest_info.get("trades") is not None
+        else "OOS Walk-Forward"
+    )
+    st.metric("📊 Backtest Win Rate", bt_label, bt_sub)
 with col4:
     st.metric("🎯 Hedef Skalası", "%100 - %250", "Buy & Hold (6-12 Ay)")
 with col5:

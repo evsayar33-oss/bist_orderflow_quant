@@ -8,6 +8,7 @@ from copy import deepcopy
 from typing import Dict
 
 import pandas as pd
+import numpy as np
 
 STATE_FILE = "longterm_ai_state.json"
 WEIGHTS_FILE = "model_weights.json"
@@ -67,6 +68,11 @@ DEFAULT_STATE = {
         "last_audit_date": None,
         "total_signals_audited": 0,
         "win_rate_t3": 0.0,
+        "win_rate_6m": 0.0,
+        "six_month_outcomes": 0,
+        "six_month_pending": 0,
+        "six_month_status": "WARMUP",
+        "six_month_horizon_trading_days": 126,
         "status": "BOOTSTRAP / LEARNING",
     },
     "data_quality": {},
@@ -135,7 +141,7 @@ def _lifecycle_columns():
         "resilience_score", "regime_fit_score", "quality_score", "risk_score", "data_quality",
         "market_regime", "regime_confidence", "model_version", "peak_price", "trough_price",
         "max_adverse_excursion", "max_favorable_excursion", "ret_t1", "ret_t3", "ret_t5",
-        "ret_t10", "outcome"
+        "ret_t10", "ret_t126", "outcome"
     ]
 
 
@@ -145,10 +151,11 @@ def load_lifecycle_signals() -> pd.DataFrame:
         return pd.DataFrame(columns=cols)
     try:
         df = pd.read_csv(LIFECYCLE_LOG_FILE)
-        if not set(cols).issubset(df.columns):
-            print("ℹ️ Eski signals_lifecycle.csv şeması algılandı; eski lifecycle kayıtları yeni modelde kullanılmıyor.")
-            return pd.DataFrame(columns=cols)
         df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce")
+        # Backward-compatible migration: preserve existing rows and add new columns.
+        for c in cols:
+            if c not in df.columns:
+                df[c] = pd.NA
         return df[cols]
     except Exception as exc:
         print(f"⚠️ Lifecycle okuma hatası: {exc}")
@@ -164,23 +171,44 @@ def save_lifecycle_signals(df: pd.DataFrame) -> None:
 
 
 def load_signal_log() -> pd.DataFrame:
-    """Load only V1-compatible signal logs; legacy schemas are ignored safely."""
+    """Load the signal ledger with backward-compatible schema migration."""
     required = [
         "tarih", "ticker", "entry_price", "meta_score", "pre_move_score", "flow_score",
         "resilience_score", "regime_fit_score", "quality_score", "risk_score",
         "ret_t1", "ret_t3", "ret_t5", "ret_t10"
     ]
+    optional = [
+        "ret_t126", "mfe_t10", "mae_t10", "outcome",
+        "market_regime", "regime_confidence", "model_version", "data_quality"
+    ]
+    all_cols = required + optional
+
     if not os.path.exists(SIGNAL_LOG_FILE):
-        return pd.DataFrame(columns=required)
+        return pd.DataFrame(columns=all_cols)
+
     try:
         df = pd.read_csv(SIGNAL_LOG_FILE)
-        if not set(required).issubset(df.columns):
-            print("ℹ️ Eski signals_log.csv şeması algılandı; eski skorlar öğrenmeye dahil edilmiyor.")
-            return pd.DataFrame(columns=required)
+        missing_required = [c for c in required if c not in df.columns]
+        if missing_required:
+            print(f"ℹ️ Signal log eksik zorunlu alanlar: {missing_required}; öğrenme atlandı.")
+            return pd.DataFrame(columns=all_cols)
+
         df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce").dt.normalize()
-        for col in required[2:]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-        return df
+        numeric_cols = [
+            "entry_price", "meta_score", "pre_move_score", "flow_score",
+            "resilience_score", "regime_fit_score", "quality_score", "risk_score",
+            "ret_t1", "ret_t3", "ret_t5", "ret_t10", "ret_t126",
+            "mfe_t10", "mae_t10", "regime_confidence", "data_quality"
+        ]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        for col in optional:
+            if col not in df.columns:
+                df[col] = "PENDING" if col == "outcome" else np.nan
+
+        return df[all_cols]
     except Exception as exc:
         print(f"⚠️ Signal log okuma hatası: {exc}")
-        return pd.DataFrame(columns=required)
+        return pd.DataFrame(columns=all_cols)

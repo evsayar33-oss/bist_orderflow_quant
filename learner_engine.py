@@ -11,7 +11,8 @@ from scipy.stats import spearmanr
 from state_manager import load_ai_state, load_signal_log, save_ai_state, save_model_weights
 
 FACTOR_COLUMNS = ["pre_move_score", "flow_score", "resilience_score", "regime_fit_score", "quality_score"]
-TARGET_COLUMNS = ["ret_t1", "ret_t3", "ret_t5", "ret_t10"]
+TARGET_COLUMNS = ["ret_t1", "ret_t3", "ret_t5", "ret_t10", "ret_t126"]
+SIX_MONTH_TRADING_DAYS = 126
 
 
 def _trading_day_index(history: pd.DataFrame) -> pd.DatetimeIndex:
@@ -50,6 +51,13 @@ def resolve_forward_outcomes(signal_log: pd.DataFrame, history: pd.DataFrame) ->
             if len(future) >= n and pd.isna(row.get(f"ret_t{n}")):
                 px = float(future.iloc[n - 1]["close"])
                 out.at[idx, f"ret_t{n}"] = round((px / entry - 1.0) * 100.0, 3)
+
+        # 6-month forward outcome = 126 future trading sessions.
+        # This is intentionally kept separate from trailing perf_6m features.
+        if len(future) >= SIX_MONTH_TRADING_DAYS and pd.isna(row.get("ret_t126")):
+            px_6m = float(future.iloc[SIX_MONTH_TRADING_DAYS - 1]["close"])
+            out.at[idx, "ret_t126"] = round((px_6m / entry - 1.0) * 100.0, 3)
+
         window = future.iloc[: min(10, len(future))]
         if len(window):
             max_high = pd.to_numeric(window["high"], errors="coerce").max()
@@ -63,6 +71,42 @@ def resolve_forward_outcomes(signal_log: pd.DataFrame, history: pd.DataFrame) ->
             out.at[idx, "outcome"] = "WIN_T3" if float(out.at[idx, "ret_t3"]) > 0 else "LOSS_T3"
 
     return out
+
+
+def summarize_six_month_performance(signal_log: pd.DataFrame) -> Dict[str, float]:
+    """
+    Calculate a genuine forward 6-month win rate from resolved signal outcomes.
+
+    Win definition: ret_t126 > 0 after 126 future trading sessions.
+    Unresolved signals are excluded; they are not treated as losses or zeros.
+    """
+    if signal_log is None or signal_log.empty or "ret_t126" not in signal_log.columns:
+        return {
+            "win_rate_6m": 0.0,
+            "six_month_outcomes": 0,
+            "six_month_pending": 0,
+            "six_month_status": "WARMUP",
+            "six_month_horizon_trading_days": SIX_MONTH_TRADING_DAYS,
+        }
+
+    r = pd.to_numeric(signal_log["ret_t126"], errors="coerce")
+    resolved = r.dropna()
+    pending = int(r.isna().sum())
+    n = int(len(resolved))
+    if n == 0:
+        status = "WARMUP"
+        win_rate = 0.0
+    else:
+        status = "ACTIVE"
+        win_rate = float((resolved > 0).mean() * 100.0)
+
+    return {
+        "win_rate_6m": round(win_rate, 1),
+        "six_month_outcomes": n,
+        "six_month_pending": pending,
+        "six_month_status": status,
+        "six_month_horizon_trading_days": SIX_MONTH_TRADING_DAYS,
+    }
 
 
 def _safe_corr(x, y):
@@ -212,5 +256,7 @@ def apply_learning(history: pd.DataFrame, state: Dict) -> Dict:
         state["audit_summary"]["total_signals_audited"] = int(y.notna().sum())
         state["audit_summary"]["win_rate_t3"] = round(float((y.dropna() > 0).mean()) * 100.0, 1)
     state["audit_summary"]["last_audit_date"] = datetime.now().strftime("%Y-%m-%d")
+    # Keep the 6-month forward metric independent from the short-horizon learner.
+    state["audit_summary"].update(summarize_six_month_performance(history))
     save_ai_state(state)
     return state

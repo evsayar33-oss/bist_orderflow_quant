@@ -1,0 +1,34 @@
+{
+  "compile": {
+    "app.py": "PASS",
+    "learner_engine.py": "PASS",
+    "main.py": "PASS",
+    "longterm_auditor.py": "PASS",
+    "state_manager.py": "PASS",
+    "backtest_optimizer.py": "PASS"
+  },
+  "six_month_test": {
+    "ret_t126": 45.324,
+    "summary": {
+      "win_rate_6m": 100.0,
+      "six_month_outcomes": 1,
+      "six_month_pending": 0,
+      "six_month_status": "ACTIVE",
+      "six_month_horizon_trading_days": 126
+    },
+    "PASS": true
+  },
+  "schema_migration_test": {
+    "PASS": true,
+    "columns_added": [
+      "ret_t126",
+      "mfe_t10",
+      "mae_t10",
+      "outcome",
+      "market_regime",
+      "regime_confidence",
+      "model_version",
+      "data_quality"
+    ]
+  }
+}
