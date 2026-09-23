@@ -1,8 +1,8 @@
 {
   "version": "5.0.0",
   "strategy": "ADAPTIVE_BIST_ORDERFLOW_META_ENGINE_V1",
-  "market_regime": "RECOVERY",
-  "regime_confidence": 40.0,
+  "market_regime": "NEUTRAL",
+  "regime_confidence": 35.0,
   "weights": {
     "pre_move": 0.4,
     "flow": 0.25,
@@ -33,7 +33,7 @@
     "shadow_model_version": "shadow-1",
     "active_oos_score": -0.154301,
     "shadow_oos_score": -0.154301,
-    "last_validation_date": "2026-09-22",
+    "last_validation_date": "2026-09-23",
     "last_promotion_date": null,
     "rollback_count": 0,
     "previous_weights": {},
@@ -50,7 +50,7 @@
     "min_signal_score": 72.0
   },
   "audit_summary": {
-    "last_audit_date": "2026-09-22",
+    "last_audit_date": "2026-09-23",
     "total_signals_audited": 3861,
     "win_rate_t3": 29.8,
     "win_rate_6m": 0.0,
@@ -70,71 +70,73 @@
     "missing_rate": 0.0
   },
   "regime_stats": {
-    "breadth_up": 0.6258,
-    "breadth_down": 0.3452,
-    "median_daily": 0.847,
-    "median_monthly": -16.406,
-    "dispersion": 3.76,
-    "high_rvol_share": 0.0935
+    "breadth_up": 0.4432,
+    "breadth_down": 0.5033,
+    "median_daily": -0.084,
+    "median_monthly": -17.91,
+    "dispersion": 3.785,
+    "high_rvol_share": 0.098
   },
   "effective_weights": {
-    "pre_move": 0.413,
+    "pre_move": 0.4,
     "flow": 0.25,
-    "resilience": 0.137,
+    "resilience": 0.15,
     "regime_fit": 0.1,
     "quality": 0.1
   },
   "autonomy_guard": {
     "version": "1.0.0",
-    "mode": "NORMAL",
-    "exposure_multiplier": 1.0,
-    "signal_threshold_add": 0.0,
+    "mode": "WATCH",
+    "exposure_multiplier": 0.6,
+    "signal_threshold_add": 5.0,
     "block_new_entries": false,
-    "drift_score": 0.2396,
+    "drift_score": 0.2991,
     "performance_drift": 0.0,
     "ops_score": 99.93,
     "regime_stress": 0.75,
     "risk_score": 0.75,
-    "watch_streak": 1,
+    "watch_streak": 2,
     "safe_streak": 0,
     "recovery_streak": 0,
     "healthy_streak": 3,
-    "last_transition": null,
-    "last_evaluation": "2026-09-22T12:46:57.107030+00:00",
+    "last_transition": "2026-09-23T12:56:15.373333+00:00",
+    "last_evaluation": "2026-09-23T12:56:15.373333+00:00",
     "reason": "WATCH_STRESS+REGIME_TRANSITION_STRESS",
     "recent_regimes": [
       "NEUTRAL",
       "BROAD_SELL_OFF",
       "BROAD_SELL_OFF",
-      "RECOVERY"
+      "RECOVERY",
+      "RECOVERY",
+      "NEUTRAL"
     ],
     "feature_baseline": {
       "pre_move_score": {
-        "n": 898,
-        "mean": 50.110401,
-        "std": 14.829434,
-        "median": 51.38,
-        "q25": 41.06,
-        "q75": 61.835,
-        "mad": 10.485
+        "n": 1347,
+        "mean": 50.110516,
+        "std": 14.767399,
+        "median": 51.301,
+        "q25": 41.042,
+        "q75": 61.73825,
+        "mad": 10.43575
       },
       "flow_score": {
-        "n": 898,
-        "mean": 50.112662,
-        "std": 17.456059,
-        "median": 52.405,
-        "q25": 38.945,
-        "q75": 62.615,
-        "mad": 11.79
+        "n": 1347,
+        "mean": 50.112497,
+        "std": 17.483138,
+        "median": 52.15475,
+        "q25": 38.84775,
+        "q75": 62.64925,
+        "mad": 11.8155
       },
       "resilience_score": {
-        "n": 898,
-        "mean": 50.110022,
-        "std": 19.28946,
-        "median": 49.5,
-        "q25": 36.235,
-        "q75": 64.425,
-        "mad": 14.095
+        "n": 1347,
+        "mean": 50.110044,
+        "std": 19.215889,
+        "median": 49.605,
+        "q25": 36.20325,
+        "q75": 64.33875,
+        "mad": 14.04525
       },
       "risk_score": {
         "n": 898,
@@ -146,55 +148,55 @@
         "mad": 6.575
       },
       "quality_score": {
-        "n": 898,
-        "mean": 81.10245,
-        "std": 3.99864,
-        "median": 85.0,
+        "n": 1347,
+        "mean": 81.096882,
+        "std": 3.998708,
+        "median": 84.6,
         "q25": 77.0,
         "q75": 85.0,
         "mad": 0.0
       },
       "overnight_risk": {
-        "n": 898,
-        "mean": 38.178074,
-        "std": 12.418907,
-        "median": 37.54,
-        "q25": 28.98,
-        "q75": 45.705,
-        "mad": 8.36
+        "n": 1347,
+        "mean": 38.499527,
+        "std": 12.438095,
+        "median": 37.823,
+        "q25": 29.251,
+        "q75": 46.20475,
+        "mad": 8.452
       },
       "rvol": {
-        "n": 898,
-        "mean": 1.062711,
-        "std": 1.101089,
-        "median": 0.913226,
-        "q25": 0.679762,
-        "q75": 1.231748,
-        "mad": 0.256904
+        "n": 1347,
+        "mean": 1.053679,
+        "std": 1.118173,
+        "median": 0.895083,
+        "q25": 0.665731,
+        "q75": 1.209688,
+        "mad": 0.252992
       },
       "perf_w": {
-        "n": 898,
-        "mean": -15.209427,
-        "std": 11.423882,
-        "median": -14.253555,
-        "q25": -20.350041,
-        "q75": -8.826481,
-        "mad": 5.792124
+        "n": 1347,
+        "mean": -15.088705,
+        "std": 11.527101,
+        "median": -14.103657,
+        "q25": -20.32973,
+        "q75": -8.569319,
+        "mad": 5.923179
       },
       "perf_1m": {
-        "n": 898,
-        "mean": -17.305793,
-        "std": 15.925361,
-        "median": -16.421777,
-        "q25": -26.323182,
-        "q75": -7.258214,
-        "mad": 9.42777
+        "n": 1347,
+        "mean": -17.411976,
+        "std": 16.031705,
+        "median": -16.496174,
+        "q25": -26.545717,
+        "q75": -7.268747,
+        "mad": 9.536988
       }
     },
     "stress_test": {
       "passed": true,
       "version": "1.0.0",
-      "timestamp": "2026-09-22T12:46:57.100991+00:00",
+      "timestamp": "2026-09-23T12:56:15.368027+00:00",
       "cases": 7,
       "passed_cases": 7
     },
@@ -205,7 +207,7 @@
   },
   "autonomy": {
     "version": "1.0.0",
-    "last_mode": "NORMAL",
+    "last_mode": "WATCH",
     "last_reason": "WATCH_STRESS+REGIME_TRANSITION_STRESS"
   },
   "win_rate_optimizer": {
@@ -215,7 +217,7 @@
     "return_col": "ret_t3",
     "outcome_col": null,
     "baseline_threshold": 72.0,
-    "last_run": "2026-09-22T12:46:37.474470Z",
+    "last_run": "2026-09-23T12:55:48.648029Z",
     "status": "WARMUP",
     "active_threshold": 72.0,
     "active_oos": {
