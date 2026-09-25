@@ -31,15 +31,15 @@
   "validation": {
     "active_model_version": "champion-1",
     "shadow_model_version": "shadow-1",
-    "active_oos_score": -0.005204,
-    "shadow_oos_score": -0.004993,
+    "active_oos_score": 0.004825,
+    "shadow_oos_score": 0.008382,
     "last_validation_date": "2026-09-25",
     "last_promotion_date": null,
     "rollback_count": 0,
     "previous_weights": {},
     "score_at_promotion": 0.0,
-    "holdout_samples": 1177,
-    "train_samples": 3555
+    "holdout_samples": 1165,
+    "train_samples": 3975
   },
   "risk_guards": {
     "min_data_quality": 70.0,
@@ -51,14 +51,14 @@
   },
   "audit_summary": {
     "last_audit_date": "2026-09-25",
-    "total_signals_audited": 4732,
-    "win_rate_t3": 29.1,
+    "total_signals_audited": 5140,
+    "win_rate_t3": 28.7,
     "win_rate_6m": 0.0,
     "six_month_outcomes": 0,
     "six_month_pending": 0,
     "six_month_status": "WARMUP",
     "six_month_horizon_trading_days": 126,
-    "status": "SHADOW_PROPOSED (3555 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED",
+    "status": "SHADOW_PROPOSED (3975 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED",
     "winrate_optimizer_status": "WARMUP | threshold=72.0 | OOS WR=42.86% | LCB=22.60% | N=7"
   },
   "data_quality": {
