@@ -1,42 +1,42 @@
-name: Adaptive BIST Orderflow Meta-Engine - Daily Scan
+name: BIST Meta-Engine V2 - Daily EOD Run
 
 on:
   schedule:
-    # Türkiye 10:35 (UTC+3 => 07:35 UTC), weekdays.
-    - cron: '35 7 * * 1-5'
+    # 18:25 Türkiye (UTC+3) = 15:25 UTC, hafta içi. Kapanış seansı 18:10'da biter.
+    # GitHub zamanlamayı dakika hassasiyetinde garanti etmez; gecikme sorun değildir.
+    - cron: '25 15 * * 1-5'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: adaptive-bist-daily-scan
+  group: bist-meta-engine-state
   cancel-in-progress: false
 
 jobs:
-  scan:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: pip
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run Meta Engine
+          pip install pandas numpy scipy requests yfinance
+      - name: Run engine (after close)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
-      - name: Commit State and Ledgers
+      - name: Commit data
         run: |
-          git config --local user.email "quantbot@github.com"
+          git config --local user.email "quantbot@users.noreply.github.com"
           git config --local user.name "QuantBot AI"
-          git add longterm_ai_state.json model_weights.json signals_log.csv signals_lifecycle.csv gecmis_veri.csv
-          git diff --cached --quiet || (git commit -m "🧠 Adaptive BIST Meta-Engine daily scan" && git push)
+          git add data/
+          git diff --cached --quiet && exit 0
+          git commit -m "🧠 Meta-Engine V2 EOD run"
+          for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
