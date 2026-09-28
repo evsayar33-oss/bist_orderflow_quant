@@ -1,0 +1,560 @@
+{
+  "generated_at": "2026-09-28T20:35:23.072780Z",
+  "engine_version": "3.0.0",
+  "objective": {
+    "horizon_months": 12,
+    "primary": "beat CPI (real return > 0)",
+    "secondary": "excess vs XU100"
+  },
+  "period": "2017-01-02..2026-09-28",
+  "universe_downloaded": 103,
+  "rebalance_months": 165,
+  "cpi_source": {
+    "source": null,
+    "tried": {
+      "manual": "unavailable",
+      "evds": "unavailable",
+      "fred": "error: HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=30)",
+      "cache": "unavailable"
+    },
+    "status": "UNAVAILABLE"
+  },
+  "fundamentals_coverage": 0.813,
+  "data_source": "Yahoo Finance adjusted OHLCV + Is Yatirim statements + CPI (EVDS/FRED)",
+  "synthetic_data_used": false,
+  "cost_round_trip_pct": 0.5,
+  "rules": {
+    "target_positions": 12,
+    "buy_pct": 85.0,
+    "hold_pct": 60.0,
+    "min_expected_real_pct": 3.0,
+    "catastrophe_peak_pct": 35.0,
+    "catastrophe_entry_pct": 30.0
+  },
+  "portfolio": {
+    "start": "2017-01-02",
+    "end": "2026-09-28",
+    "days": 2475,
+    "total_return_pct": 1242.82,
+    "cagr_pct": 30.58,
+    "max_drawdown_pct": -27.43,
+    "ann_vol_pct": 17.63,
+    "avg_exposure_pct": 63.5,
+    "xu100_total_pct": 1519.56,
+    "xu100_cagr_pct": 33.11,
+    "excess_vs_xu100_cagr_pp": -2.53
+  },
+  "closed_lots": {
+    "closed_lots": 57,
+    "avg_months_held": 11.6,
+    "hit_nominal_pct": 68.4,
+    "avg_nominal_pct": 76.82,
+    "exit_mix": {
+      "CATASTROPHE_STOP": 32,
+      "RANK_EXIT": 16,
+      "FUND_BREAK": 9
+    },
+    "hit_beat_xu100_pct": 43.9,
+    "avg_xu_excess_pct": 17.2
+  },
+  "open_positions_end": {
+    "TRGYO": 198.08,
+    "NTHOL": 88.34,
+    "GLYHO": 191.26,
+    "AYGAZ": 87.65,
+    "AGHOL": 6.81,
+    "INDES": 60.42,
+    "DOHOL": 2.46,
+    "DOAS": -11.84,
+    "ISFIN": -10.39
+  },
+  "oos_composite_ic_12m": {
+    "mean": 0.1267,
+    "t_nw": 3.79,
+    "n_months": 106
+  },
+  "per_year": {
+    "2017": {
+      "nominal_pct": 5.22,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 48.33
+    },
+    "2018": {
+      "nominal_pct": -3.73,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": -20.86
+    },
+    "2019": {
+      "nominal_pct": 19.4,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 25.37
+    },
+    "2020": {
+      "nominal_pct": 23.46,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 27.38
+    },
+    "2021": {
+      "nominal_pct": 30.69,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 24.23
+    },
+    "2022": {
+      "nominal_pct": 126.97,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 185.94
+    },
+    "2023": {
+      "nominal_pct": 35.16,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 31.96
+    },
+    "2024": {
+      "nominal_pct": 51.25,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 28.94
+    },
+    "2025": {
+      "nominal_pct": 26.4,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 13.05
+    },
+    "2026": {
+      "nominal_pct": 10.74,
+      "cpi_pct": null,
+      "real_pct": null,
+      "xu100_pct": 9.52
+    }
+  },
+  "folds": [
+    {
+      "test_start": "2017-01-02",
+      "train_months": 37,
+      "weights": {
+        "mom_12_1": 0.08677,
+        "high_52w": 0.07372,
+        "trend_consistency": 0.03591,
+        "low_vol": 0.09304,
+        "low_beta": 0.07348,
+        "dd_resilience": 0.07084,
+        "liquidity": -0.10952,
+        "roe": 0.07093,
+        "earnings_yield": 0.08424,
+        "book_yield": 0.06766,
+        "sales_yield": 0.08611,
+        "op_margin": 0.10547,
+        "low_leverage": 0.01793,
+        "div_yield": 0.02187,
+        "real_growth": 0.00252
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.05759,
+        "high_52w": 0.0872,
+        "trend_consistency": 0.02428,
+        "low_vol": 0.08965,
+        "low_beta": 0.14579,
+        "dd_resilience": 0.13639,
+        "liquidity": -0.22652,
+        "roe": 0.03041,
+        "earnings_yield": 0.07386,
+        "book_yield": 0.06366,
+        "sales_yield": 0.12743,
+        "op_margin": 0.12442,
+        "low_leverage": -0.00864,
+        "div_yield": 0.0,
+        "real_growth": -0.04859
+      }
+    },
+    {
+      "test_start": "2018-01-01",
+      "train_months": 49,
+      "weights": {
+        "mom_12_1": 0.08221,
+        "high_52w": 0.07096,
+        "trend_consistency": 0.04176,
+        "low_vol": 0.07057,
+        "low_beta": 0.07535,
+        "dd_resilience": 0.06449,
+        "liquidity": -0.10957,
+        "roe": 0.02785,
+        "earnings_yield": 0.0715,
+        "book_yield": 0.10226,
+        "sales_yield": 0.1211,
+        "op_margin": 0.09261,
+        "low_leverage": 0.01625,
+        "div_yield": 0.02049,
+        "real_growth": -0.03302
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.05137,
+        "high_52w": 0.07871,
+        "trend_consistency": 0.03546,
+        "low_vol": 0.05678,
+        "low_beta": 0.12882,
+        "dd_resilience": 0.11432,
+        "liquidity": -0.19001,
+        "roe": -0.0322,
+        "earnings_yield": 0.05444,
+        "book_yield": 0.1167,
+        "sales_yield": 0.16189,
+        "op_margin": 0.08544,
+        "low_leverage": -0.00584,
+        "div_yield": 0.0,
+        "real_growth": -0.09319
+      }
+    },
+    {
+      "test_start": "2019-01-01",
+      "train_months": 61,
+      "weights": {
+        "mom_12_1": 0.10472,
+        "high_52w": 0.07929,
+        "trend_consistency": 0.04833,
+        "low_vol": 0.03938,
+        "low_beta": 0.0916,
+        "dd_resilience": 0.04769,
+        "liquidity": -0.1248,
+        "roe": 0.00471,
+        "earnings_yield": 0.05522,
+        "book_yield": 0.11594,
+        "sales_yield": 0.14154,
+        "op_margin": 0.08212,
+        "low_leverage": 0.01342,
+        "div_yield": 0.02052,
+        "real_growth": -0.03071
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.06947,
+        "high_52w": 0.07471,
+        "trend_consistency": 0.04255,
+        "low_vol": 0.01152,
+        "low_beta": 0.12305,
+        "dd_resilience": 0.08192,
+        "liquidity": -0.17209,
+        "roe": -0.05313,
+        "earnings_yield": 0.02853,
+        "book_yield": 0.114,
+        "sales_yield": 0.15674,
+        "op_margin": 0.05538,
+        "low_leverage": -0.01025,
+        "div_yield": 0.0,
+        "real_growth": -0.07337
+      }
+    },
+    {
+      "test_start": "2020-01-02",
+      "train_months": 72,
+      "weights": {
+        "mom_12_1": 0.08955,
+        "high_52w": 0.07069,
+        "trend_consistency": 0.04489,
+        "low_vol": 0.03885,
+        "low_beta": 0.08527,
+        "dd_resilience": 0.04643,
+        "liquidity": -0.12256,
+        "roe": 0.01814,
+        "earnings_yield": 0.07006,
+        "book_yield": 0.11632,
+        "sales_yield": 0.15064,
+        "op_margin": 0.08107,
+        "low_leverage": 0.01883,
+        "div_yield": 0.01932,
+        "real_growth": -0.02738
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.05033,
+        "high_52w": 0.0642,
+        "trend_consistency": 0.03702,
+        "low_vol": 0.01978,
+        "low_beta": 0.10832,
+        "dd_resilience": 0.07812,
+        "liquidity": -0.15343,
+        "roe": -0.02769,
+        "earnings_yield": 0.04966,
+        "book_yield": 0.10969,
+        "sales_yield": 0.15472,
+        "op_margin": 0.04944,
+        "low_leverage": -0.00183,
+        "div_yield": 0.0,
+        "real_growth": -0.06014
+      }
+    },
+    {
+      "test_start": "2021-01-04",
+      "train_months": 85,
+      "weights": {
+        "mom_12_1": 0.06106,
+        "high_52w": 0.05068,
+        "trend_consistency": 0.03077,
+        "low_vol": 0.04045,
+        "low_beta": 0.09235,
+        "dd_resilience": 0.0201,
+        "liquidity": -0.20624,
+        "roe": 0.00698,
+        "earnings_yield": 0.04346,
+        "book_yield": 0.1046,
+        "sales_yield": 0.15588,
+        "op_margin": 0.08406,
+        "low_leverage": 0.01424,
+        "div_yield": 0.01921,
+        "real_growth": -0.06992
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.01049,
+        "high_52w": 0.03342,
+        "trend_consistency": 0.00901,
+        "low_vol": 0.02774,
+        "low_beta": 0.11188,
+        "dd_resilience": 0.04564,
+        "liquidity": -0.20701,
+        "roe": -0.04142,
+        "earnings_yield": 0.01539,
+        "book_yield": 0.08614,
+        "sales_yield": 0.13607,
+        "op_margin": 0.04594,
+        "low_leverage": -0.00486,
+        "div_yield": 0.0,
+        "real_growth": -0.09083
+      }
+    },
+    {
+      "test_start": "2022-01-03",
+      "train_months": 97,
+      "weights": {
+        "mom_12_1": 0.07421,
+        "high_52w": 0.06507,
+        "trend_consistency": 0.04385,
+        "low_vol": 0.01381,
+        "low_beta": 0.08428,
+        "dd_resilience": 0.00348,
+        "liquidity": -0.2465,
+        "roe": 0.01992,
+        "earnings_yield": 0.03075,
+        "book_yield": 0.08807,
+        "sales_yield": 0.15011,
+        "op_margin": 0.05512,
+        "low_leverage": 0.01207,
+        "div_yield": 0.01712,
+        "real_growth": -0.09565
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.0315,
+        "high_52w": 0.05105,
+        "trend_consistency": 0.02875,
+        "low_vol": 0.00934,
+        "low_beta": 0.1086,
+        "dd_resilience": 0.03757,
+        "liquidity": -0.23472,
+        "roe": -0.02381,
+        "earnings_yield": 0.00983,
+        "book_yield": 0.0686,
+        "sales_yield": 0.12769,
+        "op_margin": 0.02236,
+        "low_leverage": -0.00438,
+        "div_yield": 0.0,
+        "real_growth": -0.10692
+      }
+    },
+    {
+      "test_start": "2023-01-02",
+      "train_months": 109,
+      "weights": {
+        "mom_12_1": 0.06279,
+        "high_52w": 0.08167,
+        "trend_consistency": 0.04613,
+        "low_vol": 0.01997,
+        "low_beta": 0.07091,
+        "dd_resilience": 0.01171,
+        "liquidity": -0.22473,
+        "roe": -0.00389,
+        "earnings_yield": 0.03249,
+        "book_yield": 0.1197,
+        "sales_yield": 0.15048,
+        "op_margin": 0.03468,
+        "low_leverage": -0.00382,
+        "div_yield": 0.0167,
+        "real_growth": -0.12034
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.01846,
+        "high_52w": 0.05821,
+        "trend_consistency": 0.02689,
+        "low_vol": 0.0149,
+        "low_beta": 0.0858,
+        "dd_resilience": 0.04013,
+        "liquidity": -0.19461,
+        "roe": -0.04018,
+        "earnings_yield": 0.01371,
+        "book_yield": 0.08909,
+        "sales_yield": 0.12344,
+        "op_margin": 0.00551,
+        "low_leverage": -0.01669,
+        "div_yield": 0.0,
+        "real_growth": -0.11693
+      }
+    },
+    {
+      "test_start": "2024-01-02",
+      "train_months": 121,
+      "weights": {
+        "mom_12_1": 0.05059,
+        "high_52w": 0.08156,
+        "trend_consistency": 0.03258,
+        "low_vol": 0.03021,
+        "low_beta": 0.06783,
+        "dd_resilience": 0.02184,
+        "liquidity": -0.22235,
+        "roe": -0.01389,
+        "earnings_yield": 0.02156,
+        "book_yield": 0.12181,
+        "sales_yield": 0.15857,
+        "op_margin": 0.02496,
+        "low_leverage": -0.02023,
+        "div_yield": 0.01624,
+        "real_growth": -0.11578
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.00378,
+        "high_52w": 0.05152,
+        "trend_consistency": 0.0124,
+        "low_vol": 0.02411,
+        "low_beta": 0.07812,
+        "dd_resilience": 0.0406,
+        "liquidity": -0.17738,
+        "roe": -0.04623,
+        "earnings_yield": 0.00613,
+        "book_yield": 0.08479,
+        "sales_yield": 0.12169,
+        "op_margin": -0.00055,
+        "low_leverage": -0.0282,
+        "div_yield": 0.0,
+        "real_growth": -0.10668
+      }
+    },
+    {
+      "test_start": "2025-01-02",
+      "train_months": 133,
+      "weights": {
+        "mom_12_1": 0.0443,
+        "high_52w": 0.08962,
+        "trend_consistency": 0.02618,
+        "low_vol": 0.04635,
+        "low_beta": 0.05837,
+        "dd_resilience": 0.04229,
+        "liquidity": -0.20574,
+        "roe": -0.00657,
+        "earnings_yield": 0.03458,
+        "book_yield": 0.12955,
+        "sales_yield": 0.15389,
+        "op_margin": 0.00549,
+        "low_leverage": -0.02718,
+        "div_yield": 0.0145,
+        "real_growth": -0.11539
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.00173,
+        "high_52w": 0.06477,
+        "trend_consistency": 0.01314,
+        "low_vol": 0.045,
+        "low_beta": 0.07505,
+        "dd_resilience": 0.06131,
+        "liquidity": -0.16725,
+        "roe": -0.03535,
+        "earnings_yield": 0.02463,
+        "book_yield": 0.09612,
+        "sales_yield": 0.12667,
+        "op_margin": -0.01407,
+        "low_leverage": -0.03071,
+        "div_yield": 0.0,
+        "real_growth": -0.10638
+      }
+    },
+    {
+      "test_start": "2026-01-02",
+      "train_months": 145,
+      "weights": {
+        "mom_12_1": 0.03949,
+        "high_52w": 0.10157,
+        "trend_consistency": 0.03458,
+        "low_vol": 0.05383,
+        "low_beta": 0.04773,
+        "dd_resilience": 0.05525,
+        "liquidity": -0.18118,
+        "roe": -0.01994,
+        "earnings_yield": 0.03271,
+        "book_yield": 0.13825,
+        "sales_yield": 0.13517,
+        "op_margin": 0.03413,
+        "low_leverage": -0.00608,
+        "div_yield": 0.01274,
+        "real_growth": -0.10737
+      },
+      "factor_ic_train": {
+        "mom_12_1": 0.00546,
+        "high_52w": 0.08317,
+        "trend_consistency": 0.02483,
+        "low_vol": 0.05649,
+        "low_beta": 0.07057,
+        "dd_resilience": 0.0786,
+        "liquidity": -0.15381,
+        "roe": -0.04234,
+        "earnings_yield": 0.03049,
+        "book_yield": 0.11178,
+        "sales_yield": 0.11903,
+        "op_margin": 0.01038,
+        "low_leverage": -0.01262,
+        "div_yield": 0.0,
+        "real_growth": -0.10364
+      }
+    }
+  ],
+  "factor_ic_full_sample_12m": {
+    "mom_12_1": 0.01761,
+    "high_52w": 0.08887,
+    "trend_consistency": 0.03352,
+    "low_vol": 0.05529,
+    "low_beta": 0.06991,
+    "dd_resilience": 0.0872,
+    "liquidity": -0.13889,
+    "roe": -0.0341,
+    "earnings_yield": 0.03581,
+    "book_yield": 0.10874,
+    "sales_yield": 0.11919,
+    "op_margin": 0.0188,
+    "low_leverage": -0.0028,
+    "div_yield": 0.0,
+    "real_growth": -0.0926
+  },
+  "factor_t_full_sample_12m": {
+    "mom_12_1": 0.585,
+    "high_52w": 2.986,
+    "trend_consistency": 1.316,
+    "low_vol": 1.713,
+    "low_beta": 3.263,
+    "dd_resilience": 2.573,
+    "liquidity": -2.994,
+    "roe": -1.094,
+    "earnings_yield": 1.194,
+    "book_yield": 3.321,
+    "sales_yield": 5.71,
+    "op_margin": 0.51,
+    "low_leverage": -0.089,
+    "div_yield": 0.0,
+    "real_growth": -3.24
+  },
+  "limitations": [
+    "survivorship: universe = today's liquid names",
+    "dividends are in adjusted prices (reinvested), idle cash earns 0",
+    "fundamentals coverage 0.81 (Is Yatirim best effort)",
+    "autonomy guard neutral in backtest"
+  ]
+}
