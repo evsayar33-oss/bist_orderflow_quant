@@ -1,252 +1,230 @@
-"""Adaptive BIST Orderflow Meta-Engine V1 - production orchestrator."""
+"""Adaptive BIST Orderflow Meta-Engine V2 - daily end-of-day orchestrator.
+
+Run once per session AFTER the close (GitHub Actions ~18:25 TR):
+  1. EOD snapshot (TradingView, free) + optional takas
+  2. validation, stale/holiday detection, corporate-action detection
+  3. regime forecast (sticky HMM on XU100 + USDTRY, yfinance, free)
+  4. labels -> learning (champion/challenger) -> calibration
+  5. autonomy guard
+  6. ledger update with today's bar (entries/exits)
+  7. scoring + selection for TOMORROW's open, Telegram report
+`python main.py --self-test` runs the whole pipeline on synthetic data in a
+temporary folder (never touches ./data).
+"""
 from __future__ import annotations
 
-import argparse
-from datetime import datetime
 import os
+import sys
+import tempfile
 
-import numpy as np
-import pandas as pd
+if "--self-test" in sys.argv and "BOQ_DATA_DIR" not in os.environ:
+    os.environ["BOQ_DATA_DIR"] = tempfile.mkdtemp(prefix="boq_selftest_")
 
-from data_integrity import validate_market_frame
-from flow_fetcher import fetch_all_data
-from learner_engine import resolve_forward_outcomes
-from longterm_auditor import audit_and_calibrate
-from meta_engine import score_market
-from state_manager import load_ai_state, load_signal_log, load_lifecycle_signals, save_ai_state, save_lifecycle_signals
+import argparse  # noqa: E402
+from datetime import datetime  # noqa: E402
+from html import escape  # noqa: E402
 
-GECMIS_DOSYA = "gecmis_veri.csv"
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+import calendar_tr as cal  # noqa: E402
+import config as C  # noqa: E402
+import regime_model  # noqa: E402
+from autonomy_guard import evaluate_guard  # noqa: E402
+from calibration import calibrate  # noqa: E402
+from data_integrity import build_price_panel, is_stale, today_ca_ratio, validate_market_frame  # noqa: E402
+from flow_fetcher import fetch_all_data  # noqa: E402
+from labels import compute_labels  # noqa: E402
+from learner_engine import live_composite_ic, run_learning  # noqa: E402
+from meta_engine import score_snapshot  # noqa: E402
+from portfolio_ledger import add_signals, closed_returns_by_exit, performance_summary, update_ledger  # noqa: E402
+from state_manager import (SNAPSHOT_RAW_COLS, append_snapshot, load_ledger, load_research_prior,  # noqa: E402
+                           load_snapshots, load_state, save_ledger, save_snapshots, save_state)
+
+KEEP_SCORED_COLS = [f"z_{k}" for k in C.FACTORS] + [
+    "composite", "composite_pct", "exp_net_pct", "regime_label", "p_risk_off", "model_version", "eligible"]
 
 
-def load_history() -> pd.DataFrame:
-    if not os.path.exists(GECMIS_DOSYA):
+def build_dataset(snapshots: pd.DataFrame) -> pd.DataFrame:
+    """Point-in-time learning set: factor z-scores recorded on date t + labels resolved later."""
+    if snapshots is None or snapshots.empty or "z_" + C.FACTORS[0] not in snapshots.columns:
         return pd.DataFrame()
-    try:
-        df = pd.read_csv(GECMIS_DOSYA)
-        if "tarih" in df.columns:
-            df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce").dt.normalize()
-        return df
-    except Exception as exc:
-        print(f"⚠️ Geçmiş veri okuma hatası: {exc}")
+    panel = build_price_panel(snapshots)
+    lab = compute_labels(panel)
+    if lab.empty:
         return pd.DataFrame()
+    cols = ["tarih", "ticker"] + [c for c in KEEP_SCORED_COLS if c in snapshots.columns and c != "eligible"]
+    feat = snapshots[cols].dropna(subset=["z_" + C.FACTORS[0]])
+    return feat.merge(lab, on=["tarih", "ticker"], how="inner")
 
 
-def log_signals(scored: pd.DataFrame, state: dict) -> pd.DataFrame:
-    existing = load_signal_log()
-    if scored is None or scored.empty:
-        return existing
-    leaders = scored[scored["eligible"]].copy().sort_values("meta_score", ascending=False).head(int(state["risk_guards"]["max_candidates"]))
-    if leaders.empty:
-        return existing
-    rows = []
-    today = pd.Timestamp.now(tz="Europe/Istanbul").normalize().tz_localize(None)
-    for _, r in leaders.iterrows():
-        rows.append({
-            "tarih": today,
-            "ticker": r["ticker"],
-            "entry_price": float(r["close"]),
-            "meta_score": float(r["meta_score"]),
-            "pre_move_score": float(r["pre_move_score"]),
-            "flow_score": float(r["flow_score"]),
-            "resilience_score": float(r["resilience_score"]),
-            "regime_fit_score": float(r["regime_fit_score"]),
-            "quality_score": float(r["quality_score"]),
-            "risk_score": float(r["risk_score"]),
-            "data_quality": float(r["quality_score"]),
-            "market_regime": r["regime"],
-            "regime_confidence": float(r["regime_confidence"]),
-            "model_version": r.get("model_version", "champion-1"),
-            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan,
-            "mfe_t10": np.nan, "mae_t10": np.nan, "outcome": "PENDING",
-        })
-    new = pd.DataFrame(rows)
-    if not existing.empty:
-        existing["tarih"] = pd.to_datetime(existing["tarih"], errors="coerce").dt.normalize()
-        existing = existing[~existing["tarih"].eq(today)]
-        combined = pd.concat([existing, new], ignore_index=True)
-    else:
-        combined = new
-    return combined.drop_duplicates(subset=["tarih", "ticker"], keep="last")
+def fill_atr_from_history(valid: pd.DataFrame, hist: pd.DataFrame, n: int = 14) -> pd.DataFrame:
+    """If the feed did not deliver ATR, compute a simple 14-session ATR from our own stored
+    EOD bars (real data, never invented). Names with too little history stay NaN."""
+    atr = pd.to_numeric(valid["atr"], errors="coerce") if "atr" in valid else pd.Series(np.nan, index=valid.index)
+    if atr.notna().mean() >= 0.5 or hist is None or hist.empty:
+        return valid
+    h = pd.concat([hist[["tarih", "ticker", "high", "low", "close"]], valid[["tarih", "ticker", "high", "low", "close"]]])
+    h = h.sort_values(["ticker", "tarih"])
+    prev = h.groupby("ticker")["close"].shift()
+    h["tr"] = np.maximum(h["high"] - h["low"], np.maximum((h["high"] - prev).abs(), (h["low"] - prev).abs()))
+    last = h.groupby("ticker").tail(n)
+    agg = last.groupby("ticker")["tr"].agg(["mean", "count"])
+    est = agg.loc[agg["count"] >= n, "mean"]
+    out = valid.copy()
+    out["atr"] = atr.fillna(out["ticker"].map(est))
+    return out
 
-
-def log_history(scored: pd.DataFrame) -> None:
-    if scored is None or scored.empty:
-        return
-    old = load_history()
-    today = pd.Timestamp.now(tz="Europe/Istanbul").normalize().tz_localize(None)
-    new = scored.copy()
-    new["tarih"] = today
-    if not old.empty:
-        old = old[~pd.to_datetime(old["tarih"], errors="coerce").dt.normalize().eq(today)]
-        all_df = pd.concat([old, new], ignore_index=True)
-    else:
-        all_df = new
-    all_df.to_csv(GECMIS_DOSYA, index=False)
-
-
-
-def upsert_lifecycle(scored: pd.DataFrame, state: dict) -> None:
-    if scored is None or scored.empty:
-        return
-    current = load_lifecycle_signals()
-    today = pd.Timestamp.now(tz="Europe/Istanbul").normalize().tz_localize(None)
-    leaders = scored[scored["eligible"]].head(int(state["risk_guards"]["max_candidates"]))
-    if leaders.empty:
-        return
-    rows = []
-    for _, r in leaders.iterrows():
-        rows.append({
-            "tarih": today, "ticker": r["ticker"], "entry_price": float(r["close"]),
-            "initial_stop_price": round(float(r["close"]) * 0.92, 4),
-            "current_stop_price": round(float(r["close"]) * 0.92, 4),
-            "target_price": round(float(r["close"]) * 1.20, 4), "last_seen_price": float(r["close"]),
-            "meta_score": float(r["meta_score"]), "pre_move_score": float(r["pre_move_score"]),
-            "flow_score": float(r["flow_score"]), "resilience_score": float(r["resilience_score"]),
-            "regime_fit_score": float(r["regime_fit_score"]), "quality_score": float(r["quality_score"]),
-            "risk_score": float(r["risk_score"]), "data_quality": float(r["quality_score"]),
-            "market_regime": r["regime"], "regime_confidence": float(r["regime_confidence"]),
-            "model_version": r.get("model_version", "champion-1"), "peak_price": float(r["close"]),
-            "trough_price": float(r["close"]), "max_adverse_excursion": 0.0, "max_favorable_excursion": 0.0,
-            "ret_t1": np.nan, "ret_t3": np.nan, "ret_t5": np.nan, "ret_t10": np.nan, "outcome": "OPEN"
-        })
-    new = pd.DataFrame(rows)
-    if current.empty:
-        combined = new
-    else:
-        current = current[~((current["tarih"] == today) & current["ticker"].isin(new["ticker"]))]
-        combined = pd.concat([current, new], ignore_index=True)
-    save_lifecycle_signals(combined.drop_duplicates(subset=["tarih", "ticker"], keep="last"))
 
 def send_telegram(message: str) -> bool:
     import requests
-    token = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("CHAT_ID")
+    token, chat_id = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("CHAT_ID")
     if not token or not chat_id:
+        print(message)
         return False
     try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=10)
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                          json={"chat_id": chat_id, "text": message[:4000], "parse_mode": "HTML"}, timeout=15)
         return r.status_code == 200
     except Exception:
         return False
 
 
-def format_report(scored: pd.DataFrame, state: dict, alerts) -> str:
-    regime = state.get("market_regime", "NEUTRAL")
-    confidence = state.get("regime_confidence", 0)
-    stats = state.get("regime_stats", {})
-    msg = [
-        f"🧠 <b>ADAPTIVE BIST ORDERFLOW META-ENGINE V1</b> | {datetime.now().strftime('%d.%m.%Y')}",
-        f"🧭 Rejim: <b>{regime}</b> | Güven: <b>%{confidence:.1f}</b>",
-        f"🛡️ Otonomi: <b>{state.get('autonomy_guard', {}).get('mode', 'NORMAL')}</b> | Maruziyet x{state.get('autonomy_guard', {}).get('exposure_multiplier', 1.0):.2f}",
-        f"📊 Breadth Up: %{stats.get('breadth_up', 0)*100:.1f} | Down: %{stats.get('breadth_down', 0)*100:.1f}",
-        f"🛡️ Aktif Model: <b>{state.get('validation', {}).get('active_model_version', 'champion-1')}</b>",
-        f"📚 Audit Win T+3: <b>%{state.get('audit_summary', {}).get('win_rate_t3', 0):.1f}</b>",
+def format_report(today, state, scored, info, events, perf) -> str:
+    reg, g, model, cal_ = state.get("regime", {}), state.get("autonomy_guard", {}), state.get("model", {}), state.get("calibration", {})
+    probs = " / ".join(f"{k} %{v * 100:.0f}" for k, v in (reg.get("probs") or {}).items())
+    L = [
+        f"🧠 <b>BIST META-ENGINE V2</b> | {today:%d.%m.%Y} (kapanış sonrası)",
+        f"🧭 Rejim (HMM): <b>{reg.get('label', '?')}</b> | {probs}",
+        f"📈 Beklenen piyasa 5G: <b>%{float(reg.get('exp_mkt_5d_pct', 0)):+.2f}</b>" + (" ⚠️ degraded" if reg.get("degraded") else ""),
+        f"🛡️ Guard: <b>{g.get('mode', '?')}</b> ({escape(str(g.get('reason', '')))}) | maruziyet x{info.get('exposure', 0):.2f}",
+        f"🧪 Model: {escape(str(model.get('champion_version')))} | {escape(str(model.get('status', '')))}",
+        f"🎯 Kalibrasyon: {cal_.get('status')} | eşik p{info.get('pct_cutoff', 0):.0f}",
     ]
-    if alerts:
-        msg.append("🚨 <b>RİSK UYARILARI</b>")
-        for a in alerts[:8]:
-            msg.append(f"• {a.get('ticker')} — {a.get('type')}")
-    if scored is not None and not scored.empty:
-        top = scored[scored["eligible"]].head(8)
-        if not top.empty:
-            msg.append("💎 <b>QUALIFIED PRE-MOVE CANDIDATES</b>")
-            for _, r in top.iterrows():
-                msg.append(
-                    f"• <b>{r['ticker']}</b> | Meta {r['meta_score']:.1f} | PreMove {r['pre_move_score']:.1f} | Flow {r['flow_score']:.1f} | Risk {r['risk_score']:.1f}"
-                )
-        else:
-            msg.append("ℹ️ Bugün güvenlik eşiklerini geçen aday yok.")
-    return "\n".join(msg)
+    li = state.get("model", {}).get("composite_ic_live", {})
+    if li.get("n_dates"):
+        L.append(f"📊 Canlı OOS IC: {li.get('ic_mean', 0):+.3f} (t={li.get('t_nw', 0):.2f}, n={li['n_dates']})")
+    if perf.get("closed"):
+        L.append(f"💼 Kapanan {perf['closed']} işlem | isabet %{perf.get('hit_rate_pct', 0):.1f} | ort. net %{perf.get('avg_net_pct', 0):+.2f} | PF {perf.get('profit_factor')}")
+    if events:
+        L.append("🔔 <b>Pozisyon olayları</b>")
+        for e in events[:12]:
+            extra = f" net %{e['net']:+.2f}" if "net" in e else (f" @{e['price']}" if "price" in e else "")
+            L.append(f"• {escape(str(e['ticker']))} — {e['type']}{extra}")
+    top = scored[scored["eligible"]]
+    if not top.empty:
+        L.append("💎 <b>YARIN AÇILIŞTA ALIM ADAYLARI</b>")
+        for _, r in top.iterrows():
+            L.append(f"• <b>{escape(str(r['ticker']))}</b> | skor p{r['composite_pct']:.0f} | beklenen net %{r['exp_net_pct']:+.2f} | "
+                     f"stop -%{r['stop_dist_pct']:.1f} / hedef +%{r['stop_dist_pct'] * C.TARGET_RR:.1f} | "
+                     f"ağırlık %{r['size_pct']:.1f} | süre {C.MAX_HOLD}G")
+    else:
+        L.append("ℹ️ Bugün tüm kapıları (beklenen net getiri, likidite, guard) geçen aday yok.")
+    return "\n".join(L)
 
 
-def self_test():
-    n = 120
-    rng = np.random.default_rng(42)
-    close = 100 * np.cumprod(1 + rng.normal(0, 0.01, n))
-    high = close * (1 + rng.uniform(0, 0.02, n))
-    low = close * (1 - rng.uniform(0, 0.02, n))
-    open_ = (high + low) / 2
-    d = pd.DataFrame({
-        "ticker": [f"T{i:03d}" for i in range(n)], "close": close, "open": open_, "high": high, "low": low,
-        "volume": rng.integers(100000, 500000, n), "change_%": rng.normal(0, 1.5, n), "value_traded": rng.uniform(10e6, 200e6, n),
-        "high_1m": high * 1.1, "low_1m": low * 0.9, "rvol": rng.uniform(0.6, 2.2, n), "perf_w": rng.normal(0, 4, n),
-        "perf_1m": rng.normal(0, 8, n), "perf_y": rng.normal(0, 20, n), "roe": rng.uniform(10, 35, n),
-        "pb": rng.uniform(0.6, 5, n), "pe": rng.uniform(4, 25, n), "market_cap": rng.uniform(2e9, 40e9, n), "oper_margin": rng.uniform(4, 25, n),
-        "foreign_ratio": np.nan, "foreign_ratio_confidence": 0.0,
-    })
-    valid, summary = validate_market_frame(d, min_rows=30)
-    state = load_ai_state()
-    scored = score_market(valid, state)
-    assert summary["ok"] and not scored.empty
-    assert "meta_score" in scored.columns and "risk_score" in scored.columns
-    assert not bool((scored["eligible"] & (scored["meta_score"] < state["risk_guards"]["min_signal_score"])).any())
-    print("✅ SELF-TEST PASSED")
+def run(force: bool = False, fetcher=fetch_all_data, today=None) -> dict:
+    real_run = today is None
+    today = pd.Timestamp(today) if today is not None else cal.today_tr()
+    if real_run and not force:
+        now_tr = pd.Timestamp.now(tz=C.MARKET_TZ)
+        if now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15:
+            print(f"ℹ️ Seans henüz kapanmadı ({now_tr:%H:%M} TR). Motor yalnızca 18:15 sonrası kapanış verisiyle çalışır.")
+            return {"status": "BEFORE_CLOSE"}
+    if not cal.is_session(today) and not force:
+        print(f"ℹ️ {today.date()} BIST seansı değil; çalışma atlandı.")
+        return {"status": "NOT_SESSION"}
+
+    state = load_state()
+    research = load_research_prior()
+    snapshots = load_snapshots()
+
+    raw, meta = fetcher(state)
+    if not raw.empty:
+        raw["tarih"] = today
+    valid, quality = validate_market_frame(raw)
+    state["data_quality"] = {**quality, "fetch": meta}
+    if valid.empty or not quality.get("ok"):
+        # No signals today, but do not push the guard into a multi-day SAFE cycle
+        # because of a single feed outage.
+        state["last_run"] = {"date": str(today.date()), "status": f"DATA_BLOCKED:{quality.get('reason')}",
+                             "utc": datetime.utcnow().isoformat() + "Z"}
+        save_state(state)
+        send_telegram(f"🛑 BIST Meta-Engine: veri kalitesi yetersiz ({escape(str(quality.get('reason')))}). Yeni sinyal üretilmedi.")
+        return {"status": "DATA_BLOCKED"}
+
+    hist = snapshots[snapshots["tarih"] < today] if not snapshots.empty else snapshots
+    last_date = hist["tarih"].max() if not hist.empty else None
+    last = hist[hist["tarih"] == last_date] if last_date is not None else pd.DataFrame()
+    if not force and is_stale(valid, last):
+        print("ℹ️ Snapshot bir önceki günle aynı (tatil / donmuş veri); çalışma atlandı.")
+        state["last_run"] = {"date": str(today.date()), "status": "STALE_SKIPPED"}
+        save_state(state)
+        return {"status": "STALE"}
+
+    if "sector" in valid:
+        state.setdefault("sector_map", {}).update(
+            {t: s for t, s in zip(valid["ticker"], valid["sector"]) if isinstance(s, str) and s})
+    valid = fill_atr_from_history(valid, hist)
+    ca = today_ca_ratio(valid, last, last_date, today) if last_date is not None else {}
+    prev_takas = last.set_index("ticker")["takas_conc"] if (not last.empty and "takas_conc" in last) else None
+
+    # ---------------- regime forecast
+    regime_model.update_regime(state, valid, today)
+
+    # ---------------- learning on point-in-time history (+ today's bar resolves labels)
+    today_raw = valid[[c for c in SNAPSHOT_RAW_COLS if c in valid.columns]].copy()
+    panel_src = append_snapshot(hist, today_raw) if not hist.empty else today_raw
+    dataset = build_dataset(panel_src)
+    run_learning(state, dataset, research)
+    calibrate(state, dataset, research)
+    state["model"]["composite_ic_live"] = live_composite_ic(dataset)
+
+    # ---------------- ledger with today's bar
+    ledger = load_ledger()
+    ledger, events = update_ledger(ledger, valid, today, ca)
+
+    # ---------------- guard
+    feats = valid.copy()
+    feats["atr_pct"] = (pd.to_numeric(feats["atr"], errors="coerce") if "atr" in feats else np.nan) / feats["close"] * 100.0
+    guard = evaluate_guard(state, features=feats, data_quality=quality.get("score", 0.0), rows=quality.get("rows"),
+                           live_ic=state["model"]["composite_ic_live"], trade_returns=closed_returns_by_exit(ledger, today))
+
+    # ---------------- scoring for tomorrow
+    live = ledger[ledger["status"].isin(["OPEN", "PENDING_ENTRY"])] if not ledger.empty else ledger
+    scored, info = score_snapshot(valid, state, prev_takas, guard, open_positions=len(live),
+                                  held_tickers=set(live["ticker"]) if not live.empty else set())
+    ledger = add_signals(ledger, scored, today)
+
+    keep = [c for c in SNAPSHOT_RAW_COLS if c in scored.columns] + [c for c in KEEP_SCORED_COLS if c in scored.columns]
+    snap_today = scored[keep].copy()
+    snap_today["tarih"] = today
+    save_snapshots(append_snapshot(hist, snap_today))
+    save_ledger(ledger)
+
+    perf = performance_summary(ledger)
+    state["performance"] = perf
+    state["last_run"] = {"date": str(today.date()), "status": "OK", "n_eligible": info["n_eligible"],
+                         "weights": info["weights"], "coverage": info["coverage"], "ca_events_today": ca,
+                         "missing_sessions": [str(d.date()) for d in cal.missing_sessions(
+                             list(hist["tarih"].unique()) + [today])][-10:] if not hist.empty else [],
+                         "utc": datetime.utcnow().isoformat() + "Z"}
+    save_state(state)
+    send_telegram(format_report(today, state, scored, info, events, perf))
+    print(f"✅ Tamamlandı | rejim={state['regime'].get('label')} | guard={guard['mode']} | aday={info['n_eligible']}")
+    return {"status": "OK", "state": state, "scored": scored, "info": info, "events": events}
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--self-test", action="store_true")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--force", action="store_true", help="tatil/stale kontrolünü atla (manuel test)")
+    args = ap.parse_args()
     if args.self_test:
-        self_test()
-        return
-
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🧠 Adaptive BIST Orderflow Meta-Engine V1 başlatılıyor...")
-    state = load_ai_state()
-    history = load_history()
-
-    if not history.empty:
-        signals = load_signal_log()
-        if not signals.empty:
-            resolved = resolve_forward_outcomes(signals, history)
-            resolved.to_csv("signals_log.csv", index=False)
-
-    state, alerts = audit_and_calibrate(history=history)
-
-    current = fetch_all_data()
-    valid, quality = validate_market_frame(current, min_rows=30)
-    if valid.empty or not quality.get("ok", False):
-        state["data_quality"] = quality
-        state["audit_summary"]["status"] = f"DATA_BLOCKED ({quality.get('reason', 'quality')})"
-        save_ai_state(state)
-        print("🛑 Veri kalitesi güvenli eşiği geçemedi; sinyal üretimi durduruldu.")
-        return
-
-    state["data_quality"] = quality
-    scored = score_market(valid, state)
-    signal_log_for_guard = load_signal_log()
-    from autonomy_guard import evaluate_autonomy_guard
-    guard_result = evaluate_autonomy_guard(
-        state,
-        features=scored,
-        regime=state.get("market_regime"),
-        regime_confidence=float(state.get("regime_confidence", 0.0)) / 100.0,
-        performance_returns=(signal_log_for_guard["ret_t3"] if "ret_t3" in signal_log_for_guard.columns else None),
-        data_quality_score=float(quality.get("score", 0.0)),
-        row_count=len(valid),
-        min_rows=30,
-        project="orderflow",
-    )
-    base_threshold = float(state.get("risk_guards", {}).get("min_signal_score", 72.0))
-    wr_threshold = float(state.get("win_rate_optimizer", {}).get("active_threshold", base_threshold))
-    base_threshold = max(base_threshold, wr_threshold)
-    effective_threshold = base_threshold + float(guard_result.get("signal_threshold_add", 0.0))
-    if guard_result.get("block_new_entries"):
-        scored["eligible"] = False
-    else:
-        scored["eligible"] = scored["eligible"].astype(bool) & (
-            pd.to_numeric(scored["meta_score"], errors="coerce") >= effective_threshold
-        )
-
-    signal_log = log_signals(scored, state)
-    signal_log.to_csv("signals_log.csv", index=False)
-    upsert_lifecycle(scored, state)
-    log_history(scored)
-
-    report = format_report(scored, state, alerts)
-    send_telegram(report)
-    save_ai_state(state)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Tamamlandı | Rejim={state.get('market_regime')} | Aday={int(scored['eligible'].sum())}")
+        from selftest import run_self_test
+        ok = run_self_test()
+        sys.exit(0 if ok else 1)
+    run(force=args.force)
 
 
 if __name__ == "__main__":

@@ -1,51 +1,54 @@
-"""Walk-forward/OOS validation and robustness gates."""
+"""Trade- and portfolio-level performance metrics (date-ordered, cost-aware)."""
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List
+
 import numpy as np
 import pandas as pd
 
+from learner_engine import newey_west
 
-def performance_metrics(trades: pd.DataFrame) -> Dict[str, float]:
+
+def trade_metrics(trades: pd.DataFrame) -> Dict:
     if trades is None or trades.empty:
-        return {"trades": 0, "win_rate": 0.0, "profit_factor": 0.0, "avg_pnl": 0.0, "mdd": 0.0}
-    pnl = pd.to_numeric(trades["pnl_pct"], errors="coerce").fillna(0.0)
-    wins = pnl[pnl > 0]
-    losses = pnl[pnl <= 0]
-    eq = np.cumprod(1 + pnl.to_numpy() / 100.0)
-    peak = np.maximum.accumulate(eq)
-    mdd = float(((eq / peak) - 1).min() * 100.0)
-    pf = float(wins.sum() / abs(losses.sum())) if len(losses) else float("inf")
+        return {"trades": 0}
+    r = pd.to_numeric(trades["net_ret_pct"], errors="coerce").dropna()
+    gains, losses = r[r > 0].sum(), -r[r < 0].sum()
+    per_date = trades.assign(r=r).groupby("signal_date")["r"].mean()
+    m, se, t, n = newey_west(per_date, 5)
     return {
-        "trades": int(len(pnl)),
-        "win_rate": round(float((pnl > 0).mean() * 100), 2),
-        "profit_factor": round(pf, 3) if np.isfinite(pf) else 999.0,
-        "avg_pnl": round(float(pnl.mean()), 3),
-        "mdd": round(mdd, 3),
+        "trades": int(len(r)),
+        "hit_rate_pct": round(float((r > 0).mean() * 100), 2),
+        "avg_net_pct": round(float(r.mean()), 4),
+        "median_net_pct": round(float(r.median()), 4),
+        "profit_factor": round(float(gains / losses), 3) if losses > 0 else None,
+        "date_clustered_mean": round(m, 4),
+        "date_clustered_t": round(t, 3),
+        "date_clustered_lcb90": round(m - 1.2816 * se, 4) if np.isfinite(se) else None,
+        "exit_mix": trades["exit_reason"].value_counts().to_dict() if "exit_reason" in trades else {},
     }
 
 
-def validate_candidate(trades: pd.DataFrame, min_trades: int = 30) -> Dict:
-    m = performance_metrics(trades)
-    reasons = []
-    if m["trades"] < min_trades:
-        reasons.append("INSUFFICIENT_SAMPLE")
-    if m["profit_factor"] < 1.05:
-        reasons.append("PF_TOO_LOW")
-    if m["avg_pnl"] <= 0:
-        reasons.append("NEGATIVE_EXPECTANCY")
-    m["passed"] = len(reasons) == 0
-    m["reasons"] = reasons
-    return m
+def portfolio_metrics(daily_ret: pd.Series) -> Dict:
+    r = pd.to_numeric(daily_ret, errors="coerce").fillna(0.0)
+    if r.empty:
+        return {"days": 0}
+    eq = (1.0 + r).cumprod()
+    peak = eq.cummax()
+    mdd = float((eq / peak - 1.0).min() * 100.0)
+    years = max(len(r) / 252.0, 1e-9)
+    cagr = float(eq.iloc[-1] ** (1.0 / years) - 1.0) * 100.0 if eq.iloc[-1] > 0 else -100.0
+    vol = float(r.std(ddof=0) * np.sqrt(252) * 100.0)
+    sharpe = float(r.mean() / r.std(ddof=0) * np.sqrt(252)) if r.std(ddof=0) > 0 else 0.0
+    return {"days": int(len(r)), "total_return_pct": round(float(eq.iloc[-1] - 1.0) * 100.0, 2),
+            "cagr_pct": round(cagr, 2), "ann_vol_pct": round(vol, 2), "sharpe": round(sharpe, 3),
+            "max_drawdown_pct": round(mdd, 2), "calmar": round(cagr / abs(mdd), 3) if mdd < 0 else None}
 
 
-def stability_check(metrics_list) -> Dict:
-    if not metrics_list:
-        return {"stable": False, "dispersion": 1.0}
-    pfs = [float(m.get("profit_factor", 0.0)) for m in metrics_list if m.get("trades", 0) > 0]
-    wrs = [float(m.get("win_rate", 0.0)) for m in metrics_list if m.get("trades", 0) > 0]
-    if not pfs:
-        return {"stable": False, "dispersion": 1.0}
-    pf_disp = float(np.std(pfs) / (abs(np.mean(pfs)) + 1e-9))
-    wr_disp = float(np.std(wrs) / (abs(np.mean(wrs)) + 1e-9))
-    return {"stable": pf_disp < 0.35 and wr_disp < 0.25, "pf_dispersion": round(pf_disp, 4), "wr_dispersion": round(wr_disp, 4)}
+def stability(fold_metrics: List[Dict]) -> Dict:
+    vals = [f.get("date_clustered_mean") for f in fold_metrics if f.get("trades", 0) >= 10]
+    if len(vals) < 2:
+        return {"stable": False, "reason": "too_few_folds", "positive_folds": 0, "folds": len(vals)}
+    pos = sum(1 for v in vals if v is not None and v > 0)
+    return {"stable": bool(pos / len(vals) >= 0.6), "positive_folds": pos, "folds": len(vals),
+            "fold_means": [round(float(v), 4) for v in vals]}

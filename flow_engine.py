@@ -1,83 +1,112 @@
-"""Feature engineering for Adaptive BIST Orderflow Meta-Engine V1."""
+"""Factor engineering shared by the live engine AND the backtest (single code path).
+
+Design principles (fixes of V1):
+* Features are computed from a full end-of-day bar (no time-of-day bias).
+* Every factor is a distinct primitive; no factor is a linear combination of
+  others (V1's regime_fit was). Remaining collinearity is handled by the
+  learner through the factor-correlation matrix (Grinold-Kahn weighting).
+* Cross-sectional transform: rank -> Gaussian -> sector-neutral -> z-score,
+  winsorised at +-3. Missing values are neutral (0) and coverage is reported.
+* Proxies are called proxies. Real custody flow ("takas_delta") is optional.
+"""
 from __future__ import annotations
+
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm
+
+import config as C
 
 
-def _rank(s: pd.Series) -> pd.Series:
-    s = pd.to_numeric(s, errors="coerce")
-    if s.notna().sum() <= 1:
-        return pd.Series(50.0, index=s.index)
-    return (s.rank(pct=True, method="average").fillna(0.5) * 100.0).clip(0, 100)
+def _col(df: pd.DataFrame, name: str) -> pd.Series:
+    if name in df.columns:
+        return pd.to_numeric(df[name], errors="coerce")
+    return pd.Series(np.nan, index=df.index, dtype=float)
 
 
-def build_flow_features(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame()
-    out = df.copy()
+def raw_factors(snap: pd.DataFrame, prev_takas: Optional[pd.Series] = None) -> pd.DataFrame:
+    """Raw (un-normalised) factor values from one EOD snapshot."""
+    s = snap
+    f = pd.DataFrame(index=s.index)
+    close = _col(s, "close")
+    high = _col(s, "high")
+    low = _col(s, "low")
+    rvol = _col(s, "rvol")
+    span = (high - low).where(lambda x: x > 0)
 
-    # Structure / location, not directional momentum.
-    span_1m = (out["high_1m"] - out["low_1m"]).replace(0, np.nan)
-    out["range_position"] = (((out["close"] - out["low_1m"]) / span_1m) * 100.0).replace([np.inf, -np.inf], np.nan).fillna(50.0).clip(0, 100)
-    out["dist_from_support"] = (((out["close"] - out["low_1m"]) / out["low_1m"]) * 100.0).replace([np.inf, -np.inf], np.nan)
+    f["mom_3m"] = _col(s, "perf_3m")
+    f["rs_1m"] = _col(s, "perf_1m")
+    hi1, lo1 = _col(s, "high_1m"), _col(s, "low_1m")
+    rng = (hi1 - lo1).where(lambda x: x > 0)
+    f["range_pos"] = ((close - lo1) / rng).clip(0, 1)
+    f["rev_1d"] = -_col(s, "change_pct")
+    clv = (((close - low) - (high - close)) / span).clip(-1, 1)
+    f["flow_clv"] = clv * rvol.clip(lower=0, upper=5)
+    f["vol_surge"] = np.log(rvol.clip(lower=0.05, upper=20))
+    atr_pct = _col(s, "atr") / close * 100.0
+    f["low_vol"] = -atr_pct
+    f["liquidity"] = np.log1p(_col(s, "value_traded").clip(lower=0))
+    tk = _col(s, "takas_conc")
+    if prev_takas is not None and tk.notna().any():
+        prev = s["ticker"].map(prev_takas)
+        f["takas_delta"] = tk - pd.to_numeric(prev, errors="coerce")
+    else:
+        f["takas_delta"] = np.nan
+    return f.replace([np.inf, -np.inf], np.nan)
 
-    span = (out["high"] - out["low"]).replace(0, np.nan)
-    out["clv"] = (((out["close"] - out["low"]) - (out["high"] - out["close"])) / span).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-1, 1)
-    out["body_efficiency"] = ((out["close"] - out["open"]) / span).replace([np.inf, -np.inf], np.nan).fillna(0.0).clip(-1, 1)
 
-    # Flow proxies are labeled as proxies; real Takas data remains separate.
-    out["flow_proxy"] = (out["clv"].clip(lower=0) * 0.55 + out["body_efficiency"].clip(lower=0) * 0.25 + ((out["rvol"] - 1.0).clip(lower=0) / 3.0) * 0.20).clip(0, 1)
-    out["absorption_proxy"] = ((1.0 - out["range_position"] / 100.0).clip(0, 1) * out["rvol"].clip(lower=0).clip(upper=3.0) / 3.0).clip(0, 1)
-    out["activity_anomaly"] = ((out["rvol"] - 1.0) / 2.0).clip(-1, 1)
+def _gauss_rank(x: pd.Series) -> pd.Series:
+    n = x.notna().sum()
+    if n < 5:
+        return pd.Series(np.nan, index=x.index)
+    r = x.rank(method="average")
+    return pd.Series(norm.ppf((r - 0.5) / n), index=x.index)
 
-    # Favor base/accumulation zone but do not require positive daily price change.
-    out["accumulation_score"] = np.select(
-        [
-            out["range_position"].between(5, 45) & (out["dist_from_support"] <= 10),
-            out["range_position"].between(0, 60) & (out["dist_from_support"] <= 18),
-            out["range_position"] >= 85,
-        ],
-        [85.0, 65.0, 15.0],
-        default=40.0,
-    )
 
-    out["volume_ignition"] = (out["rvol"].clip(lower=0) * 35.0 + out["activity_anomaly"].clip(lower=0) * 25.0).clip(0, 100)
-    out["takas_quality"] = pd.to_numeric(out.get("foreign_ratio_confidence", 0.0), errors="coerce").fillna(0.0).clip(0, 100)
-    out["takas_flow"] = _rank(pd.to_numeric(out.get("foreign_ratio", np.nan), errors="coerce"))
+def cross_sectional_z(raw: pd.DataFrame, sector: Optional[pd.Series] = None) -> (pd.DataFrame, Dict[str, float]):
+    z = pd.DataFrame(index=raw.index)
+    coverage = {}
+    for k in C.FACTORS:
+        x = raw[k] if k in raw else pd.Series(np.nan, index=raw.index)
+        coverage[k] = float(x.notna().mean())
+        if coverage[k] < 0.5:
+            z[k] = 0.0
+            continue
+        g = _gauss_rank(x)
+        if sector is not None:
+            sec = sector.fillna("NA").astype(str)
+            sizes = sec.map(sec.value_counts())
+            means = g.groupby(sec).transform("mean")
+            g = g - means.where(sizes >= 5, 0.0)
+        sd = g.std(ddof=0)
+        g = (g - g.mean()) / sd if sd and np.isfinite(sd) and sd > 0 else g * 0.0
+        z[k] = g.clip(-3, 3).fillna(0.0)
+    return z, coverage
 
-    out["pct_accum"] = _rank(out["accumulation_score"])
-    out["pct_flow_proxy"] = _rank(out["flow_proxy"])
-    out["pct_absorption"] = _rank(out["absorption_proxy"])
-    out["pct_volume"] = _rank(out["volume_ignition"])
-    out["pct_takas"] = _rank(out["takas_flow"])
-    out["pct_liquidity"] = _rank(np.log1p(out["value_traded"].clip(lower=0)))
 
-    out["pre_move_score"] = (
-        out["pct_accum"] * 0.30
-        + out["pct_flow_proxy"] * 0.20
-        + out["pct_absorption"] * 0.20
-        + out["pct_volume"] * 0.15
-        + out["pct_takas"] * 0.10
-        + out["pct_liquidity"] * 0.05
-    ).clip(0, 100).round(1)
+def build_factor_frame(snap: pd.DataFrame, prev_takas: Optional[pd.Series] = None) -> (pd.DataFrame, Dict[str, float]):
+    """Returns snapshot + raw factor columns (f_*) + z columns (z_*) and coverage."""
+    raw = raw_factors(snap, prev_takas)
+    sector = snap["sector"] if "sector" in snap.columns and snap["sector"].notna().mean() > 0.5 else None
+    z, cov = cross_sectional_z(raw, sector)
+    out = snap.copy()
+    for k in C.FACTORS:
+        out[f"f_{k}"] = raw[k]
+        out[f"z_{k}"] = z[k]
+    out["atr_pct"] = _col(snap, "atr") / _col(snap, "close") * 100.0
+    return out, cov
 
-    out["flow_score"] = (
-        out["pct_flow_proxy"] * 0.35
-        + out["pct_absorption"] * 0.25
-        + out["pct_volume"] * 0.20
-        + out["pct_takas"] * 0.15
-        + out["pct_liquidity"] * 0.05
-    ).clip(0, 100).round(1)
 
-    out["structural_risk"] = np.select(
-        [
-            out["range_position"] >= 85,
-            out["dist_from_support"] > 30,
-            out["rvol"] < 0.60,
-        ],
-        [80.0, 65.0, 70.0],
-        default=25.0,
-    )
+def composite(frame: pd.DataFrame, weights: Dict[str, float]) -> pd.Series:
+    s = pd.Series(0.0, index=frame.index)
+    for k, w in weights.items():
+        col = f"z_{k}"
+        if col in frame:
+            s = s + float(w) * frame[col].fillna(0.0)
+    return s
 
-    return out
+
+def z_matrix(frame: pd.DataFrame) -> np.ndarray:
+    return np.column_stack([frame[f"z_{k}"].fillna(0.0).to_numpy(dtype=float) for k in C.FACTORS])

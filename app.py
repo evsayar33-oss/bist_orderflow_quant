@@ -1,327 +1,104 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import os
+"""Streamlit dashboard for Meta-Engine V2 (read-only; reads ./data)."""
 import json
+import os
 
-st.set_page_config(
-    page_title="BIST Multi-Bagger Kuluçka Terminali",
-    layout="wide",
-    page_icon="🦅"
-)
+import pandas as pd
+import streamlit as st
 
-@st.cache_data(ttl=60)
-def load_backtest_win_rate():
-    """Read the latest real OOS walk-forward backtest metric."""
-    candidates = []
+import config as C
 
-    if os.path.exists("backtest_report.json"):
-        try:
-            with open("backtest_report.json", "r", encoding="utf-8") as f:
-                report = json.load(f)
-            oos = report.get("oos_metrics", {}) if isinstance(report, dict) else {}
-            value = oos.get("win_rate")
-            trades = oos.get("trades")
-            if value is not None:
-                candidates.append({
-                    "win_rate": float(value),
-                    "trades": int(trades) if trades is not None else None,
-                    "source": "OOS Walk-Forward",
-                    "generated_at": report.get("generated_at"),
-                })
-        except Exception:
-            pass
-
-    if os.path.exists("longterm_ai_state.json"):
-        try:
-            with open("longterm_ai_state.json", "r", encoding="utf-8") as f:
-                state = json.load(f)
-            bench = state.get("backtest_benchmark", {})
-            value = bench.get("win_rate")
-            if value is not None:
-                candidates.append({
-                    "win_rate": float(value),
-                    "trades": int(bench["trades"]) if bench.get("trades") is not None else None,
-                    "source": "Stored Benchmark",
-                    "generated_at": bench.get("generated_at"),
-                })
-        except Exception:
-            pass
-
-    return candidates[0] if candidates else None
+st.set_page_config(page_title="BIST Meta-Engine V2", layout="wide", page_icon="🧠")
 
 
-@st.cache_data(ttl=60)
-def load_six_month_win_rate():
-    """Read the genuine forward 6-month signal outcome metric."""
-    if not os.path.exists("longterm_ai_state.json"):
-        return {
-            "win_rate": None,
-            "outcomes": 0,
-            "pending": 0,
-            "status": "WARMUP",
-            "horizon_days": 126,
-        }
-    try:
-        with open("longterm_ai_state.json", "r", encoding="utf-8") as f:
-            state = json.load(f)
-        audit = state.get("audit_summary", {})
-        outcomes = int(audit.get("six_month_outcomes", 0) or 0)
-        value = audit.get("win_rate_6m")
-        return {
-            "win_rate": float(value) if value is not None and outcomes > 0 else None,
-            "outcomes": outcomes,
-            "pending": int(audit.get("six_month_pending", 0) or 0),
-            "status": str(audit.get("six_month_status", "WARMUP")),
-            "horizon_days": int(audit.get("six_month_horizon_trading_days", 126) or 126),
-        }
-    except Exception:
-        return {
-            "win_rate": None,
-            "outcomes": 0,
-            "pending": 0,
-            "status": "WARMUP",
-            "horizon_days": 126,
-        }
+@st.cache_data(ttl=120)
+def _json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def load_historical_data():
-    if os.path.exists("gecmis_veri.csv"):
-        try:
-            df = pd.read_csv("gecmis_veri.csv")
-            if 'tarih' in df.columns:
-                df['tarih'] = pd.to_datetime(df['tarih'])
-            return df
-        except Exception:
-            return pd.DataFrame()
-    return pd.DataFrame()
+@st.cache_data(ttl=120)
+def _csv(path):
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    return pd.read_csv(path, low_memory=False)
 
-@st.cache_data(ttl=60)
-def load_ai_state():
-    if os.path.exists("longterm_ai_state.json"):
-        try:
-            with open("longterm_ai_state.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
 
-@st.cache_data(ttl=60)
-def load_lifecycle_signals():
-    if os.path.exists("signals_lifecycle.csv"):
-        try:
-            df = pd.read_csv("signals_lifecycle.csv")
-            df['tarih'] = pd.to_datetime(df['tarih'])
-            return df
-        except Exception:
-            return pd.DataFrame()
-    return pd.DataFrame()
+state = _json(C.STATE_FILE)
+report = _json(C.BACKTEST_REPORT_FILE)
+prior = _json(C.RESEARCH_PRIOR_FILE)
+ledger = _csv(C.LEDGER_FILE)
+snaps = _csv(C.SNAPSHOT_FILE)
 
-df_gecmis = load_historical_data()
-ai_state = load_ai_state()
-df_lifecycle = load_lifecycle_signals()
-backtest_info = load_backtest_win_rate()
-six_month_info = load_six_month_win_rate()
+st.title("🧠 Adaptive BIST Orderflow Meta-Engine V2")
+if not state:
+    st.warning("Henüz state yok. GitHub Actions'ta önce 'Walk Forward Backtest', sonra 'Daily Scan' çalışmalı.")
+    st.stop()
 
-# =============================================================================
-# BAŞLIK VE METRİKLER
-# =============================================================================
+reg, g, model, cal = state.get("regime", {}), state.get("autonomy_guard", {}), state.get("model", {}), state.get("calibration", {})
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("Rejim (HMM)", reg.get("label", "?"), f"P(risk-off) %{float(reg.get('p_risk_off') or 0) * 100:.0f}")
+c2.metric("Beklenen piyasa 5G", f"%{float(reg.get('exp_mkt_5d_pct') or 0):+.2f}", reg.get("source", ""))
+c3.metric("Guard", g.get("mode", "?"), g.get("reason", ""))
+c4.metric("Model", str(model.get("champion_version", "?")), str(model.get("status", ""))[:40])
+c5.metric("Kalibrasyon", str(cal.get("status", "?")), f"eşik p{cal.get('pct_cutoff', '?')}")
 
-st.title("🦅 BIST Multi-Bagger & Kuluçka Terminali")
-st.markdown("*52 haftalık makro dipte kuluçkaya yatmış; **kâr patlaması yaşayan ve %100 - %250 potansiyel taşıyan Small/Mid-Cap** şirketleri tespit eden Quant Motoru.*")
+tab1, tab2, tab3, tab4 = st.tabs(["💎 Adaylar", "💼 Pozisyonlar", "🔬 Model", "📚 Backtest"])
 
-col1, col2, col3, col4, col5 = st.columns(5)
-weights = ai_state.get("weights", {"macro_base": 0.35, "growth_quality": 0.30, "stealth_accumulation": 0.20, "volume_ignition": 0.15})
-audit = ai_state.get("audit_summary", {})
+with tab1:
+    if snaps.empty:
+        st.info("Snapshot yok.")
+    else:
+        last = snaps[snaps["tarih"] == snaps["tarih"].max()].copy()
+        st.caption(f"Son kapanış verisi: {snaps['tarih'].max()} — adaylar ertesi seans açılışı içindir.")
+        el = last[last.get("eligible", False) == True] if "eligible" in last else last.head(0)  # noqa: E712
+        cols = [c for c in ["ticker", "close", "change_pct", "composite_pct", "exp_net_pct", "atr", "value_traded"] if c in last]
+        st.subheader("Seçilen adaylar")
+        st.dataframe(el[cols], hide_index=True, use_container_width=True)
+        st.subheader("Skor sıralaması (ilk 30)")
+        st.dataframe(last.sort_values("composite", ascending=False)[cols].head(30), hide_index=True, use_container_width=True)
 
-with col1:
-    st.metric("🤖 Model Durumu", "Aktif", audit.get("status", "Kuluçka Takibinde")[:22] + "...")
-with col2:
-    sixm_value = six_month_info.get("win_rate")
-    sixm_label = f"%{sixm_value:.1f}" if sixm_value is not None else "Hazırlanıyor"
-    sixm_sub = (
-        f"Çözülen: {six_month_info.get('outcomes', 0)} | 126 seans"
-        if sixm_value is not None
-        else f"Warmup: {six_month_info.get('outcomes', 0)} tamamlandı | 126 seans"
-    )
-    st.metric("🏆 6 Aylık Win Rate", sixm_label, sixm_sub)
-with col3:
-    bt_label = f"%{backtest_info['win_rate']:.1f}" if backtest_info else "Bekliyor"
-    bt_sub = (
-        f"OOS | N={backtest_info['trades']}"
-        if backtest_info and backtest_info.get("trades") is not None
-        else "OOS Walk-Forward"
-    )
-    st.metric("📊 Backtest Win Rate", bt_label, bt_sub)
-with col4:
-    st.metric("🎯 Hedef Skalası", "%100 - %250", "Buy & Hold (6-12 Ay)")
-with col5:
-    last_date = audit.get("last_audit_date", "-")
-    st.metric("🗓️ Son Güncelleme", str(last_date))
+with tab2:
+    perf = state.get("performance", {})
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Kapanan işlem", perf.get("closed", 0))
+    p2.metric("İsabet", f"%{perf.get('hit_rate_pct', 0)}")
+    p3.metric("Ort. net", f"%{perf.get('avg_net_pct', 0)}")
+    p4.metric("Profit factor", perf.get("profit_factor"))
+    if not ledger.empty:
+        st.subheader("Açık / bekleyen")
+        st.dataframe(ledger[ledger["status"].isin(["OPEN", "PENDING_ENTRY"])], hide_index=True, use_container_width=True)
+        st.subheader("Kapananlar (son 50)")
+        st.dataframe(ledger[ledger["status"] == "CLOSED"].sort_values("exit_date", ascending=False).head(50),
+                     hide_index=True, use_container_width=True)
 
-st.divider()
+with tab3:
+    w = model.get("champion_weights", {})
+    if w:
+        st.subheader("Champion faktör ağırlıkları (işaretli)")
+        st.bar_chart(pd.Series(w).sort_values())
+    ics = model.get("ic_stats", {})
+    if ics:
+        st.subheader("Canlı faktör IC (Newey-West)")
+        st.dataframe(pd.DataFrame(ics).T, use_container_width=True)
+    li = model.get("composite_ic_live", {})
+    if li.get("series_tail"):
+        st.subheader("Canlı composite IC (kaydedildiği hâliyle, OOS)")
+        st.line_chart(pd.Series(li["series_tail"]))
+    st.json({"challenger": model.get("challenger"), "calibration": cal.get("cutoffs"), "regime": reg.get("probs")})
 
-# =============================================================================
-# YAN PANEL (SIDEBAR)
-# =============================================================================
-
-st.sidebar.header("🔍 Hisse Kuluçka Sorgu")
-search_ticker = st.sidebar.text_input("Hisse Kodu Girin (Örn: RAYSG):").upper().strip()
-
-if not df_gecmis.empty:
-    son_tarih = df_gecmis['tarih'].max()
-    df_latest = df_gecmis[df_gecmis['tarih'] == son_tarih].copy()
-    
-    if search_ticker:
-        h_data = df_latest[df_latest['ticker'] == search_ticker]
-        if not h_data.empty:
-            score = float(h_data['quant_score'].iloc[0])
-            regime = h_data['regime'].iloc[0]
-            d_52w = float(h_data.get('dist_from_52w_low', 0.0).iloc[0])
-            mcap = float(h_data.get('mcap_milyar', 0.0).iloc[0])
-            target_1 = float(h_data.get('target_cup', 0.0).iloc[0])
-            target_2 = float(h_data.get('target_bagger', 0.0).iloc[0])
-            roe = float(h_data.get('roe', 0.0).iloc[0])
-            pe = float(h_data.get('pe', 0.0).iloc[0])
-
-            st.sidebar.metric(f"{search_ticker} Kuluçka Skoru", f"{score:.1f}")
-            st.sidebar.write(f"**Durum:** {regime}")
-            st.sidebar.write(f"**Piyasa Değeri:** {mcap:.1f} Milyar TL")
-            st.sidebar.write(f"**52H Dip Mesafesi:** %{d_52w:+.1f}")
-            st.sidebar.write(f"**ROE:** %{roe:.1f} | **F/K:** {pe:.1f}")
-            st.sidebar.write(f"🎯 **1. Çanak Hedefi:** {target_1:.2f} TL")
-            st.sidebar.write(f"🚀 **2. Bagger Hedefi:** {target_2:.2f} TL")
-
-            trend = df_gecmis[df_gecmis['ticker'] == search_ticker][['tarih', 'quant_score']].sort_values('tarih')
-            if not trend.empty:
-                trend.set_index('tarih', inplace=True)
-                st.sidebar.line_chart(trend['quant_score'])
-        else:
-            st.sidebar.warning("Hisse bugünkü taramada bulunamadı.")
-
-# =============================================================================
-# SEKMELER
-# =============================================================================
-
-tab_leads, tab_ai, tab_risks = st.tabs([
-    "💎 Kuluçka Liderleri (Multi-Baggers)",
-    "🧠 Quant AI & Portföy Takip Defteri",
-    "🏢 Elenen Hisseler (Devler & Zombiler)"
-])
-
-with tab_leads:
-    st.subheader("💎 52 Haftalık Dipte Kuluçkaya Yatan Şirketler")
-    st.markdown("*Piyasa değeri 2-35 Mr TL arası, ROE'si %20'nin üzerinde ve 52 haftalık dip desteğinde kurumsal alım gören hisseler.*")
-    
-    if not df_gecmis.empty:
-        leaders = df_latest[
-            df_latest['regime'].str.contains("KULUÇKA LİDERİ", na=False)
-        ].sort_values(by='quant_score', ascending=False).head(15)
-
-        col_map = {
-            'ticker': 'Hisse',
-            'quant_score': 'Kuluçka Skoru',
-            'close': 'Fiyat (TL)',
-            'mcap_milyar': 'Piyasa Değeri (Mr TL)',
-            'dist_from_52w_low': '52H Dip %',
-            'target_cup': '1. Çanak Hedefi',
-            'potansiyel_cup': 'Çanak Prim %',
-            'target_bagger': '2. Bagger (2.5x)',
-            'stop_price': 'Taban Stop',
-            'roe': 'ROE %',
-            'pe': 'F/K'
-        }
-        
-        display_cols = [c for c in col_map.keys() if c in leaders.columns]
-        
-        if not leaders.empty:
-            st.dataframe(
-                leaders[display_cols].rename(columns=col_map),
-                column_config={
-                    "Kuluçka Skoru": st.column_config.ProgressColumn("Kuluçka Skoru", min_value=0, max_value=100, format="%.1f"),
-                    "Fiyat (TL)": st.column_config.NumberColumn("Fiyat (TL)", format="%.2f TL"),
-                    "52H Dip %": st.column_config.NumberColumn("52H Dip %", format="%+0.1f%%"),
-                    "Çanak Prim %": st.column_config.NumberColumn("Çanak Prim %", format="%+0.0f%%"),
-                    "1. Çanak Hedefi": st.column_config.NumberColumn("1. Çanak Hedefi", format="%.2f TL"),
-                    "2. Bagger (2.5x)": st.column_config.NumberColumn("2. Bagger (2.5x)", format="%.2f TL"),
-                    "Taban Stop": st.column_config.NumberColumn("Taban Stop", format="%.2f TL"),
-                    "ROE %": st.column_config.NumberColumn("ROE %", format="%%%0.1f"),
-                    "F/K": st.column_config.NumberColumn("F/K", format="%.1f")
-                },
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Bugün kuluçka şartlarını sağlayan hisse bulunamadı.")
-
-with tab_ai:
-    st.subheader("🧠 Model Faktör Dağılımı (Dinamik Ağırlıklar)")
-    
-    col_w1, col_w2, col_w3, col_w4 = st.columns(4)
-    with col_w1:
-        st.write(f"**52H Taban Geometrisi:** %{int(weights.get('macro_base', 0.35)*100)}")
-        st.progress(float(weights.get('macro_base', 0.35)))
-    with col_w2:
-        st.write(f"**Büyüme & Kârlılık (ROE):** %{int(weights.get('growth_quality', 0.30)*100)}")
-        st.progress(float(weights.get('growth_quality', 0.30)))
-    with col_w3:
-        st.write(f"**Sessiz Kurumsal Takas:** %{int(weights.get('stealth_accumulation', 0.20)*100)}")
-        st.progress(float(weights.get('stealth_accumulation', 0.20)))
-    with col_w4:
-        st.write(f"**Hacimli Ateşleme:** %{int(weights.get('volume_ignition', 0.15)*100)}")
-        st.progress(float(weights.get('volume_ignition', 0.15)))
-
-    st.write("")
-    st.subheader("📋 Sinyal Yaşam Döngüsü & Kâr Koruma Takibi")
-    
-    if not df_lifecycle.empty:
-        recent_lifecycle = df_lifecycle.sort_values(by='tarih', ascending=False).head(30)
-        life_map = {
-            'tarih': 'Sinyal Tarihi',
-            'ticker': 'Hisse',
-            'entry_price': 'Giriş Fiyatı',
-            'stop_price': 'Güncel İzleyen Stop',
-            'target_cup': '1. Çanak Hedefi',
-            'max_drawdown': 'Max Çekilme %',
-            'peak_gain': 'Görülen Tepe Kâr %',
-            'outcome': 'Kuluçka Durumu'
-        }
-        l_cols = [c for c in life_map.keys() if c in recent_lifecycle.columns]
-        
-        st.dataframe(
-            recent_lifecycle[l_cols].rename(columns=life_map),
-            column_config={
-                "Sinyal Tarihi": st.column_config.DateColumn("Sinyal Tarihi", format="YYYY-MM-DD"),
-                "Giriş Fiyatı": st.column_config.NumberColumn("Giriş Fiyatı", format="%.2f TL"),
-                "Güncel İzleyen Stop": st.column_config.NumberColumn("Güncel İzleyen Stop", format="%.2f TL"),
-                "1. Çanak Hedefi": st.column_config.NumberColumn("1. Çanak Hedefi", format="%.2f TL"),
-                "Max Çekilme %": st.column_config.NumberColumn("Max Çekilme %", format="%0.1f%%"),
-                "Görülen Tepe Kâr %": st.column_config.NumberColumn("Görülen Tepe Kâr %", format="%+0.1f%%")
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-
-with tab_risks:
-    st.subheader("🏢 Diskalifiye Edilen Hisseler")
-    st.markdown("*3x yapma potansiyeli olmayan 50 Milyar TL üstü hantal mega devler ve kârsız zombi şirketler.*")
-    
-    if not df_gecmis.empty:
-        traps = df_latest[
-            df_latest['regime'].str.contains("MEGA DEV|ELENDİ", na=False)
-        ].head(25)
-
-        if not traps.empty:
-            r_cols = ['ticker', 'regime', 'mcap_milyar', 'roe', 'close']
-            r_cols = [c for c in r_cols if c in traps.columns]
-            st.dataframe(
-                traps[r_cols].rename(columns={
-                    'ticker': 'Hisse',
-                    'regime': 'Elenme Sebebi',
-                    'mcap_milyar': 'Piyasa Değeri (Mr TL)',
-                    'roe': 'ROE %',
-                    'close': 'Fiyat'
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
+with tab4:
+    if not report:
+        st.info("Backtest raporu yok.")
+    else:
+        st.caption(f"{report.get('period')} | {report.get('data_source')}")
+        a, b = st.columns(2)
+        a.json(report.get("oos_trades", {}))
+        b.json(report.get("oos_portfolio", {}))
+        st.json({"oos_composite_ic": report.get("oos_composite_ic"), "stability": report.get("stability"),
+                 "limitations": report.get("limitations")})
+        if report.get("folds"):
+            st.dataframe(pd.DataFrame([{**{k: v for k, v in f.items() if k not in ("weights", "trades")},
+                                        **{f"t_{k}": v for k, v in (f.get("trades") or {}).items() if k != "exit_mix"}}
+                                       for f in report["folds"]]), hide_index=True, use_container_width=True)

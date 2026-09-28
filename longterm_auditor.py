@@ -1,162 +1,66 @@
-"""Lifecycle audit, MAE/MFE measurement and controlled feedback loop."""
+"""Weekly / on-demand audit report (read-only: never changes model state).
+
+Summarises the live, out-of-sample evidence: realised trades from the ledger,
+the recorded composite's IC, per-factor live IC vs. the research prior,
+calibration and guard status, then sends it to Telegram.
+The daily learning/ledger work happens in main.py after the close.
+"""
 from __future__ import annotations
 
-from datetime import datetime
-import os
+from html import escape
+
 import numpy as np
 import pandas as pd
-import requests
 
-from learner_engine import apply_learning, resolve_forward_outcomes
-from state_manager import load_ai_state, load_lifecycle_signals, load_signal_log, save_ai_state, save_lifecycle_signals
-from autonomy_guard import evaluate_autonomy_guard
-from win_rate_optimizer import optimize_win_rate, summary as winrate_optimizer_summary
-
-
-def fetch_current_snapshot():
-    url = "https://scanner.tradingview.com/turkey/scan"
-    payload = {
-        "filter": [{"left": "type", "operation": "equal", "right": "stock"}],
-        "columns": ["name", "close", "high", "low", "change"],
-        "sort": {"sortBy": "Value.Traded", "sortOrder": "desc"},
-        "range": [0, 500],
-    }
-    try:
-        r = requests.post(url, json=payload, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-        r.raise_for_status()
-        out = {}
-        for item in r.json().get("data", []):
-            d = item.get("d", [])
-            if len(d) >= 5 and d[0] is not None and d[1] is not None:
-                out[d[0]] = {
-                    "close": float(d[1]), "high": float(d[2] or d[1]), "low": float(d[3] or d[1]), "change": float(d[4] or 0.0)
-                }
-        return out
-    except Exception as exc:
-        print(f"⚠️ Lifecycle snapshot hatası: {exc}")
-        return {}
+import config as C
+from learner_engine import ZCOLS, daily_rank_ic, newey_west
+from main import build_dataset, send_telegram
+from portfolio_ledger import performance_summary
+from state_manager import load_ledger, load_research_prior, load_snapshots, load_state
 
 
-def update_lifecycle(signal_df, snapshot):
-    if signal_df.empty or not snapshot:
-        return signal_df, []
-    df = signal_df.copy()
-    alerts = []
-    today = pd.Timestamp.now(tz="Europe/Istanbul").normalize().tz_localize(None)
-    for i, row in df.iterrows():
-        t = row.get("ticker")
-        if t not in snapshot:
-            continue
-        p = snapshot[t]
-        entry = float(row.get("entry_price") or 0)
-        if entry <= 0:
-            continue
-        curr = float(p["close"])
-        high = float(p["high"])
-        low = float(p["low"])
-        df.at[i, "last_seen_price"] = curr
-        prev_peak = float(row.get("peak_price") or entry)
-        prev_trough = float(row.get("trough_price") or entry)
-        peak = max(prev_peak, high)
-        trough = min(prev_trough, low)
-        df.at[i, "peak_price"] = peak
-        df.at[i, "trough_price"] = trough
-        df.at[i, "max_favorable_excursion"] = round((peak / entry - 1) * 100, 3)
-        df.at[i, "max_adverse_excursion"] = round((trough / entry - 1) * 100, 3)
-        current_stop = float(row.get("current_stop_price") or row.get("initial_stop_price") or entry * 0.92)
-        if df.at[i, "max_favorable_excursion"] >= 8:
-            current_stop = max(current_stop, entry * 1.01)
-        if df.at[i, "max_favorable_excursion"] >= 15:
-            current_stop = max(current_stop, entry * 1.06)
-        if df.at[i, "max_favorable_excursion"] >= 25:
-            current_stop = max(current_stop, entry * 1.15)
-        if df.at[i, "max_favorable_excursion"] >= 40:
-            current_stop = max(current_stop, entry * 1.28)
-        if current_stop > float(row.get("current_stop_price") or 0):
-            alerts.append({"ticker": t, "type": "STOP_RAISE", "stop": round(current_stop, 2)})
-        df.at[i, "current_stop_price"] = round(current_stop, 2)
-        if curr <= current_stop and row.get("outcome", "OPEN") in ("OPEN", "INCUBATING", "PENDING"):
-            df.at[i, "outcome"] = "STOP_TRIGGERED"
-            alerts.append({"ticker": t, "type": "STOP_TRIGGERED", "price": round(curr, 2)})
-    return df, alerts
-
-
-def send_telegram_alerts(alerts):
-    import os
-    if not alerts:
-        return False
-    token = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("CHAT_ID")
-    if not token or not chat_id:
-        return False
-    lines = ["🧪 <b>ADAPTIVE BIST META-ENGINE AUDIT</b>"]
-    for a in alerts[:12]:
-        stop = a.get("stop")
-        suffix = f" | Stop {stop}" if stop is not None else ""
-        lines.append(f"• <b>{a.get('ticker','?')}</b> — {a.get('type','ALERT')}{suffix}")
-    try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": "\n".join(lines), "parse_mode": "HTML"},
-            timeout=10,
-        )
-        return r.status_code == 200
-    except Exception:
-        return False
-
-
-def audit_and_calibrate(history=None):
-    state = load_ai_state()
-    if history is None:
-        try:
-            if os.path.exists("gecmis_veri.csv"):
-                history = pd.read_csv("gecmis_veri.csv")
-                history["tarih"] = pd.to_datetime(history["tarih"], errors="coerce").dt.normalize()
-        except Exception:
-            history = pd.DataFrame()
-    lifecycle = load_lifecycle_signals()
-    snapshot = fetch_current_snapshot()
-    alerts = []
-    if not lifecycle.empty and snapshot:
-        lifecycle, alerts = update_lifecycle(lifecycle, snapshot)
-        save_lifecycle_signals(lifecycle)
-
-    if history is not None and not history.empty:
-        signal_log = history.copy()
-        # Outcomes are resolved against persisted daily history, not calendar-day elapsed time.
-        signal_log = resolve_forward_outcomes(signal_log, history)
-        state = apply_learning(signal_log, state)
-        state = optimize_win_rate(
-            state, signal_log,
-            current_threshold=float(state.get("win_rate_optimizer", {}).get("active_threshold", state.get("risk_guards", {}).get("min_signal_score", 72.0))),
-        )
-        state.setdefault("audit_summary", {})["winrate_optimizer_status"] = winrate_optimizer_summary(state)
-        evaluate_autonomy_guard(
-            state,
-            features=None,
-            regime=state.get("market_regime"),
-            regime_confidence=float(state.get("regime_confidence", 0.0)) / 100.0,
-            performance_returns=(signal_log["ret_t3"] if "ret_t3" in signal_log.columns else None),
-            data_quality_score=float(state.get("data_quality", {}).get("score", 100.0)),
-            row_count=state.get("data_quality", {}).get("rows"),
-            min_rows=30,
-            project="orderflow",
-        )
+def audit() -> str:
+    state, ledger, snaps, research = load_state(), load_ledger(), load_snapshots(), load_research_prior()
+    perf = performance_summary(ledger)
+    ds = build_dataset(snaps)
+    lines = ["🧪 <b>BIST META-ENGINE V2 — HAFTALIK DENETİM</b>"]
+    lines.append(f"Snapshot seansı: {snaps['tarih'].nunique() if not snaps.empty else 0} | çözülmüş etiketli satır: {len(ds)}")
+    if perf.get("closed"):
+        lines.append(f"💼 Kapanan {perf['closed']} | isabet %{perf['hit_rate_pct']} | ort. net %{perf['avg_net_pct']} | "
+                     f"PF {perf.get('profit_factor')} | tarih-kümeli ort. %{perf['date_clustered_mean']} (LCB90 {perf['date_clustered_lcb90']})")
+        lines.append(f"Çıkış dağılımı: {perf.get('exit_mix')}")
     else:
-        state["audit_summary"]["status"] = state["audit_summary"].get("status", "LEARNING")
-        save_ai_state(state)
-
-    return state, alerts
+        lines.append("💼 Henüz kapanmış işlem yok.")
+    li = state.get("model", {}).get("composite_ic_live", {})
+    if li.get("n_dates"):
+        lines.append(f"📊 Canlı composite IC: {li['ic_mean']:+.4f} (t={li['t_nw']:.2f}, n={li['n_dates']}, son20 {li.get('ic_recent20')})")
+    if not ds.empty:
+        ic = daily_rank_ic(ds.dropna(subset=["fwd_ret"]), ZCOLS, "fwd_ret")
+        if len(ic) >= 5:
+            lines.append("🔬 <b>Faktör IC (canlı | araştırma)</b>")
+            for k in C.FACTORS:
+                m, _, t, n = newey_west(ic[f"z_{k}"], C.LABEL_HORIZON - 1)
+                pr = (research or {}).get("ic_mean", {}).get(k)
+                lines.append(f"• {k}: {m:+.4f} (t={t:.2f}) | {pr if pr is not None else '-'}")
+    m = state.get("model", {})
+    lines.append(f"🧠 Model: {escape(str(m.get('champion_version')))} | {escape(str(m.get('status')))} | "
+                 f"terfi {m.get('promotions', 0)} / geri alma {m.get('rollbacks', 0)}")
+    w = m.get("champion_weights", {})
+    if w:
+        lines.append("⚖️ Ağırlıklar: " + ", ".join(f"{k} {v:+.2f}" for k, v in sorted(w.items(), key=lambda x: -abs(x[1]))))
+    cal = state.get("calibration", {})
+    lines.append(f"🎯 Kalibrasyon: {cal.get('status')} ({cal.get('source')}) | eşik p{cal.get('pct_cutoff')}")
+    g = state.get("autonomy_guard", {})
+    lines.append(f"🛡️ Guard: {g.get('mode')} | {escape(str(g.get('reason')))}")
+    tk = state.get("takas", {})
+    lines.append(f"🏦 Takas kapsaması: %{float(tk.get('last_coverage', 0)) * 100:.0f} ({'aktif' if tk.get('enabled') else 'devre dışı'})")
+    if research:
+        lines.append(f"📚 Araştırma prior: {research.get('generated_at')} | {research.get('n_dates')} seans")
+    else:
+        lines.append("📚 Araştırma prior YOK → Actions'ta 'Walk Forward Backtest' iş akışını bir kez elle çalıştırın.")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
-    history = pd.DataFrame()
-    try:
-        if os.path.exists("gecmis_veri.csv"):
-            history = pd.read_csv("gecmis_veri.csv")
-            if "tarih" in history.columns:
-                history["tarih"] = pd.to_datetime(history["tarih"], errors="coerce").dt.normalize()
-    except Exception:
-        pass
-    state, alerts = audit_and_calibrate(history=history)
-    send_telegram_alerts(alerts)
+    msg = audit()
+    send_telegram(msg)   # prints to the log when Telegram secrets are absent

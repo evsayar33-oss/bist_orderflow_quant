@@ -1,4 +1,4 @@
-"""Persistent state, schema migration and atomic writes for Meta-Engine V1."""
+"""Persistent state, ledgers and atomic file IO for Meta-Engine V2."""
 from __future__ import annotations
 
 import json
@@ -7,76 +7,71 @@ import tempfile
 from copy import deepcopy
 from typing import Dict
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-STATE_FILE = "longterm_ai_state.json"
-WEIGHTS_FILE = "model_weights.json"
-LIFECYCLE_LOG_FILE = "signals_lifecycle.csv"
-SIGNAL_LOG_FILE = "signals_log.csv"
+import config as C
 
-DEFAULT_STATE = {
-    "version": "5.0.0",
-    "strategy": "ADAPTIVE_BIST_ORDERFLOW_META_ENGINE_V1",
-    "market_regime": "NEUTRAL",
-    "regime_confidence": 50.0,
-    "weights": {
-        "pre_move": 0.40,
-        "flow": 0.25,
-        "resilience": 0.15,
-        "regime_fit": 0.10,
-        "quality": 0.10,
-    },
-    "shadow_weights": {
-        "pre_move": 0.40,
-        "flow": 0.25,
-        "resilience": 0.15,
-        "regime_fit": 0.10,
-        "quality": 0.10,
-    },
-    "regime_weights": {},
-    "learning_params": {
-        "learning_rate": 0.08,
-        "min_sample_size": 30,
-        "shadow_min_sample": 20,
-        "promotion_margin": 0.05,
-        "max_weight_shift": 0.08,
-        "min_weight": 0.05,
-        "max_weight": 0.55,
-        "cooldown_days": 5,
-    },
-    "validation": {
-        "active_model_version": "champion-1",
-        "shadow_model_version": "shadow-1",
-        "active_oos_score": 0.0,
-        "shadow_oos_score": 0.0,
-        "last_validation_date": None,
-        "last_promotion_date": None,
-        "rollback_count": 0,
+DEFAULT_STATE: Dict = {
+    "version": C.ENGINE_VERSION,
+    "strategy": C.STRATEGY_NAME,
+    "model": {
+        "champion_weights": {},
+        "champion_version": "prior-0",
         "previous_weights": {},
-        "score_at_promotion": 0.0,
+        "previous_version": None,
+        "regime_weights": {},
+        "prior_source": "hand",
+        "ic_stats": {},
+        "composite_ic_live": {},
+        "challenger": {},
+        "promotions": 0,
+        "rollbacks": 0,
+        "last_fit": None,
+        "status": "BOOTSTRAP",
     },
-    "risk_guards": {
-        "min_data_quality": 70.0,
-        "min_liquidity_tl": 8000000.0,
-        "max_overnight_risk": 65.0,
-        "max_sector_like_concentration": 0.35,
-        "max_candidates": 8,
-        "min_signal_score": 72.0,
+    "calibration": {
+        "pct_cutoff": C.DEFAULT_PCT_CUTOFF,
+        "bucket_table": [],
+        "source": "default",
+        "status": "BOOTSTRAP",
     },
-    "audit_summary": {
-        "last_audit_date": None,
-        "total_signals_audited": 0,
-        "win_rate_t3": 0.0,
-        "win_rate_6m": 0.0,
-        "six_month_outcomes": 0,
-        "six_month_pending": 0,
-        "six_month_status": "WARMUP",
-        "six_month_horizon_trading_days": 126,
-        "status": "BOOTSTRAP / LEARNING",
+    "regime": {
+        "params": None,
+        "last_fit": None,
+        "label": "UNKNOWN",
+        "probs": {},
+        "p_risk_off": None,
+        "exp_mkt_5d_pct": 0.0,
+        "argmax_history": [],
+        "degraded": True,
+        "source": "none",
     },
+    "autonomy_guard": {},
+    "takas": {"enabled": True, "zero_runs": 0, "runs_since_check": 0, "last_coverage": 0.0},
     "data_quality": {},
+    "performance": {},
+    "sector_map": {},
+    "last_run": {},
 }
+
+SNAPSHOT_RAW_COLS = [
+    "tarih", "ticker", "open", "high", "low", "close", "volume", "change_pct",
+    "value_traded", "rvol", "perf_w", "perf_1m", "perf_3m", "high_1m", "low_1m",
+    "atr", "market_cap", "sector", "takas_conc", "takas_conf",
+]
+
+LEDGER_COLS = [
+    "signal_date", "ticker", "status", "composite", "composite_pct", "exp_net_pct",
+    "regime_label", "p_risk_off", "model_version", "atr_pct", "stop_dist_pct", "size_pct",
+    "signal_close", "entry_date", "entry_price", "stop_price", "target_price", "breakeven_armed",
+    "expiry_date", "sessions_held", "last_date", "last_price", "mfe_pct", "mae_pct",
+    "exit_date", "exit_price", "exit_reason", "gross_ret_pct", "net_ret_pct",
+]
+
+
+def ensure_dir() -> None:
+    os.makedirs(C.DATA_DIR, exist_ok=True)
 
 
 def _merge(base: Dict, incoming: Dict) -> Dict:
@@ -89,126 +84,154 @@ def _merge(base: Dict, incoming: Dict) -> Dict:
     return out
 
 
-def _atomic_json_write(path: str, payload: Dict) -> bool:
+def _json_default(o):
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        v = float(o)
+        return v if np.isfinite(v) else None
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
+    if isinstance(o, (pd.Timestamp,)):
+        return o.strftime("%Y-%m-%d")
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
+
+def atomic_json_write(path: str, payload: Dict) -> bool:
+    ensure_dir()
     directory = os.path.dirname(os.path.abspath(path)) or "."
-    fd, tmp = tempfile.mkstemp(prefix=".state-", suffix=".tmp", dir=directory)
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", suffix=".json", dir=directory)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=_json_default)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
         return True
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         try:
             os.unlink(tmp)
         except OSError:
             pass
-        print(f"❌ State kayıt hatası: {exc}")
+        print(f"❌ JSON yazma hatası ({path}): {exc}")
         return False
 
 
-def load_ai_state() -> Dict:
-    if not os.path.exists(STATE_FILE):
-        state = deepcopy(DEFAULT_STATE)
-        save_ai_state(state)
-        return state
+def atomic_csv_write(path: str, df: pd.DataFrame) -> bool:
+    ensure_dir()
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", suffix=".csv", dir=directory)
+    os.close(fd)
     try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        state = _merge(DEFAULT_STATE, raw)
-        return state
+        df.to_csv(tmp, index=False)
+        os.replace(tmp, path)
+        return True
+    except Exception as exc:  # pragma: no cover
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        print(f"❌ CSV yazma hatası ({path}): {exc}")
+        return False
+
+
+def read_json(path: str):
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception as exc:
-        print(f"⚠️ State okuma hatası: {exc}. Güvenli varsayılan state kullanılacak.")
-        return deepcopy(DEFAULT_STATE)
+        print(f"⚠️ JSON okuma hatası ({path}): {exc}")
+        return None
 
 
-def save_ai_state(state: Dict) -> bool:
+def load_state() -> Dict:
+    raw = read_json(C.STATE_FILE)
+    return _merge(DEFAULT_STATE, raw or {})
+
+
+def save_state(state: Dict) -> bool:
     state = _merge(DEFAULT_STATE, state or {})
-    state["version"] = "5.0.0"
-    return _atomic_json_write(STATE_FILE, state)
+    state["version"] = C.ENGINE_VERSION
+    return atomic_json_write(C.STATE_FILE, state)
 
 
-def save_model_weights(weights: Dict, status: str = "") -> bool:
-    payload = {"weights": weights, "status": status, "version": "5.0.0"}
-    return _atomic_json_write(WEIGHTS_FILE, payload)
+def load_research_prior():
+    return read_json(C.RESEARCH_PRIOR_FILE)
 
 
-def _lifecycle_columns():
-    return [
-        "tarih", "ticker", "entry_price", "initial_stop_price", "current_stop_price",
-        "target_price", "last_seen_price", "meta_score", "pre_move_score", "flow_score",
-        "resilience_score", "regime_fit_score", "quality_score", "risk_score", "data_quality",
-        "market_regime", "regime_confidence", "model_version", "peak_price", "trough_price",
-        "max_adverse_excursion", "max_favorable_excursion", "ret_t1", "ret_t3", "ret_t5",
-        "ret_t10", "ret_t126", "outcome"
-    ]
-
-
-def load_lifecycle_signals() -> pd.DataFrame:
-    cols = _lifecycle_columns()
-    if not os.path.exists(LIFECYCLE_LOG_FILE):
-        return pd.DataFrame(columns=cols)
+# ------------------------------------------------------------------ snapshots
+def load_snapshots() -> pd.DataFrame:
+    if not os.path.exists(C.SNAPSHOT_FILE):
+        return pd.DataFrame()
     try:
-        df = pd.read_csv(LIFECYCLE_LOG_FILE)
-        df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce")
-        # Backward-compatible migration: preserve existing rows and add new columns.
-        for c in cols:
-            if c not in df.columns:
-                df[c] = pd.NA
-        return df[cols]
+        df = pd.read_csv(C.SNAPSHOT_FILE, low_memory=False)
     except Exception as exc:
-        print(f"⚠️ Lifecycle okuma hatası: {exc}")
-        return pd.DataFrame(columns=cols)
+        print(f"⚠️ Snapshot okuma hatası: {exc}")
+        return pd.DataFrame()
+    if df.empty or "tarih" not in df.columns:
+        return pd.DataFrame()
+    df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce").dt.normalize()
+    df = df.dropna(subset=["tarih", "ticker"])
+    df["ticker"] = df["ticker"].astype(str)
+    return df
 
 
-def save_lifecycle_signals(df: pd.DataFrame) -> None:
+def save_snapshots(df: pd.DataFrame) -> bool:
+    if df is None or df.empty:
+        return False
     out = df.copy()
-    for c in _lifecycle_columns():
-        if c not in out.columns:
-            out[c] = pd.NA
-    out[_lifecycle_columns()].to_csv(LIFECYCLE_LOG_FILE, index=False)
+    out["tarih"] = pd.to_datetime(out["tarih"]).dt.normalize()
+    dates = sorted(out["tarih"].unique())
+    if len(dates) > C.MAX_SNAPSHOT_SESSIONS:
+        out = out[out["tarih"] >= dates[-C.MAX_SNAPSHOT_SESSIONS]]
+    out = out.sort_values(["tarih", "ticker"])
+    num = out.select_dtypes(include=[np.number]).columns
+    out[num] = out[num].round(5)
+    out["tarih"] = out["tarih"].dt.strftime("%Y-%m-%d")
+    return atomic_csv_write(C.SNAPSHOT_FILE, out)
 
 
-def load_signal_log() -> pd.DataFrame:
-    """Load the signal ledger with backward-compatible schema migration."""
-    required = [
-        "tarih", "ticker", "entry_price", "meta_score", "pre_move_score", "flow_score",
-        "resilience_score", "regime_fit_score", "quality_score", "risk_score",
-        "ret_t1", "ret_t3", "ret_t5", "ret_t10"
-    ]
-    optional = [
-        "ret_t126", "mfe_t10", "mae_t10", "outcome",
-        "market_regime", "regime_confidence", "model_version", "data_quality"
-    ]
-    all_cols = required + optional
+def append_snapshot(existing: pd.DataFrame, today: pd.DataFrame) -> pd.DataFrame:
+    if existing is None or existing.empty:
+        return today.copy()
+    d = pd.Timestamp(today["tarih"].iloc[0]).normalize()
+    keep = existing[existing["tarih"] != d]
+    return pd.concat([keep, today], ignore_index=True)
 
-    if not os.path.exists(SIGNAL_LOG_FILE):
-        return pd.DataFrame(columns=all_cols)
 
+# ------------------------------------------------------------------ ledger
+def load_ledger() -> pd.DataFrame:
+    if not os.path.exists(C.LEDGER_FILE):
+        return pd.DataFrame(columns=LEDGER_COLS)
     try:
-        df = pd.read_csv(SIGNAL_LOG_FILE)
-        missing_required = [c for c in required if c not in df.columns]
-        if missing_required:
-            print(f"ℹ️ Signal log eksik zorunlu alanlar: {missing_required}; öğrenme atlandı.")
-            return pd.DataFrame(columns=all_cols)
-
-        df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce").dt.normalize()
-        numeric_cols = [
-            "entry_price", "meta_score", "pre_move_score", "flow_score",
-            "resilience_score", "regime_fit_score", "quality_score", "risk_score",
-            "ret_t1", "ret_t3", "ret_t5", "ret_t10", "ret_t126",
-            "mfe_t10", "mae_t10", "regime_confidence", "data_quality"
-        ]
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-
-        for col in optional:
-            if col not in df.columns:
-                df[col] = "PENDING" if col == "outcome" else np.nan
-
-        return df[all_cols]
+        df = pd.read_csv(C.LEDGER_FILE)
     except Exception as exc:
-        print(f"⚠️ Signal log okuma hatası: {exc}")
-        return pd.DataFrame(columns=all_cols)
+        print(f"⚠️ Ledger okuma hatası: {exc}")
+        return pd.DataFrame(columns=LEDGER_COLS)
+    for c in LEDGER_COLS:
+        if c not in df.columns:
+            df[c] = np.nan
+    for c in ("signal_date", "entry_date", "expiry_date", "last_date", "exit_date"):
+        df[c] = pd.to_datetime(df[c], errors="coerce").dt.normalize()
+    df["ticker"] = df["ticker"].astype(str)
+    df["status"] = df["status"].astype(str)
+    df["exit_reason"] = df["exit_reason"].astype(object)
+    df["regime_label"] = df["regime_label"].astype(object)
+    df["model_version"] = df["model_version"].astype(object)
+    return df[LEDGER_COLS]
+
+
+def save_ledger(df: pd.DataFrame) -> bool:
+    out = df.copy()
+    for c in LEDGER_COLS:
+        if c not in out.columns:
+            out[c] = np.nan
+    out = out[LEDGER_COLS]
+    for c in ("signal_date", "entry_date", "expiry_date", "last_date", "exit_date"):
+        out[c] = pd.to_datetime(out[c], errors="coerce").dt.strftime("%Y-%m-%d")
+    return atomic_csv_write(C.LEDGER_FILE, out)
