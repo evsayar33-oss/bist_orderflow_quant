@@ -26,14 +26,14 @@
 1. Zip'i **Files by Google** ile açıp "Ayıkla" deyin.
 2. GitHub'da **Add file → Upload files** ile kök klasördeki tüm `.py` dosyalarını, `requirements.txt` ve README dosyalarını yükleyin. Aynı isimli V2 dosyalarının üzerine yazılır.
 3. `.github/workflows` klasörüne girip 3 `.yml` dosyasını yükleyin.
-4. **(Önerilir, ücretsiz)** TÜFE verisi için evds2.tcmb.gov.tr'den ücretsiz üyelik açıp API anahtarı alın. Anahtarı repoda **Settings → Secrets → Actions → New secret** yoluyla `EVDS_API_KEY` adıyla ekleyin. Anahtar olmazsa sistem FRED'i kullanır; bu kaynak birkaç ay geriden gelebilir.
+4. **(Şiddetle önerilir, ücretsiz)** TÜFE verisi için **evds3.tcmb.gov.tr**'de ücretsiz üye olun → **Profilim → API Key Kopyala**. Anahtarı repoda **Settings → Secrets and variables → Actions → New repository secret** yoluyla `EVDS_API_KEY` adıyla ekleyin. Anahtar yoksa sistem sırasıyla FRED, DBnomics ve önbelleği dener. Hiçbiri çalışmazsa USDTRY vekilini (+5 puan güvenlik payıyla) kullanır; vekil de yoksa **yeni alım yapmaz**.
 5. **Actions → "Walk Forward Backtest" → Run workflow**. Bu adım 30–90 dakika sürebilir. 2012'den bugüne gerçek veriyle araştırma prior'ını ve kalibrasyonu üretir. **Canlı sistem bu dosya olmadan da çalışır, ancak ilk alımlar çok daha temkinli olur.**
 6. Günlük çalışma otomatiktir. İlk çalıştırmada aylık gözden geçirme hemen yapılır ve alımlar ertesi günün açılışında gerçekleşir.
 
 **Artık kullanılmayan V1/V2 dosyaları (isteğe bağlı silebilirsiniz):** `data/snapshots_eod.csv`, `data/signals_ledger.csv`, `data/engine_state.json`, `data/research_prior.json`, `data/backtest_report.json`, `gecmis_veri.csv`, `signals_log.csv`, `signals_lifecycle.csv`, `longterm_ai_state.json`, `model_weights.json`, `backtest_report.*`, `VERIFY_RESULTS.*`.
 
 ## TÜFE verisi
-Sistem kaynakları şu sırayla dener: `data/cpi_manual.csv` (isterseniz kendiniz yükleyebilirsiniz; format: `tarih,cpi`) → EVDS → FRED → önbellek. TÜİK seri kodunu değiştirirse yeni kodu `EVDS_CPI_SERIES` ortam değişkeniyle ekleyebilirsiniz. Kaynaklar birbirine oran eşlemesiyle eklenir (splice). Enflasyon verisi hiçbir zaman uydurulmaz: yayımlanmamış bir ay için reel getiri boş bırakılır.
+Sistem kaynakları şu sırayla dener: `data/cpi_manual.csv` (isterseniz kendiniz yükleyebilirsiniz; format: `tarih,cpi`) → EVDS → FRED → önbellek. TÜİK 2025'te TÜFE'yi 2025=100 bazına taşıdı; sistem eski `TP.FG.J0` ile yeni `TP.TUKFIY2025.GENEL` serisini otomatik birleştirir. TÜİK seri kodunu yine değiştirirse yeni kodu `EVDS_CPI_SERIES` ortam değişkeniyle ekleyebilirsiniz. Kaynaklar birbirine oran eşlemesiyle eklenir (splice). Enflasyon verisi hiçbir zaman uydurulmaz: yayımlanmamış bir ay için reel getiri boş bırakılır.
 
 ## Dürüstlük notları
 * Hiçbir sistem "her hisse enflasyonu yenecek" garantisi veremez. Ölçülen ve raporlanan başarı ölçütleri şunlardır:

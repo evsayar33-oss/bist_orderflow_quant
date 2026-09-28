@@ -2,9 +2,11 @@
 
 Free source chain (first that works wins, result cached in data/cpi_tr.csv):
   1. data/cpi_manual.csv          (optional, user-uploaded: tarih,cpi)
-  2. TCMB EVDS series TP.FG.J0    (needs a FREE key: GitHub secret EVDS_API_KEY)
-  3. FRED TURCPIALLMINMEI         (OECD monthly CPI index, keyless CSV)
-  4. cached data/cpi_tr.csv
+  2. TCMB EVDS (evds3, TP.FG.J0 spliced with TP.TUKFIY2025.GENEL; FREE key: secret EVDS_API_KEY)
+  3. FRED (OECD CPI index, keyless CSV)
+  4. DBnomics (IMF / OECD CPI, keyless JSON)
+  5. cached data/cpi_tr.csv
+  6. LAST RESORT: USDTRY monthly average as a flagged proxy (+5pp safety margin)
 If a month is not yet published the real return for it is left unresolved;
 the engine never invents inflation figures.
 """
@@ -20,11 +22,16 @@ import requests
 
 import config as C
 
-EVDS_URL = ("https://evds2.tcmb.gov.tr/service/evds/series={code}"
-            "&startDate=01-01-2003&endDate=01-12-2035&type=json&frequency=5")
-# TÜİK may re-base CPI (new series code). Add codes via env EVDS_CPI_SERIES="CODE1,CODE2".
-EVDS_CODES = [c.strip() for c in os.environ.get("EVDS_CPI_SERIES", "TP.FG.J0").split(",") if c.strip()]
-FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=TURCPIALLMINMEI"
+# TCMB moved EVDS to evds3 in 2025 and TÜİK re-based CPI to 2025=100:
+# old code TP.FG.J0 (2003=100, archived) is spliced with TP.TUKFIY2025.GENEL.
+EVDS_BASES = ["https://evds3.tcmb.gov.tr/igmevdsms-dis/", "https://evds2.tcmb.gov.tr/service/evds/"]
+EVDS_QUERY = "series={code}&startDate=01-01-2003&endDate=01-12-2035&type=json&frequency=5"
+EVDS_CODES = [c.strip() for c in os.environ.get("EVDS_CPI_SERIES", "TP.FG.J0,TP.TUKFIY2025.GENEL").split(",") if c.strip()]
+FRED_URLS = ["https://fred.stlouisfed.org/graph/fredgraph.csv?id=TURCPIALLMINMEI",
+             "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPALTT01TRM661N"]
+DBNOMICS_URLS = ["https://api.db.nomics.world/v22/series/IMF/CPI/M.TR.PCPI_IX?observations=1&format=json",
+                 "https://api.db.nomics.world/v22/series/OECD/MEI/TUR.CPALTT01.IXOB.M?observations=1&format=json"]
+PROXY_SAFETY_PP = 5.0     # extra inflation assumed when only the USDTRY proxy is available
 
 
 def _month(x) -> pd.Timestamp:
@@ -51,23 +58,30 @@ def _from_evds() -> Optional[pd.Series]:
     key = os.environ.get("EVDS_API_KEY")
     if not key:
         return None
-    out = None
+    out, errors = None, []
     for code in EVDS_CODES:
-        r = requests.get(EVDS_URL.format(code=code), headers={"key": key}, timeout=30)
-        r.raise_for_status()
         field = code.replace(".", "_")
-        idx, val = [], []
-        for it in r.json().get("items", []):
-            t = str(it.get("Tarih", ""))
-            v = it.get(field)
-            if not t or v in (None, ""):
-                continue
-            y, m = t.split("-")[:2]
-            idx.append(pd.Timestamp(int(y), int(m), 1))
-            val.append(float(v))
-        if idx:
-            s = _clean(pd.Series(val, index=idx))
-            out = s if out is None else splice(out, s)
+        for base in EVDS_BASES:
+            try:
+                r = requests.get(base + EVDS_QUERY.format(code=code), headers={"key": key}, timeout=40)
+                r.raise_for_status()
+                idx, val = [], []
+                for it in r.json().get("items", []):
+                    t = str(it.get("Tarih", ""))
+                    v = it.get(field)
+                    if not t or v in (None, ""):
+                        continue
+                    y, m = t.split("-")[:2]
+                    idx.append(pd.Timestamp(int(y), int(m), 1))
+                    val.append(float(v))
+                if idx:
+                    s = _clean(pd.Series(val, index=idx))
+                    out = s if out is None else splice(out, s)
+                    break
+            except Exception as exc:
+                errors.append(f"{code}@{base.split('/')[2]}: {str(exc)[:60]}")
+    if out is None and errors:
+        raise RuntimeError("; ".join(errors[:3]))
     return out
 
 
@@ -86,11 +100,55 @@ def splice(base: pd.Series, ext: pd.Series) -> pd.Series:
 
 
 def _from_fred() -> Optional[pd.Series]:
-    r = requests.get(FRED_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-    df = pd.read_csv(io.StringIO(r.text))
-    date_col = df.columns[0]
-    return _clean(pd.Series(df.iloc[:, 1].to_numpy(), index=pd.to_datetime(df[date_col])))
+    last_exc = None
+    for url in FRED_URLS:
+        for _ in range(2):
+            try:
+                r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+                r.raise_for_status()
+                df = pd.read_csv(io.StringIO(r.text))
+                s = _clean(pd.Series(pd.to_numeric(df.iloc[:, 1], errors="coerce").to_numpy(),
+                                     index=pd.to_datetime(df.iloc[:, 0])))
+                if len(s) >= 24:
+                    return s
+            except Exception as exc:
+                last_exc = exc
+    if last_exc:
+        raise last_exc
+    return None
+
+
+def _from_dbnomics() -> Optional[pd.Series]:
+    last_exc = None
+    for url in DBNOMICS_URLS:
+        try:
+            r = requests.get(url, timeout=40, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            docs = r.json().get("series", {}).get("docs", [])
+            if not docs:
+                continue
+            per, val = docs[0].get("period", []), docs[0].get("value", [])
+            s = _clean(pd.Series([v if v not in ("NA", None) else np.nan for v in val],
+                                 index=pd.to_datetime([p + "-01" if len(p) == 7 else p for p in per])))
+            if len(s) >= 24:
+                return s
+        except Exception as exc:
+            last_exc = exc
+    if last_exc:
+        raise last_exc
+    return None
+
+
+def proxy_from_fx(fx: Optional[pd.Series]) -> pd.Series:
+    """LAST RESORT: monthly average USDTRY as an inflation proxy (clearly flagged).
+    TRY depreciation tracks the inflation differential only loosely, so a safety
+    margin is added to the expected inflation when this proxy is in use."""
+    if fx is None or len(fx) < 300:
+        return pd.Series(dtype=float)
+    m = pd.to_numeric(fx, errors="coerce").dropna()
+    m.index = pd.to_datetime(m.index)
+    m = m.resample("MS").mean().dropna()
+    return m[m > 0]
 
 
 def _from_cache() -> Optional[pd.Series]:
@@ -104,7 +162,7 @@ def load_cpi(allow_network: bool = True) -> Tuple[pd.Series, Dict]:
     tried = {}
     sources = [("manual", _from_manual)]
     if allow_network:
-        sources += [("evds", _from_evds), ("fred", _from_fred)]
+        sources += [("evds", _from_evds), ("fred", _from_fred), ("dbnomics", _from_dbnomics)]
     sources += [("cache", _from_cache)]
     best, best_name = None, None
     for name, fn in sources:
@@ -158,15 +216,29 @@ def cpi_ratio_vec(cpi: pd.Series, starts, ends) -> np.ndarray:
     return np.asarray(out, float)
 
 
-def inflation_stats(cpi: pd.Series) -> Dict:
+def load_cpi_or_proxy(fx: Optional[pd.Series] = None, allow_network: bool = True) -> Tuple[pd.Series, Dict]:
+    cpi, meta = load_cpi(allow_network)
+    if meta.get("status") == "OK":
+        # an official series that has stopped updating (> 4 months) is still used for history,
+        # but flagged so the dashboard/Telegram can warn
+        if cpi.index[-1] < pd.Timestamp.now().normalize() - pd.DateOffset(months=4):
+            meta["status"] = "STALE"
+        return cpi, meta
+    px = proxy_from_fx(fx)
+    if len(px) >= 24:
+        meta.update({"source": "USDTRY_PROXY", "status": "PROXY", "last_month": str(px.index[-1].date())})
+        return px, meta
+    return cpi, meta
+
+
+def inflation_stats(cpi: pd.Series, proxy: bool = False) -> Dict:
     if cpi is None or len(cpi) < 13:
-        return {"yoy_pct": None, "ann6m_pct": None, "expected_12m_pct": None}
+        return {"yoy_pct": None, "ann6m_pct": None, "expected_12m_pct": None, "is_proxy": proxy}
     last = cpi.index[-1]
     yoy = (cpi.iloc[-1] / cpi.iloc[-13] - 1.0) * 100.0
     ann6 = ((cpi.iloc[-1] / cpi.iloc[-7]) ** 2 - 1.0) * 100.0 if len(cpi) >= 7 else yoy
-    # Expected next-12m inflation: blend of trailing year and recent 6m pace.
-    # Conservative (never below the recent pace blend) because the objective is
-    # to beat inflation, so under-estimating it is the costly error.
-    exp = max(0.5 * yoy + 0.5 * ann6, 0.0)
+    # Expected next-12m inflation: blend of trailing year and recent 6m pace. Under-estimating
+    # inflation is the costly error for a beat-inflation objective -> proxy gets a safety margin.
+    exp = max(0.5 * yoy + 0.5 * ann6, 0.0) + (PROXY_SAFETY_PP if proxy else 0.0)
     return {"last_month": str(last.date()), "yoy_pct": round(float(yoy), 2),
-            "ann6m_pct": round(float(ann6), 2), "expected_12m_pct": round(float(exp), 2)}
+            "ann6m_pct": round(float(ann6), 2), "expected_12m_pct": round(float(exp), 2), "is_proxy": proxy}

@@ -117,11 +117,48 @@ def unit_checks() -> dict:
     return res
 
 
+def inflation_gate_check(W) -> dict:
+    """Day 1: no CPI and no FX proxy -> review must block buys. Day 2 (same month): CPI back ->
+    the ungated review must be redone and buys must appear."""
+    import main as M
+    import state_manager as SM
+    days = [d for d in W["days"] if d >= pd.Timestamp("2025-06-02")][:2]
+    reg_df = pd.DataFrame({"idx": W["idx"], "fx": W["fx"]})
+    cur = {"d": days[0]}
+    fetch = lambda st: (snapshot_for(W, cur["d"]), {"source": "synthetic"})
+    hist_fn = lambda tickers, start: {t: g[(g.index >= pd.Timestamp(start)) & (g.index <= cur["d"])]
+                                      for t, g in W["hist"].items() if t in tickers}
+
+    def no_regime():
+        raise RuntimeError("offline")
+    r1 = M.run(today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
+               cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
+    st1 = SM.load_state()
+    blocked = r1["review"] is not None and not st1["portfolio"]["pending"] and \
+        st1["last_rebalance"].get("expected_inflation_12m") is None
+    cur["d"] = days[1]
+    last = pd.Timestamp(days[1]) - pd.DateOffset(months=1)
+    r2 = M.run(today=days[1], fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
+               cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
+    st2 = SM.load_state()
+    redone = r2["review"] is not None and any(o["action"] == "BUY" for o in st2["portfolio"]["pending"])
+    # proxy path: CPI unavailable but FX series present
+    r3 = M.run(today=pd.Timestamp(cal.add_sessions(days[1], 1)), fetch=lambda st: (snapshot_for(W, cal.add_sessions(days[1], 1)), {}),
+               hist_fn=hist_fn, regime_fn=lambda: reg_df, cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
+    st3 = SM.load_state()
+    proxy = st3["inflation"].get("status") == "PROXY" and st3["inflation"].get("expected_12m_pct") is not None
+    for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
+        if os.path.exists(f):
+            os.remove(f)
+    return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy)}
+
+
 def run_self_test() -> bool:
     import main as M
     import autonomy_guard as AG
     assert os.path.abspath(C.DATA_DIR) != os.path.abspath("data"), "self-test must not use ./data"
     W = synthetic_world()
+    gate = inflation_gate_check(W)
     split = ("SYN003", pd.Timestamp("2025-03-03"), 0.5)
     live_days = [d for d in W["days"] if pd.Timestamp("2024-11-01") <= d <= pd.Timestamp("2026-05-29")]
     reg_df = pd.DataFrame({"idx": W["idx"], "fx": W["fx"]})
@@ -172,6 +209,7 @@ def run_self_test() -> bool:
         "real_return_reported": st["performance"]["nav"].get("real_total_pct") is not None,
         "backtest_ran": rep["portfolio"].get("days", 0) > 200,
         **{f"unit_{k}": bool(v) for k, v in u.items()},
+        **{f"gate_{k}": v for k, v in gate.items()},
     }
     print("SELF-TEST checks:", checks)
     print("live performance:", st["performance"]["nav"])

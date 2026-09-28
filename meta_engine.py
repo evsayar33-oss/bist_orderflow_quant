@@ -104,7 +104,10 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         & ~f["fund_break"].astype(bool)
         & ~f.index.isin(cur)
     )
-    if f["exp_real_12m"].notna().any():
+    no_inflation = not f["exp_real_12m"].notna().any()
+    if no_inflation:
+        elig &= False          # no inflation estimate -> no real-return gate -> no new buys
+    else:
         elig &= f["exp_real_12m"] >= C.MIN_EXPECTED_REAL_PCT
     if today_change is not None:
         chg = today_change.reindex(f.index)
@@ -156,7 +159,7 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         if t in tw and abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
             # only trim overweights when exposure is reduced; never add to a position in a blocked state
             orders.append({"ticker": t, "action": "REBAL", "reason": "WEIGHT_DRIFT", "target_w": round(tw[t], 5)})
-    summary = {"cutoff": cutoff, "n_target": n_target, "holds": holds, "sells": [s for s, _ in sells],
+    summary = {"cutoff": cutoff, "n_target": n_target, "no_inflation_block": no_inflation, "holds": holds, "sells": [s for s, _ in sells],
                "buys": buys, "target_weights": {k: round(v, 4) for k, v in tw.items()},
                "cash_target": round(1.0 - sum(tw.values()), 4)}
     return orders, summary

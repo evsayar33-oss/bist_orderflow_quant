@@ -166,7 +166,9 @@ def format_monthly(today, state, rev, top) -> str:
     perf = state.get("performance", {})
     L = [f"🏛️ <b>BIST REEL GETİRİ MOTORU V3 — AYLIK GÖZDEN GEÇİRME</b> | {today:%d.%m.%Y}",
          f"🎯 Hedef: 12 ayda TÜFE'yi yenmek (ikincil: XU100)",
-         f"📉 TÜFE yıllık %{inf.get('yoy_pct')} | beklenen 12A %{inf.get('expected_12m_pct')} ({inf.get('source')})",
+         f"📉 TÜFE yıllık %{inf.get('yoy_pct')} | beklenen 12A %{inf.get('expected_12m_pct')} ({inf.get('source')})"
+         + (" ⚠️ VEKİL (USDTRY) — EVDS_API_KEY ekleyin" if inf.get("status") == "PROXY" else "")
+         + (" ⛔ TÜFE YOK: yeni alım yapılmadı" if inf.get("expected_12m_pct") is None else ""),
          f"🧭 Rejim: <b>{reg.get('label')}</b> | P(risk-off) %{float(reg.get('p_risk_off') or 0) * 100:.0f} | "
          f"piyasa 12A beklenti %{rev.get('market_12m', {}).get('mkt_12m_pct')}",
          f"🛡️ Guard: {g.get('mode')} | maruziyet %{float(rev.get('exposure', 0)) * 100:.0f}",
@@ -238,13 +240,25 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
 
     # inflation
     cpi, cmeta = cpi_fn()
-    cpi_stats = INF.inflation_stats(cpi)
+    if cmeta.get("status") not in ("OK", "STALE") and rser is not None and "fx" in rser:
+        px = INF.proxy_from_fx(rser["fx"])
+        if len(px) >= 24:
+            cpi, cmeta = px, {**cmeta, "source": "USDTRY_PROXY", "status": "PROXY", "last_month": str(px.index[-1].date())}
+    cpi_stats = INF.inflation_stats(cpi, proxy=cmeta.get("status") == "PROXY")
     state["inflation"] = {**cpi_stats, **cmeta}
 
     # portfolio: execute pending orders at today's open, mark to close
     if not state.get("portfolio"):
         state["portfolio"] = new_portfolio(today)
     pf = state["portfolio"]
+    # A review taken while inflation was unknown had no real-return gate: cancel its
+    # not-yet-executed buys and redo the review now that an inflation estimate exists.
+    lr = state.get("last_rebalance", {}) or {}
+    if lr.get("status") == "OK" and lr.get("expected_inflation_12m") is None and cpi_stats.get("expected_12m_pct") is not None:
+        before = len(pf["pending"])
+        pf["pending"] = [o for o in pf["pending"] if o["action"] == "SELL"]
+        pf["last_rebalance_month"] = None
+        print(f"ℹ️ Enflasyon kapısı olmadan verilmiş {before - len(pf['pending'])} emir iptal edildi; aylık gözden geçirme yenileniyor.")
     bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
     events, lots = apply_day(pf, bars, today)
     if lots:

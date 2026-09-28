@@ -75,12 +75,12 @@ def fund_inputs_at(pit: pd.DataFrame, date, price_f: pd.DataFrame, latest_paid: 
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def cpi_stats_at(cpi: pd.Series, date) -> Dict:
+def cpi_stats_at(cpi: pd.Series, date, proxy: bool = False) -> Dict:
     if cpi is None or cpi.empty:
         return {"yoy_pct": None, "expected_12m_pct": None}
     last_pub = pd.Timestamp(date) - pd.DateOffset(months=1)        # ~1 month publication lag
     s = cpi[cpi.index <= pd.Timestamp(last_pub.year, last_pub.month, 1)]
-    return INF.inflation_stats(s)
+    return INF.inflation_stats(s, proxy=proxy)
 
 
 def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
@@ -91,6 +91,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     data = data if data is not None else MD.download_history(UNIVERSE, start, end, min_rows=300)
     if len(data) < C.MIN_CROSS_SECTION:
         raise RuntimeError(f"Gerçek veri yetersiz: {len(data)} hisse")
+    rdf = None
     try:
         rdf = regime_df if regime_df is not None else RM.download_regime_series(start=start, end=end)
         index_close, X = rdf["idx"], RM.make_features(rdf)
@@ -99,7 +100,9 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         index_close, X = None, None
     cpi_meta = {"source": "given"}
     if cpi is None:
-        cpi, cpi_meta = INF.load_cpi()
+        cpi, cpi_meta = INF.load_cpi_or_proxy(fx=rdf["fx"] if rdf is not None else None)
+        if cpi_meta.get("status") == "PROXY":
+            print("⚠️ Resmî TÜFE alınamadı; USDTRY vekili kullanılıyor (EVDS_API_KEY ekleyin).")
     fund_cov = 0.0
     if pit is None:
         try:
@@ -121,7 +124,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         if len(pf_) < C.MIN_CROSS_SECTION:
             continue
         fi = fund_inputs_at(pit, d, pf_, latest_paid)
-        cs = cpi_stats_at(cpi, d)
+        cs = cpi_stats_at(cpi, d, proxy=cpi_meta.get("status") == "PROXY")
         inputs[d] = (pf_, fi, cs)
         fr, cov = build_frame(pf_, fi, cs.get("yoy_pct"), sector_map)
         fund_cov = max(fund_cov, float(np.mean([cov.get(k, 0) for k in C.FUNDAMENTAL_FACTORS])))
