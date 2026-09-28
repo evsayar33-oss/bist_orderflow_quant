@@ -1,8 +1,8 @@
 {
   "version": "5.0.0",
   "strategy": "ADAPTIVE_BIST_ORDERFLOW_META_ENGINE_V1",
-  "market_regime": "RECOVERY",
-  "regime_confidence": 40.0,
+  "market_regime": "PANIC",
+  "regime_confidence": 80.0,
   "weights": {
     "pre_move": 0.4,
     "flow": 0.25,
@@ -33,7 +33,7 @@
     "shadow_model_version": "shadow-1",
     "active_oos_score": 0.004825,
     "shadow_oos_score": 0.008382,
-    "last_validation_date": "2026-09-25",
+    "last_validation_date": "2026-09-28",
     "last_promotion_date": null,
     "rollback_count": 0,
     "previous_weights": {},
@@ -50,7 +50,7 @@
     "min_signal_score": 72.0
   },
   "audit_summary": {
-    "last_audit_date": "2026-09-25",
+    "last_audit_date": "2026-09-28",
     "total_signals_audited": 5140,
     "win_rate_t3": 28.7,
     "win_rate_6m": 0.0,
@@ -59,29 +59,29 @@
     "six_month_status": "WARMUP",
     "six_month_horizon_trading_days": 126,
     "status": "SHADOW_PROPOSED (3975 samples; 0 regime models) | OOS_REJECTED_OR_UNCHANGED",
-    "winrate_optimizer_status": "WARMUP | threshold=72.0 | OOS WR=42.86% | LCB=22.60% | N=7"
+    "winrate_optimizer_status": "UNCHANGED | threshold=72.0 | OOS WR=11.11% | LCB=3.39% | N=9"
   },
   "data_quality": {
     "ok": true,
-    "score": 99.9,
-    "rows": 413,
-    "invalid_rows": 1,
+    "score": 100.0,
+    "rows": 450,
+    "invalid_rows": 0,
     "missing_optional": [],
     "missing_rate": 0.0
   },
   "regime_stats": {
-    "breadth_up": 0.6489,
-    "breadth_down": 0.3075,
-    "median_daily": 0.756,
-    "median_monthly": -18.789,
-    "dispersion": 3.147,
-    "high_rvol_share": 0.0508
+    "breadth_up": 0.1044,
+    "breadth_down": 0.8911,
+    "median_daily": -4.692,
+    "median_monthly": -23.582,
+    "dispersion": 3.809,
+    "high_rvol_share": 0.08
   },
   "effective_weights": {
-    "pre_move": 0.413,
-    "flow": 0.25,
-    "resilience": 0.137,
-    "regime_fit": 0.1,
+    "pre_move": 0.3025,
+    "flow": 0.2175,
+    "resilience": 0.2475,
+    "regime_fit": 0.1325,
     "quality": 0.1
   },
   "autonomy_guard": {
@@ -90,21 +90,19 @@
     "exposure_multiplier": 0.6,
     "signal_threshold_add": 5.0,
     "block_new_entries": false,
-    "drift_score": 0.2958,
+    "drift_score": 0.1445,
     "performance_drift": 0.0,
-    "ops_score": 99.93,
-    "regime_stress": 0.75,
-    "risk_score": 0.75,
+    "ops_score": 100.0,
+    "regime_stress": 0.55,
+    "risk_score": 0.55,
     "watch_streak": 3,
     "safe_streak": 0,
     "recovery_streak": 0,
     "healthy_streak": 4,
     "last_transition": "2026-09-25T12:53:21.250307+00:00",
-    "last_evaluation": "2026-09-25T12:53:21.250307+00:00",
-    "reason": "WATCH_STRESS+REGIME_TRANSITION_STRESS",
+    "last_evaluation": "2026-09-28T15:47:50.762985+00:00",
+    "reason": "HEALTHY",
     "recent_regimes": [
-      "NEUTRAL",
-      "BROAD_SELL_OFF",
       "BROAD_SELL_OFF",
       "RECOVERY",
       "RECOVERY",
@@ -112,107 +110,109 @@
       "NEUTRAL",
       "BROAD_SELL_OFF",
       "BROAD_SELL_OFF",
-      "RECOVERY"
+      "RECOVERY",
+      "RECOVERY",
+      "PANIC"
     ],
     "feature_baseline": {
       "pre_move_score": {
-        "n": 2209,
-        "mean": 50.111142,
-        "std": 14.701355,
-        "median": 51.169152,
-        "q25": 41.026655,
-        "q75": 61.55627,
-        "mad": 10.350764
+        "n": 2659,
+        "mean": 50.111118,
+        "std": 14.720142,
+        "median": 51.033194,
+        "q25": 40.902822,
+        "q75": 61.558456,
+        "mad": 10.408226
       },
       "flow_score": {
-        "n": 2209,
-        "mean": 50.112999,
-        "std": 17.511949,
-        "median": 51.776662,
-        "q25": 38.628594,
-        "q75": 62.483698,
-        "mad": 11.860489
+        "n": 2659,
+        "mean": 50.112871,
+        "std": 17.53826,
+        "median": 51.585329,
+        "q25": 38.468414,
+        "q75": 62.662013,
+        "mad": 11.994965
       },
       "resilience_score": {
-        "n": 2209,
-        "mean": 50.110739,
-        "std": 18.916557,
-        "median": 49.628263,
-        "q25": 36.389433,
-        "q75": 64.074471,
-        "mad": 13.824588
+        "n": 2659,
+        "mean": 50.110891,
+        "std": 18.910731,
+        "median": 49.54935,
+        "q25": 36.362461,
+        "q75": 64.190747,
+        "mad": 13.868359
       },
       "risk_score": {
-        "n": 898,
-        "mean": 35.841292,
-        "std": 12.154757,
-        "median": 32.965,
-        "q25": 27.23,
-        "q75": 41.055,
-        "mad": 6.575
+        "n": 1348,
+        "mean": 35.899616,
+        "std": 12.189655,
+        "median": 32.98925,
+        "q25": 27.2435,
+        "q75": 41.32975,
+        "mad": 6.60875
       },
       "quality_score": {
-        "n": 2209,
-        "mean": 81.103595,
-        "std": 3.998328,
-        "median": 84.639,
+        "n": 2659,
+        "mean": 81.108193,
+        "std": 3.998172,
+        "median": 84.65705,
         "q25": 77.0,
         "q75": 85.0,
         "mad": 0.0
       },
       "overnight_risk": {
-        "n": 2209,
-        "mean": 39.263585,
-        "std": 12.402575,
-        "median": 38.685758,
-        "q25": 30.021777,
-        "q75": 47.166287,
-        "mad": 8.56418
+        "n": 2659,
+        "mean": 39.26035,
+        "std": 12.411262,
+        "median": 38.66397,
+        "q25": 30.025688,
+        "q75": 47.162973,
+        "mad": 8.573471
       },
       "rvol": {
-        "n": 2209,
-        "mean": 1.016907,
-        "std": 1.115249,
-        "median": 0.852297,
-        "q25": 0.633478,
-        "q75": 1.158304,
-        "mad": 0.242419
+        "n": 2659,
+        "mean": 1.010777,
+        "std": 1.085511,
+        "median": 0.848148,
+        "q25": 0.631951,
+        "q75": 1.150805,
+        "mad": 0.239691
       },
       "perf_w": {
-        "n": 2209,
-        "mean": -14.38324,
-        "std": 11.59203,
-        "median": -13.364705,
-        "q25": -19.767548,
-        "q75": -7.770437,
-        "mad": 6.023468
+        "n": 2659,
+        "mean": -14.055488,
+        "std": 11.557704,
+        "median": -13.060404,
+        "q25": -19.439986,
+        "q75": -7.451664,
+        "mad": 6.016848
       },
       "perf_1m": {
-        "n": 2209,
-        "mean": -17.761446,
-        "std": 16.2591,
-        "median": -16.781586,
-        "q25": -27.214431,
-        "q75": -7.378258,
-        "mad": 9.786495
+        "n": 2659,
+        "mean": -18.117514,
+        "std": 16.370788,
+        "median": -17.121608,
+        "q25": -27.693441,
+        "q75": -7.588368,
+        "mad": 9.920442
       }
     },
     "stress_test": {
       "passed": true,
       "version": "1.0.0",
-      "timestamp": "2026-09-25T12:53:21.245476+00:00",
+      "timestamp": "2026-09-28T15:47:50.756863+00:00",
       "cases": 7,
       "passed_cases": 7
     },
     "performance_detail": {
-      "samples": 7,
+      "samples": 13,
       "status": "WARMUP"
     }
   },
   "autonomy": {
     "version": "1.0.0",
     "last_mode": "WATCH",
-    "last_reason": "WATCH_STRESS+REGIME_TRANSITION_STRESS"
+    "last_reason": "HEALTHY"
   },
   "win_rate_optimizer": {
     "version": "1.0.0",
@@ -221,16 +221,126 @@
     "return_col": "ret_t3",
     "outcome_col": null,
     "baseline_threshold": 72.0,
-    "last_run": "2026-09-25T12:53:02.533027Z",
-    "status": "WARMUP",
+    "last_run": "2026-09-28T15:47:04.144714Z",
+    "status": "UNCHANGED",
     "active_threshold": 72.0,
     "active_oos": {
-      "n": 7,
-      "wins": 3,
-      "win_rate": 42.86,
-      "wilson_lcb": 22.6,
-      "pf": 1.4216,
-      "avg_return": 0.9383
-    }
+      "n": 9,
+      "wins": 1,
+      "win_rate": 11.11,
+      "wilson_lcb": 3.39,
+      "pf": 0.3169,
+      "avg_return": -3.047
+    },
+    "walk_forward_folds": [
+      {
+        "train_start": "2026-09-18",
+        "train_end": "2026-09-21",
+        "test_start": "2026-09-22",
+        "test_end": "2026-09-23",
+        "selected_threshold": 72.0,
+        "train": {
+          "n": 7,
+          "wins": 3,
+          "win_rate": 42.86,
+          "wilson_lcb": 22.6,
+          "pf": 1.4216,
+          "avg_return": 0.9383
+        },
+        "active_test": {
+          "n": 9,
+          "wins": 1,
+          "win_rate": 11.11,
+          "wilson_lcb": 3.39,
+          "pf": 0.3169,
+          "avg_return": -3.047
+        },
+        "candidate_test": {
+          "n": 9,
+          "wins": 1,
+          "win_rate": 11.11,
+          "wilson_lcb": 3.39,
+          "pf": 0.3169,
+          "avg_return": -3.047
+        }
+      },
+      {
+        "train_start": "2026-09-18",
+        "train_end": "2026-09-23",
+        "test_start": "2026-09-24",
+        "test_end": "2026-09-24",
+        "selected_threshold": 72.0,
+        "train": {
+          "n": 16,
+          "wins": 4,
+          "win_rate": 25.0,
+          "wilson_lcb": 13.91,
+          "pf": 0.6257,
+          "avg_return": -1.3034
+        },
+        "active_test": {
+          "n": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "wilson_lcb": 0.0,
+          "pf": null,
+          "avg_return": null
+        },
+        "candidate_test": {
+          "n": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "wilson_lcb": 0.0,
+          "pf": null,
+          "avg_return": null
+        }
+      },
+      {
+        "train_start": "2026-09-18",
+        "train_end": "2026-09-24",
+        "test_start": "2026-09-25",
+        "test_end": "2026-09-25",
+        "selected_threshold": 72.0,
+        "train": {
+          "n": 16,
+          "wins": 4,
+          "win_rate": 25.0,
+          "wilson_lcb": 13.91,
+          "pf": 0.6257,
+          "avg_return": -1.3034
+        },
+        "active_test": {
+          "n": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "wilson_lcb": 0.0,
+          "pf": null,
+          "avg_return": null
+        },
+        "candidate_test": {
+          "n": 0,
+          "wins": 0,
+          "win_rate": 0.0,
+          "wilson_lcb": 0.0,
+          "pf": null,
+          "avg_return": null
+        }
+      }
+    ],
+    "selected_thresholds": [
+      72.0,
+      72.0,
+      72.0
+    ],
+    "candidate_threshold": 72.0,
+    "candidate_oos": {
+      "n": 9,
+      "wins": 1,
+      "win_rate": 11.11,
+      "wilson_lcb": 3.39,
+      "pf": 0.3169,
+      "avg_return": -3.047
+    },
+    "decision_reason": "OOS_SAMPLE_TOO_SMALL"
   }
 }
