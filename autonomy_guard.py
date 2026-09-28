@@ -8,8 +8,9 @@ Fixes of V1:
 * Drift is measured on RAW features (z-scores are N(0,1) by construction).
 * Regime stress comes from the HMM forecast (P(risk-off) and state
   instability), not from a label that flipped every day.
-* Performance drift uses the live out-of-sample composite IC and realised
-  trade returns (date ordered).
+* Performance drift (V3, long horizon): live 3-month IC of the recorded
+  composite, portfolio drawdown and 6-month performance versus XU100.
+* In V3 the guard only scales/blocks NEW buys; it never forces selling.
 Failure anywhere -> SAFE (no new entries), never a crash.
 """
 from __future__ import annotations
@@ -35,7 +36,7 @@ DEFAULT_GUARD = {
     "feature_baseline": {}, "reason": "BOOTSTRAP", "last_transition": None, "last_evaluation": None,
 }
 
-DRIFT_FEATURES = ["rvol", "atr_pct", "change_pct", "perf_1m", "log_value_traded"]
+DRIFT_FEATURES = ["change_pct", "log_value_traded"]
 
 
 # ------------------------------------------------------------------ helpers
@@ -93,27 +94,26 @@ def feature_drift(features: Optional[pd.DataFrame], baseline: Dict, mode: str) -
     return float(np.clip(0.7 * max(drifts) + 0.3 * np.mean(drifts), 0, 1))
 
 
-def performance_drift(live_ic: Optional[Dict], trade_returns: Optional[pd.Series]) -> (float, Dict):
-    detail = {}
-    ic_d = 0.0
-    if live_ic and live_ic.get("n_dates", 0) >= 20 and live_ic.get("ic_recent20") is not None:
-        r = float(live_ic["ic_recent20"])
-        ic_d = float(np.clip(-r / 0.05, 0, 1))
-        detail["ic_recent20"] = r
-    tr_d = 0.0
-    s = pd.to_numeric(trade_returns, errors="coerce").dropna() if trade_returns is not None else pd.Series(dtype=float)
-    # Only RECENTLY closed trades are passed in (caller filters by exit date), so a
-    # SAFE period without trades cannot freeze the guard in SAFE forever: once old
-    # losses age out, recovery is decided by the live out-of-sample composite IC.
-    if len(s) >= 30:
-        recent, base = s.iloc[-20:], s.iloc[:-20].tail(60)
-        se = float(np.sqrt(recent.var(ddof=1) / len(recent) + base.var(ddof=1) / len(base)))
-        t = (recent.mean() - base.mean()) / se if se > 0 else 0.0
-        tr_d = float(np.clip(-t / 3.0, 0, 1)) if recent.mean() < 0 else 0.0
-        detail.update({"recent_mean_net": round(float(recent.mean()), 3), "base_mean_net": round(float(base.mean()), 3),
-                       "t_recent_vs_base": round(float(t), 3)})
-    detail["n_trades"] = int(len(s))
-    return float(max(ic_d, tr_d)), detail
+def performance_drift(live_ic: Optional[Dict], nav_df: Optional[pd.DataFrame]) -> (float, Dict):
+    """Long-horizon health: 3-month live IC of the recorded composite, portfolio
+    drawdown and 6-month performance relative to XU100."""
+    detail, parts = {}, [0.0]
+    if live_ic and live_ic.get("n_dates", 0) >= 12 and live_ic.get("ic_recent") is not None:
+        r = float(live_ic["ic_recent"])
+        parts.append(float(np.clip(-r / 0.08, 0, 1)))
+        detail["ic3m_recent"] = r
+    if nav_df is not None and len(nav_df) >= 20:
+        nv = pd.to_numeric(nav_df["nav"], errors="coerce").dropna()
+        dd = float((nv.iloc[-1] / nv.cummax().iloc[-1] - 1) * 100)
+        detail["nav_drawdown_pct"] = round(dd, 2)
+        parts.append(0.85 if dd <= -25 else 0.5 if dd <= -15 else 0.0)
+        if "xu100" in nav_df and len(nav_df) >= 126:
+            x = pd.to_numeric(nav_df["xu100"], errors="coerce").ffill()
+            if x.notna().iloc[-126] and x.notna().iloc[-1]:
+                rel = (nv.iloc[-1] / nv.iloc[-126] - x.iloc[-1] / x.iloc[-126]) * 100
+                detail["rel_vs_xu100_6m_pct"] = round(float(rel), 2)
+                parts.append(0.5 if rel <= -15 else 0.0)
+    return float(max(parts)), detail
 
 
 def regime_stress(regime: Dict) -> float:
@@ -206,7 +206,7 @@ def run_self_test() -> Dict:
 
 # ------------------------------------------------------------------ public API
 def evaluate_guard(state: Dict, *, features: Optional[pd.DataFrame], data_quality: float, rows: Optional[int],
-                   live_ic: Optional[Dict], trade_returns: Optional[pd.Series]) -> Dict:
+                   live_ic: Optional[Dict], nav_df: Optional[pd.DataFrame]) -> Dict:
     try:
         g = deepcopy(DEFAULT_GUARD)
         g.update(state.get("autonomy_guard", {}) or {})
@@ -214,7 +214,7 @@ def evaluate_guard(state: Dict, *, features: Optional[pd.DataFrame], data_qualit
         g["self_test"] = test
         baseline = g.get("feature_baseline", {}) or {}
         drift = feature_drift(features, baseline, g.get("mode", "WATCH"))
-        perf, perf_detail = performance_drift(live_ic, trade_returns)
+        perf, perf_detail = performance_drift(live_ic, nav_df)
         ops = ops_score(data_quality, rows)
         reg = regime_stress(state.get("regime", {}))
         flags = classify(drift, perf, ops, reg)

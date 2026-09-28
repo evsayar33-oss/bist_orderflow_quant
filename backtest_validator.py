@@ -1,54 +1,105 @@
-"""Trade- and portfolio-level performance metrics (date-ordered, cost-aware)."""
+"""Performance measurement in the engine's own yardstick: REAL (CPI) return,
+with XU100 as the secondary benchmark. Used by the live report, the weekly
+audit and the backtest, so all three speak the same language."""
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 
-from learner_engine import newey_west
+from inflation import cpi_ratio, cpi_ratio_vec
 
 
-def trade_metrics(trades: pd.DataFrame) -> Dict:
-    if trades is None or trades.empty:
-        return {"trades": 0}
-    r = pd.to_numeric(trades["net_ret_pct"], errors="coerce").dropna()
-    gains, losses = r[r > 0].sum(), -r[r < 0].sum()
-    per_date = trades.assign(r=r).groupby("signal_date")["r"].mean()
-    m, se, t, n = newey_west(per_date, 5)
-    return {
-        "trades": int(len(r)),
-        "hit_rate_pct": round(float((r > 0).mean() * 100), 2),
-        "avg_net_pct": round(float(r.mean()), 4),
-        "median_net_pct": round(float(r.median()), 4),
-        "profit_factor": round(float(gains / losses), 3) if losses > 0 else None,
-        "date_clustered_mean": round(m, 4),
-        "date_clustered_t": round(t, 3),
-        "date_clustered_lcb90": round(m - 1.2816 * se, 4) if np.isfinite(se) else None,
-        "exit_mix": trades["exit_reason"].value_counts().to_dict() if "exit_reason" in trades else {},
+def enrich_lots(lots: pd.DataFrame, cpi: Optional[pd.Series], index_close: Optional[pd.Series]) -> pd.DataFrame:
+    if lots is None or lots.empty:
+        return pd.DataFrame()
+    L = lots.copy()
+    L["entry_date"] = pd.to_datetime(L["entry_date"])
+    L["exit_date"] = pd.to_datetime(L["exit_date"])
+    L["months_held"] = ((L["exit_date"] - L["entry_date"]).dt.days / 30.44).round(1)
+    cr = cpi_ratio_vec(cpi, L["entry_date"], L["exit_date"]) if cpi is not None and len(cpi) else np.full(len(L), np.nan)
+    L["cpi_ret_pct"] = (cr - 1) * 100
+    L["real_ret_pct"] = ((1 + L["nominal_ret_pct"] / 100) / cr - 1) * 100
+    if index_close is not None and len(index_close):
+        ic = index_close.sort_index()
+        a = ic.reindex(L["entry_date"], method="ffill").to_numpy()
+        b = ic.reindex(L["exit_date"], method="ffill").to_numpy()
+        L["xu100_ret_pct"] = (b / a - 1) * 100
+        L["xu_excess_pct"] = L["nominal_ret_pct"] - L["xu100_ret_pct"]
+    return L
+
+
+def lot_metrics(L: pd.DataFrame) -> Dict:
+    if L is None or L.empty:
+        return {"closed_lots": 0}
+    r = pd.to_numeric(L["nominal_ret_pct"], errors="coerce")
+    real = pd.to_numeric(L.get("real_ret_pct"), errors="coerce") if "real_ret_pct" in L else pd.Series(dtype=float)
+    out = {
+        "closed_lots": int(len(L)),
+        "avg_months_held": round(float(L["months_held"].mean()), 1) if "months_held" in L else None,
+        "hit_nominal_pct": round(float((r > 0).mean() * 100), 1),
+        "avg_nominal_pct": round(float(r.mean()), 2),
+        "exit_mix": L["reason"].value_counts().to_dict() if "reason" in L else {},
     }
+    if real.notna().any():
+        rr = real.dropna()
+        out.update({"hit_beat_cpi_pct": round(float((rr > 0).mean() * 100), 1),
+                    "avg_real_pct": round(float(rr.mean()), 2), "median_real_pct": round(float(rr.median()), 2),
+                    "n_real": int(len(rr))})
+    if "xu_excess_pct" in L and L["xu_excess_pct"].notna().any():
+        x = L["xu_excess_pct"].dropna()
+        out.update({"hit_beat_xu100_pct": round(float((x > 0).mean() * 100), 1),
+                    "avg_xu_excess_pct": round(float(x.mean()), 2)})
+    return out
 
 
-def portfolio_metrics(daily_ret: pd.Series) -> Dict:
-    r = pd.to_numeric(daily_ret, errors="coerce").fillna(0.0)
-    if r.empty:
+def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series]) -> Dict:
+    if nav_df is None or len(nav_df) < 2:
         return {"days": 0}
-    eq = (1.0 + r).cumprod()
-    peak = eq.cummax()
-    mdd = float((eq / peak - 1.0).min() * 100.0)
-    years = max(len(r) / 252.0, 1e-9)
-    cagr = float(eq.iloc[-1] ** (1.0 / years) - 1.0) * 100.0 if eq.iloc[-1] > 0 else -100.0
-    vol = float(r.std(ddof=0) * np.sqrt(252) * 100.0)
-    sharpe = float(r.mean() / r.std(ddof=0) * np.sqrt(252)) if r.std(ddof=0) > 0 else 0.0
-    return {"days": int(len(r)), "total_return_pct": round(float(eq.iloc[-1] - 1.0) * 100.0, 2),
-            "cagr_pct": round(cagr, 2), "ann_vol_pct": round(vol, 2), "sharpe": round(sharpe, 3),
-            "max_drawdown_pct": round(mdd, 2), "calmar": round(cagr / abs(mdd), 3) if mdd < 0 else None}
-
-
-def stability(fold_metrics: List[Dict]) -> Dict:
-    vals = [f.get("date_clustered_mean") for f in fold_metrics if f.get("trades", 0) >= 10]
-    if len(vals) < 2:
-        return {"stable": False, "reason": "too_few_folds", "positive_folds": 0, "folds": len(vals)}
-    pos = sum(1 for v in vals if v is not None and v > 0)
-    return {"stable": bool(pos / len(vals) >= 0.6), "positive_folds": pos, "folds": len(vals),
-            "fold_means": [round(float(v), 4) for v in vals]}
+    d = nav_df.copy()
+    d["tarih"] = pd.to_datetime(d["tarih"])
+    d = d.sort_values("tarih")
+    nv = pd.to_numeric(d["nav"], errors="coerce").ffill()
+    r = nv.pct_change().fillna(0.0)
+    years = max((d["tarih"].iloc[-1] - d["tarih"].iloc[0]).days / 365.25, 1e-9)
+    total = nv.iloc[-1] / nv.iloc[0]
+    out = {"start": str(d["tarih"].iloc[0].date()), "end": str(d["tarih"].iloc[-1].date()),
+           "days": int(len(d)), "total_return_pct": round((total - 1) * 100, 2),
+           "cagr_pct": round((total ** (1 / years) - 1) * 100, 2) if total > 0 else -100.0,
+           "max_drawdown_pct": round(float((nv / nv.cummax() - 1).min() * 100), 2),
+           "ann_vol_pct": round(float(r.std(ddof=0) * np.sqrt(252) * 100), 2),
+           "avg_exposure_pct": round(float(pd.to_numeric(d.get("exposure"), errors="coerce").mean() * 100), 1)
+           if "exposure" in d else None}
+    if "xu100" in d and d["xu100"].notna().sum() > 2:
+        x = pd.to_numeric(d["xu100"], errors="coerce").ffill().bfill()
+        xt = x.iloc[-1] / x.iloc[0]
+        out["xu100_total_pct"] = round((xt - 1) * 100, 2)
+        out["xu100_cagr_pct"] = round((xt ** (1 / years) - 1) * 100, 2)
+        out["excess_vs_xu100_cagr_pp"] = round(out["cagr_pct"] - out["xu100_cagr_pct"], 2)
+    if cpi is not None and len(cpi) > 13:
+        cr = cpi_ratio(cpi, d["tarih"].iloc[0], min(d["tarih"].iloc[-1], cpi.index[-1] + pd.offsets.MonthEnd(0)))
+        if np.isfinite(cr):
+            real_total = total / cr
+            out["cpi_total_pct"] = round((cr - 1) * 100, 2)
+            out["real_total_pct"] = round((real_total - 1) * 100, 2)
+            out["real_cagr_pct"] = round((real_total ** (1 / years) - 1) * 100, 2) if real_total > 0 else -100.0
+        # rolling 12-month windows: share that beat CPI (the user's "win rate" for the portfolio)
+        m = d.set_index("tarih")["nav"].resample("ME").last().dropna()
+        if len(m) >= 13:
+            wins, beats_xu, n = 0, 0, 0
+            xm = d.set_index("tarih")["xu100"].resample("ME").last() if "xu100" in d else None
+            for i in range(12, len(m)):
+                a, b = m.index[i - 12], m.index[i]
+                c = cpi_ratio(cpi, a, b)
+                if not np.isfinite(c):
+                    continue
+                n += 1
+                wins += int(m.iloc[i] / m.iloc[i - 12] > c)
+                if xm is not None and np.isfinite(xm.get(a, np.nan)) and np.isfinite(xm.get(b, np.nan)):
+                    beats_xu += int(m.iloc[i] / m.iloc[i - 12] > xm[b] / xm[a])
+            if n:
+                out["rolling12m_windows"] = n
+                out["rolling12m_beat_cpi_pct"] = round(wins / n * 100, 1)
+                out["rolling12m_beat_xu100_pct"] = round(beats_xu / n * 100, 1)
+    return out

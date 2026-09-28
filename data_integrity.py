@@ -23,7 +23,7 @@ import calendar_tr as cal
 import config as C
 
 REQUIRED = ["ticker", "close", "open", "high", "low", "volume", "change_pct", "value_traded"]
-RECOMMENDED = ["rvol", "perf_w", "perf_1m", "perf_3m", "high_1m", "low_1m", "atr", "sector"]
+RECOMMENDED = ["market_cap", "sector", "roe", "pb", "pe"]
 
 
 def validate_market_frame(df: pd.DataFrame, min_rows: int = C.MIN_CROSS_SECTION) -> Tuple[pd.DataFrame, Dict]:

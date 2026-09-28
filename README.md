@@ -1,9 +1,8 @@
-# Adaptive BIST Orderflow Meta-Engine V2
+# BIST Real-Return Engine V3
 
-End-of-day, free-data-only BIST equity selection engine running on GitHub Actions.
-See **README_TR.md** for the full description and installation steps.
+Long-horizon, monthly-rebalanced BIST portfolio whose objective is to beat Turkish CPI over 12 months (secondary: XU100). Free data only, runs on GitHub Actions. See **README_TR.md**.
 
-- Daily EOD run (18:25 TR): `python main.py`
-- Monthly walk-forward research backtest (writes the learner's prior): `python backtest_optimizer.py`
-- Weekly audit + synthetic self-test: `python longterm_auditor.py`, `python main.py --self-test`
+- Daily run after close: `python main.py`
+- Walk-forward research backtest: `python backtest_optimizer.py`
+- Weekly audit / self-test: `python longterm_auditor.py`, `python main.py --self-test`
 - Dashboard: `streamlit run app.py`

@@ -1,96 +1,169 @@
-"""Scoring and selection for Meta-Engine V2.
+"""Scoring and monthly portfolio construction (live AND backtest use these functions).
 
-Pipeline for one EOD snapshot:
-  factors (flow_engine) -> champion weights (regime-blended) -> composite
-  -> percentile -> calibrated expected net trade return (calibration + HMM)
-  -> eligibility gates -> risk-based position size.
+Rules (long-horizon, low turnover):
+* BUY  : composite percentile >= calibrated cut-off, expected 12m REAL return
+         after costs >= MIN_EXPECTED_REAL_PCT, liquid, no fundamental break,
+         max MAX_PER_SECTOR names per sector, up to TARGET_POSITIONS x exposure.
+* HOLD : keep while percentile >= HOLD_PCT and no fundamental break
+         (hysteresis 85 -> 60 keeps winners for years).
+* SELL : percentile < HOLD_PCT (thesis weakened) or fundamental break;
+         catastrophe stop is handled daily in portfolio.apply_day.
+* Weights: inverse volatility, capped at MAX_POSITION_W, total = exposure
+  (autonomy guard x regime). Idle weight stays in cash. Holdings are only
+  re-weighted when they drift more than REBALANCE_BAND.
 """
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 import config as C
-from calibration import expected_excess
-from flow_engine import build_factor_frame, composite
-from labels import stop_distance_pct
+from calibration import bucket_lookup, market_expectation
+from factors import build_frame, composite, fund_break
+from portfolio import weights as pf_weights
 
 
 def active_weights(state: Dict) -> Tuple[Dict[str, float], str]:
     model = state.get("model", {})
-    champ = model.get("champion_weights") or {k: v for k, v in C.PRIOR_IC.items()}
+    champ = model.get("champion_weights") or dict(C.PRIOR_IC)
     reg = state.get("regime", {})
     label = reg.get("label")
     p = float((reg.get("probs") or {}).get(label, 0.0) or 0.0)
     rw = (model.get("regime_weights") or {}).get(label)
     if rw and p >= 0.6 and not reg.get("degraded", True):
         w = {k: p * rw.get(k, 0.0) + (1 - p) * champ.get(k, 0.0) for k in C.FACTORS}
-        tot = sum(abs(v) for v in w.values()) or 1.0
-        return {k: v / tot for k, v in w.items()}, f"{model.get('champion_version', 'prior')}+{label}"
-    tot = sum(abs(v) for v in champ.values()) or 1.0
-    return {k: v / tot for k, v in champ.items()}, model.get("champion_version", "prior")
+        version = f"{model.get('champion_version', 'prior')}+{label}"
+    else:
+        w, version = {k: champ.get(k, 0.0) for k in C.FACTORS}, model.get("champion_version", "prior")
+    tot = sum(abs(v) for v in w.values()) or 1.0
+    return {k: v / tot for k, v in w.items()}, version
 
 
-def score_snapshot(snap: pd.DataFrame, state: Dict, prev_takas: Optional[pd.Series] = None,
-                   guard: Optional[Dict] = None, open_positions: int = 0,
-                   held_tickers: Optional[set] = None) -> Tuple[pd.DataFrame, Dict]:
-    frame, coverage = build_factor_frame(snap, prev_takas)
-    weights, version = active_weights(state)
-    frame["composite"] = composite(frame, weights)
+def score_universe(price_f: pd.DataFrame, fund_inputs: Optional[pd.DataFrame], state: Dict,
+                   cpi_stats: Dict, sector_map: Optional[Dict[str, str]] = None) -> Tuple[pd.DataFrame, Dict]:
+    frame, cov = build_frame(price_f, fund_inputs, cpi_stats.get("yoy_pct"), sector_map)
+    if frame.empty:
+        return frame, {"error": "no_price_factors"}
+    w, version = active_weights(state)
+    frame["composite"] = composite(frame, w)
     frame["composite_pct"] = frame["composite"].rank(pct=True) * 100.0
     frame["model_version"] = version
-
-    reg = state.get("regime", {})
     cal = state.get("calibration", {})
-    exp_mkt = float(reg.get("exp_mkt_5d_pct", 0.0) or 0.0)
-    p_off = reg.get("p_risk_off")
-    p_off = 0.5 if p_off is None else float(p_off)
+    reg = state.get("regime", {})
     calibrated = cal.get("status") == "CALIBRATED"
-    frame["exp_excess_pct"] = expected_excess(frame["composite_pct"], cal.get("bucket_table", [])) if calibrated else 0.0
-    frame["exp_net_pct"] = exp_mkt + frame["exp_excess_pct"] - C.COST_ROUND_TRIP_PCT
+    table = cal.get("bucket_table", [])
+    exc = bucket_lookup(frame["composite_pct"], table, "mean_excess") if calibrated else np.zeros(len(frame))
+    frame["exp_excess_12m"] = np.nan_to_num(exc, nan=0.0)
+    frame["p_beat_cpi"] = bucket_lookup(frame["composite_pct"], table, "p_beat_cpi") if calibrated else np.nan
+    mk = market_expectation(cal, reg.get("label"), reg.get("exp_mkt_12m_pct"))
+    infl = cpi_stats.get("expected_12m_pct")
+    if mk["mkt_12m_pct"] is not None and infl is not None:
+        nom = mk["mkt_12m_pct"] + frame["exp_excess_12m"]
+        frame["exp_real_12m"] = ((1 + nom / 100.0) / (1 + infl / 100.0) - 1.0) * 100.0 - C.COST_ROUND_TRIP_PCT
+    else:
+        frame["exp_real_12m"] = np.nan
+    frame["fund_break"] = fund_break(frame)
     frame["regime_label"] = reg.get("label", "UNKNOWN")
-    frame["p_risk_off"] = p_off
-    frame["stop_dist_pct"] = stop_distance_pct(frame["atr_pct"])
+    info = {"weights": {k: round(v, 4) for k, v in w.items()}, "model_version": version,
+            "coverage": {k: round(v, 3) for k, v in cov.items()}, "calibrated": calibrated,
+            "market_12m": mk, "expected_inflation_12m": infl, "n_scored": int(len(frame))}
+    return frame, info
 
-    guard = guard or {}
-    cutoff = float(cal.get("pct_cutoff", C.DEFAULT_PCT_CUTOFF)) + float(guard.get("pct_cutoff_add", 0.0))
-    cutoff = min(cutoff, 99.0)
-    edge_ok = (frame["exp_net_pct"] >= C.MIN_EXPECTED_EDGE_PCT) if calibrated else (exp_mkt >= 0.0)
+
+def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
+                   block: bool = False, today_change: Optional[pd.Series] = None) -> Tuple[List[Dict], Dict]:
+    """Returns orders for the next open + a summary. Never forces sells because of low exposure."""
+    cal = state.get("calibration", {})
+    cutoff = float(cal.get("pct_cutoff", C.DEFAULT_PCT_CUTOFF))
+    f = frame.set_index("ticker")
+    cur = list(pf["positions"].keys())
+    orders, holds, sells = [], [], []
+    if block:
+        return [], {"blocked": True, "holds": cur, "sells": [], "buys": []}
+    for t in cur:
+        if t not in f.index:
+            holds.append(t)                     # no data this month: do not trade blind
+            continue
+        r = f.loc[t]
+        if bool(r.get("fund_break", False)):
+            sells.append((t, "FUND_BREAK"))
+        elif float(r["composite_pct"]) < C.HOLD_PCT:
+            sells.append((t, "RANK_EXIT"))
+        else:
+            holds.append(t)
+    n_target = int(round(C.TARGET_POSITIONS * max(0.0, min(1.0, exposure))))
+    sector_count: Dict[str, int] = {}
+    for t in holds:
+        s = str(f.loc[t, "sector"]) if t in f.index and pd.notna(f.loc[t].get("sector")) else "NA"
+        sector_count[s] = sector_count.get(s, 0) + 1
     elig = (
-        (frame["composite_pct"] >= cutoff)
-        & edge_ok
-        & (pd.to_numeric(frame["value_traded"], errors="coerce") >= C.MIN_VALUE_TRADED_TL)
-        & (pd.to_numeric(frame["change_pct"], errors="coerce") < C.LIMIT_MOVE_PCT)   # closed at limit-up: no fill
-        & np.isfinite(frame["atr_pct"])
+        (f["composite_pct"] >= cutoff)
+        & (pd.to_numeric(f["med_value_traded"], errors="coerce") >= C.MIN_MEDIAN_VALUE_TRADED_TL)
+        & ~f["fund_break"].astype(bool)
+        & ~f.index.isin(cur)
     )
-    if held_tickers:
-        elig &= ~frame["ticker"].isin(held_tickers)
-    if guard.get("block_new_entries"):
-        elig &= False
+    if f["exp_real_12m"].notna().any():
+        elig &= f["exp_real_12m"] >= C.MIN_EXPECTED_REAL_PCT
+    if today_change is not None:
+        chg = today_change.reindex(f.index)
+        elig &= ~(chg >= C.LIMIT_MOVE_PCT)
+    cand = f[elig].copy()
+    sort_col = "exp_real_12m" if cand["exp_real_12m"].notna().any() else "composite"
+    cand = cand.sort_values([sort_col, "composite"], ascending=False)
+    buys = []
+    for t, r in cand.iterrows():
+        if len(holds) + len(buys) >= n_target:
+            break
+        s = str(r.get("sector")) if pd.notna(r.get("sector")) else "NA"
+        if s != "NA" and sector_count.get(s, 0) >= C.MAX_PER_SECTOR:
+            continue
+        sector_count[s] = sector_count.get(s, 0) + 1
+        buys.append(t)
+    final = holds + buys
+    tw = {}
+    if final:
+        vol = pd.to_numeric(f["vol_ann_pct"], errors="coerce")
+        med = float(vol.median()) if vol.notna().any() else 40.0
+        inv = {t: 1.0 / max(float(vol.get(t, med)) if pd.notna(vol.get(t, np.nan)) else med, 5.0) for t in final}
+        tot = sum(inv.values())
+        total_exp = min(1.0, max(0.0, exposure)) if n_target > 0 else 0.0
+        raw = {t: v / tot * total_exp for t, v in inv.items()}
+        for _ in range(10):                                   # cap and redistribute
+            over = {t: w for t, w in raw.items() if w > C.MAX_POSITION_W}
+            if not over:
+                break
+            excess = sum(w - C.MAX_POSITION_W for w in over.values())
+            for t in over:
+                raw[t] = C.MAX_POSITION_W
+            under = [t for t in raw if raw[t] < C.MAX_POSITION_W]
+            us = sum(inv[t] for t in under)
+            if not under or us <= 0:
+                break
+            for t in under:
+                raw[t] += excess * inv[t] / us
+        tw = raw
+    cw = pf_weights(pf)
+    for t, why in sells:
+        orders.append({"ticker": t, "action": "SELL", "reason": why, "target_w": 0.0})
+    for t in buys:
+        r = f.loc[t]
+        orders.append({"ticker": t, "action": "BUY", "reason": "NEW_ENTRY", "target_w": round(tw.get(t, 0.0), 5),
+                       "entry_pct": round(float(r["composite_pct"]), 2),
+                       "entry_exp_real": None if pd.isna(r["exp_real_12m"]) else round(float(r["exp_real_12m"]), 2)})
+    for t in holds:
+        if t in tw and abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
+            # only trim overweights when exposure is reduced; never add to a position in a blocked state
+            orders.append({"ticker": t, "action": "REBAL", "reason": "WEIGHT_DRIFT", "target_w": round(tw[t], 5)})
+    summary = {"cutoff": cutoff, "n_target": n_target, "holds": holds, "sells": [s for s, _ in sells],
+               "buys": buys, "target_weights": {k: round(v, 4) for k, v in tw.items()},
+               "cash_target": round(1.0 - sum(tw.values()), 4)}
+    return orders, summary
 
-    regime_mult = float(np.clip(1.0 - p_off, 0.25, 1.0))
-    exposure = float(guard.get("exposure_multiplier", 1.0)) * regime_mult * (1.0 if calibrated else 0.5)
-    max_n = int(np.ceil(C.MAX_CANDIDATES * min(1.0, max(exposure, 0.0))))
-    max_n = max(0, min(max_n, C.MAX_OPEN_POSITIONS - int(open_positions)))
-    frame["eligible"] = False
-    if max_n > 0 and elig.any():
-        idx = frame.loc[elig].sort_values(["exp_net_pct", "composite"], ascending=False).head(max_n).index
-        frame.loc[idx, "eligible"] = True
-    base_size = np.minimum(C.MAX_POSITION_PCT, C.RISK_PER_TRADE_PCT / frame["stop_dist_pct"] * 100.0)
-    frame["size_pct"] = np.where(frame["eligible"], np.round(base_size * exposure, 2), 0.0)
 
-    info = {
-        "weights": {k: round(v, 4) for k, v in weights.items()},
-        "model_version": version,
-        "coverage": {k: round(v, 3) for k, v in coverage.items()},
-        "pct_cutoff": cutoff,
-        "calibrated": calibrated,
-        "exp_mkt_5d_pct": exp_mkt,
-        "exposure": round(exposure, 3),
-        "max_candidates": max_n,
-        "open_positions": int(open_positions),
-        "n_eligible": int(frame["eligible"].sum()),
-    }
-    return frame.sort_values(["eligible", "composite"], ascending=False).reset_index(drop=True), info
+def exposure_from(guard: Dict, regime: Dict) -> float:
+    p_off = regime.get("p_risk_off")
+    p_off = 0.5 if p_off is None else float(p_off)
+    regime_mult = float(np.clip(1.0 - 0.5 * p_off, 0.5, 1.0))   # long horizon: damped reaction
+    return float(guard.get("exposure_multiplier", 1.0)) * regime_mult

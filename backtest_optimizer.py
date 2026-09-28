@@ -1,24 +1,17 @@
-"""Walk-forward research backtest = the LIVE code path on historical data.
+"""Walk-forward research backtest for the V3 real-return engine (free data only).
 
-What it does (monthly GitHub Action, free data via yfinance):
-  1. Downloads split/dividend-ADJUSTED daily OHLCV for a broad liquid BIST universe.
-  2. Rebuilds, for every historical session, a snapshot with the SAME fields and
-     definitions the live engine gets from TradingView (rvol, perf_w/1m/3m,
-     1-month range, ATR ...), then scores it with meta_engine.score_snapshot -
-     the exact live function.
-  3. Walk-forward: expanding train window, purged split, weights fitted on the
-     first part of train, score->return calibration on the purged last part
-     (out-of-sample), HMM regime fitted on train only and FILTERED forward.
-  4. Trades follow labels.barrier_step (same as the live ledger) with the live
-     portfolio caps; portfolio P&L is marked to market DAILY in date order,
-     after costs, so drawdown is real.
-  5. Writes data/research_prior.json (factor IC prior, factor correlation,
-     regime-conditional IC, OOS calibration) that the live learner uses as its
-     Bayesian prior, plus data/backtest_report.json.
-
-Known limitations (reported, not hidden): the universe is today's liquid names
-(survivorship bias), yfinance can miss tickers, sector-neutralisation uses the
-sector map collected by the live engine when available.
+* Adjusted daily OHLCV (yfinance) for a broad liquid BIST universe since 2012,
+  XU100 + USDTRY for the regime model, Turkish CPI for real returns,
+  point-in-time fundamentals from Is Yatirim (best effort, lagged 75/100 days).
+* Monthly decisions use EXACTLY the live functions (factors.price_factors_at,
+  meta_engine.score_universe / plan_rebalance, portfolio.apply_day).
+* Walk-forward by year: factor weights are fitted only on months whose 12-month
+  labels were fully known before the test year (purged); calibration uses only
+  earlier OUT-OF-SAMPLE months; the HMM is fitted on data before the test year.
+* Output: data/research_prior_v3.json (prior + OOS calibration for the live
+  learner) and data/backtest_report_v3.json (real/CPI and XU100 metrics).
+Known limitations are written into the report (survivorship, no dividends in
+cash, fundamentals coverage).
 """
 from __future__ import annotations
 
@@ -31,13 +24,17 @@ import numpy as np
 import pandas as pd
 
 import config as C
+import fundamentals_hist as FH
+import inflation as INF
+import market_data as MD
 import regime_model as RM
-from backtest_validator import portfolio_metrics, stability, trade_metrics
-from calibration import add_excess, bucket_table, calibrate, cutoff_stats
-from flow_engine import build_factor_frame, composite
-from labels import compute_labels
+from backtest_validator import enrich_lots, lot_metrics, nav_metrics
+from calibration import add_excess, bucket_table, calibrate, cutoff_stats, market_stats
+from factors import build_frame, composite, price_factors_at, wide_from_history
+from labels import forward_labels, month_start_sessions
 from learner_engine import daily_rank_ic, factor_corr, fit_weights, get_prior, newey_west
-from meta_engine import score_snapshot
+from meta_engine import exposure_from, plan_rebalance, score_universe
+from portfolio import apply_day, new_portfolio, weights as pf_weights
 from state_manager import atomic_json_write, load_state
 
 UNIVERSE = [
@@ -51,305 +48,248 @@ UNIVERSE = [
     "TCELL", "THYAO", "TKFEN", "TMSN", "TOASO", "TRGYO", "TSKB", "TTKOM", "TTRAK", "TUKAS", "TUPRS", "TURSG",
     "ULKER", "VAKBN", "VERUS", "VESBE", "VESTL", "YATAS", "YEOTK", "YKBNK", "ZOREN", "ZRGYO",
 ]
-
-MIN_TRAIN_SESSIONS = 504
-TEST_SESSIONS = 126
+MIN_TRAIN_MONTHS = 36
 
 
-# ------------------------------------------------------------------ data
-def download_ohlcv(tickers: List[str], start: str, end: Optional[str]) -> Dict[str, pd.DataFrame]:
-    import yfinance as yf
-    out: Dict[str, pd.DataFrame] = {}
-    syms = [t + ".IS" for t in tickers]
-    for i in range(0, len(syms), 35):
-        chunk = syms[i:i + 35]
-        raw = None
-        for _ in range(2):
-            try:
-                raw = yf.download(chunk, start=start, end=end, interval="1d", auto_adjust=True,
-                                  group_by="ticker", progress=False, threads=True)
-                break
-            except Exception as exc:  # pragma: no cover
-                print(f"⚠️ yfinance chunk hatası: {exc}")
-        if raw is None or raw.empty:
-            continue
-        for s in chunk:
-            try:
-                g = raw[s] if isinstance(raw.columns, pd.MultiIndex) else raw
-                g = g.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]].dropna()
-                g = g[(g["close"] > 0) & (g["volume"] >= 0)]
-                g.index = pd.to_datetime(g.index).tz_localize(None).normalize()
-                if len(g) >= 300:
-                    out[s.replace(".IS", "")] = g
-            except Exception:
-                continue
-    if len(out) < C.MIN_CROSS_SECTION:
-        raise RuntimeError(f"Gerçek veri kapsamı yetersiz: {len(out)} hisse (min {C.MIN_CROSS_SECTION}).")
-    return out
+def fund_inputs_at(pit: pd.DataFrame, date, price_f: pd.DataFrame, latest_paid: Dict[str, float]) -> pd.DataFrame:
+    if pit is None or pit.empty or price_f.empty:
+        return pd.DataFrame(columns=["ticker"])
+    d = FH.point_in_time(pit, date, price_f["ticker"].tolist())
+    if d.empty:
+        return pd.DataFrame(columns=["ticker"])
+    px = price_f.set_index("ticker")["close_adj"]
+    out = pd.DataFrame({"ticker": d["ticker"].to_numpy()})
+    eq = d["equity"].to_numpy(float)
+    ni = d["net_income_ttm"].to_numpy(float)
+    rev = d["revenue_ttm"].to_numpy(float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        shares = out["ticker"].map(latest_paid).to_numpy(float)
+        out["market_cap"] = out["ticker"].map(px).to_numpy(float) * shares
+        out["net_income"] = ni
+        out["equity"] = eq
+        out["revenue"] = rev
+        out["roe"] = np.where(eq > 0, ni / eq * 100.0, np.nan)
+        out["op_margin"] = np.where(rev > 0, d["op_profit_ttm"].to_numpy(float) / rev * 100.0, np.nan)
+        out["debt_to_equity"] = np.where(eq > 0, d["fin_debt"].to_numpy(float) / eq, np.nan)
+        out["rev_growth"] = d["rev_growth_pct"].to_numpy(float)
+    return out.replace([np.inf, -np.inf], np.nan)
 
 
-def snapshot_fields(g: pd.DataFrame) -> pd.DataFrame:
-    """Same field definitions the live engine receives from TradingView."""
-    f = pd.DataFrame(index=g.index)
-    f["open"], f["high"], f["low"], f["close"], f["volume"] = g["open"], g["high"], g["low"], g["close"], g["volume"]
-    f["change_pct"] = g["close"].pct_change() * 100.0
-    f["value_traded"] = g["close"] * g["volume"]
-    f["rvol"] = g["volume"] / g["volume"].shift(1).rolling(10).mean()
-    f["perf_w"] = g["close"].pct_change(5) * 100.0
-    f["perf_1m"] = g["close"].pct_change(21) * 100.0
-    f["perf_3m"] = g["close"].pct_change(63) * 100.0
-    f["high_1m"] = g["high"].rolling(21).max()
-    f["low_1m"] = g["low"].rolling(21).min()
-    tr = pd.concat([g["high"] - g["low"], (g["high"] - g["close"].shift()).abs(),
-                    (g["low"] - g["close"].shift()).abs()], axis=1).max(axis=1)
-    f["atr"] = tr.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()
-    return f.replace([np.inf, -np.inf], np.nan)
+def cpi_stats_at(cpi: pd.Series, date) -> Dict:
+    if cpi is None or cpi.empty:
+        return {"yoy_pct": None, "expected_12m_pct": None}
+    last_pub = pd.Timestamp(date) - pd.DateOffset(months=1)        # ~1 month publication lag
+    s = cpi[cpi.index <= pd.Timestamp(last_pub.year, last_pub.month, 1)]
+    return INF.inflation_stats(s)
 
 
-def build_inputs(data: Dict[str, pd.DataFrame], sector_map: Dict[str, str]):
-    frames = []
-    for t, g in data.items():
-        f = snapshot_fields(g)
-        f["ticker"] = t
-        f["sector"] = sector_map.get(t)
-        f["tarih"] = f.index
-        frames.append(f.dropna(subset=["perf_3m", "atr", "rvol", "high_1m"]))
-    long = pd.concat(frames, ignore_index=True)
-    counts = long.groupby("tarih")["ticker"].size()
-    good = counts[counts >= C.MIN_CROSS_SECTION].index
-    long = long[long["tarih"].isin(good)]
-    snaps = {d: g.reset_index(drop=True) for d, g in long.groupby("tarih")}
-    dates = sorted(snaps.keys())
-    close = pd.DataFrame({t: g["close"] for t, g in data.items()}).sort_index()
-    close = close.reindex(sorted(set(close.index)))
-    panel = {
-        "dates": list(close.index),
-        "open": pd.DataFrame({t: g["open"] for t, g in data.items()}).reindex(close.index),
-        "high": pd.DataFrame({t: g["high"] for t, g in data.items()}).reindex(close.index),
-        "low": pd.DataFrame({t: g["low"] for t, g in data.items()}).reindex(close.index),
-        "close": close,
-    }
-    atr = pd.DataFrame({t: snapshot_fields(g)["atr"] for t, g in data.items()}).reindex(close.index)
-    panel["atr_pct"] = atr / close * 100.0
-    panel["breaks"] = pd.DataFrame(False, index=close.index, columns=close.columns)
-    panel["adjacent"] = np.ones(len(close.index), bool)
-    return snaps, dates, panel
-
-
-def factor_dataset(snaps: Dict, dates: List, labels: pd.DataFrame) -> pd.DataFrame:
-    rows = []
-    for d in dates:
-        fr, _ = build_factor_frame(snaps[d])
-        rows.append(fr[["tarih", "ticker"] + [f"z_{k}" for k in C.FACTORS]])
-    z = pd.concat(rows, ignore_index=True)
-    z["tarih"] = pd.to_datetime(z["tarih"]).dt.normalize()
-    return z.merge(labels, on=["tarih", "ticker"], how="inner")
-
-
-# ------------------------------------------------------------------ regime helpers
-def regime_at(params: Dict, alpha: np.ndarray, xdates: pd.DatetimeIndex, d) -> Dict:
-    pos = xdates.searchsorted(pd.Timestamp(d), side="right") - 1
-    if pos < 0:
-        return {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0, "degraded": True}
-    s = RM.summarize(params, alpha[: pos + 1], xdates[: pos + 1])
-    s["degraded"] = False
-    return s
-
-
-# ------------------------------------------------------------------ walk-forward
-def run_walk_forward(snaps, dates, panel, ds, X: Optional[pd.DataFrame]) -> Dict:
-    hand = get_prior(None)
-    date_idx = {d: i for i, d in enumerate(panel["dates"])}
-    close = panel["close"]
-    lab_idx = ds.set_index(["tarih", "ticker"])
-    trades, oos_rows, folds, fold_trade_metrics = [], [], [], []
-    ic_oos = []
-    start = MIN_TRAIN_SESSIONS
-    purge = C.MAX_HOLD + 1
-    while start < len(dates):
-        test_dates = dates[start:start + TEST_SESSIONS]
-        train_dates = dates[: max(0, start - purge)]
-        n_w = int(len(train_dates) * 0.7)
-        w_dates = train_dates[: max(0, n_w - purge)]
-        c_dates = train_dates[n_w:]
-        w_cal, _ = fit_weights(ds[ds["tarih"].isin(w_dates)], hand)
-        cal_rows = ds[ds["tarih"].isin(c_dates)].copy()
-        cal_rows["composite"] = composite(cal_rows, w_cal)
-        cal_rows["composite_pct"] = cal_rows.groupby("tarih")["composite"].rank(pct=True) * 100.0
-        st_cal = {"calibration": {}}
-        calibrate(st_cal, cal_rows, None)
-        w_fold, meta = fit_weights(ds[ds["tarih"].isin(train_dates)], hand)
-
-        params, alpha, xdates = None, None, None
-        if X is not None and len(X[X.index <= train_dates[-1]]) > 300:
-            params = RM.fit_hmm(X[X.index <= train_dates[-1]])
-            alpha = RM.filtered_probs(params, X)
-            xdates = X.index
-
-        open_pos: List[Dict] = []
-        fold_trades = []
-        for d in test_dates:
-            i = date_idx[d]
-            open_pos = [p for p in open_pos if p["exit_idx"] > i]
-            reg = regime_at(params, alpha, xdates, d) if params else {
-                "label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0, "degraded": True}
-            st = {"model": {"champion_weights": w_fold, "champion_version": f"wf{len(folds)}", "regime_weights": {}},
-                  "calibration": st_cal["calibration"], "regime": reg}
-            scored, info = score_snapshot(snaps[d], st, None, {"exposure_multiplier": 1.0},
-                                          open_positions=len(open_pos),
-                                          held_tickers={p["ticker"] for p in open_pos})
-            oos_rows.append(scored[["tarih", "ticker", "composite", "composite_pct"]].assign(tarih=d))
-            for _, r in scored[scored["eligible"]].iterrows():
-                key = (d, r["ticker"])
-                if key not in lab_idx.index:
-                    continue
-                lb = lab_idx.loc[key]
-                if isinstance(lb, pd.DataFrame):
-                    lb = lb.iloc[0]
-                if lb["filled"] < 1 or not np.isfinite(lb["barrier_gross"]) or lb["exit_k"] <= 0:
-                    continue
-                tr = {"signal_date": d, "ticker": r["ticker"], "size_pct": float(r["size_pct"]),
-                      "entry_idx": i + 1, "exit_idx": i + int(lb["exit_k"]), "entry_px": float(lb["entry_px"]),
-                      "exit_px": float(lb["exit_px"]), "exit_reason": lb["exit_reason"],
-                      "gross_ret_pct": float(lb["barrier_gross"]), "net_ret_pct": float(lb["barrier_net"]),
-                      "exp_net_pct": float(r["exp_net_pct"]), "regime": reg.get("label"), "fold": len(folds)}
-                open_pos.append(tr)
-                fold_trades.append(tr)
-        trades.extend(fold_trades)
-        tdf = pd.DataFrame(fold_trades)
-        fm = trade_metrics(tdf) if not tdf.empty else {"trades": 0}
-        fold_trade_metrics.append(fm)
-        test_ds = ds[ds["tarih"].isin(test_dates)].copy()
-        test_ds["_c"] = composite(test_ds, w_fold)
-        ic = daily_rank_ic(test_ds, ["_c"], "fwd_ret")
-        if not ic.empty:
-            ic_oos.append(ic["_c"])
-        folds.append({"train_end": str(pd.Timestamp(train_dates[-1]).date()),
-                      "test_start": str(pd.Timestamp(test_dates[0]).date()),
-                      "test_end": str(pd.Timestamp(test_dates[-1]).date()),
-                      "weights": w_fold, "pct_cutoff": st_cal["calibration"].get("pct_cutoff"),
-                      "oos_ic_mean": round(float(ic["_c"].mean()), 4) if not ic.empty else None,
-                      "trades": fm})
-        start += TEST_SESSIONS
-
-    tdf = pd.DataFrame(trades)
-    # daily mark-to-market portfolio, date ordered, costs charged at exit
-    pr = pd.Series(0.0, index=close.index)
-    if not tdf.empty:
-        cost = C.COST_ROUND_TRIP_PCT / 100.0
-        cvals = close.to_numpy(float)
-        cols = {t: j for j, t in enumerate(close.columns)}
-        for tr in trades:
-            j, e, x, w = cols[tr["ticker"]], tr["entry_idx"], tr["exit_idx"], tr["size_pct"] / 100.0
-            prev = tr["entry_px"]
-            for t in range(e, x + 1):
-                px = tr["exit_px"] if t == x else cvals[t, j]
-                if not np.isfinite(px):
-                    continue
-                pr.iat[t] += w * (px / prev - 1.0)
-                prev = px
-            pr.iat[x] -= w * cost
-    first = dates[MIN_TRAIN_SESSIONS] if len(dates) > MIN_TRAIN_SESSIONS else dates[0]
-    pr = pr[pr.index >= first]
-    ic_all = pd.concat(ic_oos) if ic_oos else pd.Series(dtype=float)
-    m, se, t, n = newey_west(ic_all, C.LABEL_HORIZON - 1) if len(ic_all) else (0, 0, 0, 0)
-    per_year = {}
-    if not tdf.empty:
-        tdf["year"] = pd.to_datetime(tdf["signal_date"]).dt.year
-        per_year = {int(y): trade_metrics(g) for y, g in tdf.groupby("year")}
-    oos = pd.concat(oos_rows, ignore_index=True) if oos_rows else pd.DataFrame()
-    return {"trades": tdf, "portfolio_daily": pr, "folds": folds, "fold_trade_metrics": fold_trade_metrics,
-            "oos_ic": {"mean": round(float(m), 5), "t_nw": round(float(t), 3), "n_dates": int(n)},
-            "per_year": per_year, "oos_scores": oos}
-
-
-def build_research_prior(ds: pd.DataFrame, X: Optional[pd.DataFrame], oos_scores: pd.DataFrame) -> Dict:
-    zc = [f"z_{k}" for k in C.FACTORS]
-    ic = daily_rank_ic(ds, zc, "fwd_ret")
-    ic_mean, ic_t = {}, {}
-    for k in C.FACTORS:
-        s = ic.get(f"z_{k}", pd.Series(dtype=float))
-        m, se, t, n = newey_west(s, C.LABEL_HORIZON - 1) if len(s.dropna()) else (0.0, 0, 0.0, 0)
-        ic_mean[k], ic_t[k] = round(float(m), 5), round(float(t), 3)
-    omega = factor_corr(ds)
-    prior = {
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%d"),
-        "ic_mean": ic_mean, "ic_t_nw": ic_t,
-        "omega": np.round(omega, 4).tolist() if omega is not None else None,
-        "n_dates": int(len(ic)), "n_eff_dates": round(len(ic) / C.LABEL_HORIZON, 1),
-        "regime_ic": {},
-    }
-    if X is not None and len(X) > 300:
-        params = RM.fit_hmm(X)
-        alpha = RM.filtered_probs(params, X)
-        lab = pd.Series([params["labels"][int(a)] for a in alpha.argmax(axis=1)], index=X.index)
-        ds2 = ds.copy()
-        ds2["regime_label"] = ds2["tarih"].map(lab)
-        for L, sub in ds2.dropna(subset=["regime_label"]).groupby("regime_label"):
-            ic_r = daily_rank_ic(sub, zc, "fwd_ret")
-            if len(ic_r) < 60:
-                continue
-            prior["regime_ic"][L] = {"ic_mean": {k: round(float(ic_r[f"z_{k}"].mean()), 5) for k in C.FACTORS},
-                                     "n_dates": int(len(ic_r)), "n_eff_dates": round(len(ic_r) / C.LABEL_HORIZON, 1)}
-        prior["hmm_state_stats"] = {params["labels"][k]: {"mean_daily_ret": params["state_mean_daily_ret"][k],
-                                                          "ann_vol": params["state_ann_vol"][k]} for k in range(params["K"])}
-    if oos_scores is not None and not oos_scores.empty:
-        o = oos_scores.merge(ds[["tarih", "ticker", "barrier_gross"]], on=["tarih", "ticker"], how="inner")
-        d = add_excess(o)
-        if not d.empty:
-            prior["calibration"] = {"buckets": bucket_table(d), "cutoffs": cutoff_stats(d), "source": "walk_forward_oos"}
-    return prior
-
-
-def run(start: str, end: Optional[str], save: bool = True, data: Optional[Dict] = None,
-        regime_df: Optional[pd.DataFrame] = None) -> Dict:
+def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
+        data: Optional[Dict] = None, regime_df: Optional[pd.DataFrame] = None,
+        cpi: Optional[pd.Series] = None, pit: Optional[pd.DataFrame] = None) -> Dict:
     state = load_state()
-    data = data if data is not None else download_ohlcv(UNIVERSE, start, end)
-    snaps, dates, panel = build_inputs(data, state.get("sector_map", {}))
-    if len(dates) < MIN_TRAIN_SESSIONS + 60:
-        raise RuntimeError(f"Walk-forward için yetersiz seans: {len(dates)}")
-    labels = compute_labels(panel)
-    ds = factor_dataset(snaps, dates, labels)
-    X = None
+    sector_map = state.get("sector_map", {})
+    data = data if data is not None else MD.download_history(UNIVERSE, start, end, min_rows=300)
+    if len(data) < C.MIN_CROSS_SECTION:
+        raise RuntimeError(f"Gerçek veri yetersiz: {len(data)} hisse")
     try:
         rdf = regime_df if regime_df is not None else RM.download_regime_series(start=start, end=end)
-        X = RM.make_features(rdf)
+        index_close, X = rdf["idx"], RM.make_features(rdf)
     except Exception as exc:
-        print(f"⚠️ Rejim serisi alınamadı, backtest rejimsiz sürüyor: {exc}")
-    wf = run_walk_forward(snaps, dates, panel, ds, X)
-    prior = build_research_prior(ds, X, wf["oos_scores"])
+        print(f"⚠️ Endeks/rejim serisi yok: {exc}")
+        index_close, X = None, None
+    cpi_meta = {"source": "given"}
+    if cpi is None:
+        cpi, cpi_meta = INF.load_cpi()
+    fund_cov = 0.0
+    if pit is None:
+        try:
+            pit = FH.load_history(list(data.keys()), int(start[:4]))
+        except Exception as exc:
+            print(f"⚠️ Temel veri geçmişi alınamadı: {exc}")
+            pit = pd.DataFrame()
+    latest_paid = {}
+    if pit is not None and not pit.empty and "paid_in" in pit:
+        lp = pit.dropna(subset=["paid_in"]).sort_values("period_end").groupby("ticker")["paid_in"].last()
+        latest_paid = lp.to_dict()
+
+    wide = wide_from_history(data)
+    idx = wide["close"].index
+    reb = month_start_sessions(idx[C.MIN_HISTORY_SESSIONS:])
+    inputs, zrows = {}, []
+    for d in reb:
+        pf_ = price_factors_at(wide, index_close, d)
+        if len(pf_) < C.MIN_CROSS_SECTION:
+            continue
+        fi = fund_inputs_at(pit, d, pf_, latest_paid)
+        cs = cpi_stats_at(cpi, d)
+        inputs[d] = (pf_, fi, cs)
+        fr, cov = build_frame(pf_, fi, cs.get("yoy_pct"), sector_map)
+        fund_cov = max(fund_cov, float(np.mean([cov.get(k, 0) for k in C.FUNDAMENTAL_FACTORS])))
+        zrows.append(fr[["tarih", "ticker"] + [f"z_{k}" for k in C.FACTORS]])
+    dates = sorted(inputs.keys())
+    if len(dates) < MIN_TRAIN_MONTHS + 14:
+        raise RuntimeError(f"Walk-forward için yetersiz ay: {len(dates)}")
+    Z = pd.concat(zrows, ignore_index=True)
+    lab = forward_labels(wide, dates, cpi, index_close)
+    ds = Z.merge(lab, on=["tarih", "ticker"], how="inner")
+    hand = get_prior(None)
+
+    # ------------------------------------------------ walk-forward folds (yearly)
+    first_test_i = MIN_TRAIN_MONTHS + 13
+    test_starts = dates[first_test_i::12]
+    folds, oos_rows = [], []
+    fold_of_date = {}
+    for k, T0 in enumerate(test_starts):
+        T1 = test_starts[k + 1] if k + 1 < len(test_starts) else None
+        train_dates = [d for d in dates if d + pd.DateOffset(months=13) <= T0]
+        w, meta = fit_weights(ds[ds["tarih"].isin(train_dates)], hand)
+        params = None
+        if X is not None and len(X[X.index < T0]) > 500:
+            params = RM.fit_hmm(X[X.index < T0])
+        for d in dates:
+            if d >= T0 and (T1 is None or d < T1):
+                fold_of_date[d] = (k, w, params)
+        folds.append({"test_start": str(T0.date()), "train_months": len(train_dates), "weights": w,
+                      "factor_ic_train": {f: meta["factor_stats"][f]["ic_mean"] for f in C.FACTORS}})
+
+    alpha_cache = {}
+    pf = new_portfolio(dates[first_test_i])
+    nav_rows, lots_all = [], []
+    sim_days = idx[(idx >= dates[first_test_i])]
+    O, Cl = wide["open"], wide["close"]
+    chg = Cl.pct_change(fill_method=None) * 100.0
+    reb_set = set(fold_of_date.keys())
+    cal_state = {"calibration": {}}
+    for day in sim_days:
+        bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
+        ev, lots = apply_day(pf, bars, day)
+        lots_all.extend(lots)
+        if day in reb_set:
+            k, w, params = fold_of_date[day]
+            if params is not None:
+                if k not in alpha_cache:
+                    alpha_cache[k] = RM.filtered_probs(params, X)
+                pos = X.index.searchsorted(day, side="right") - 1
+                reg = RM.summarize(params, alpha_cache[k][: pos + 1], X.index[: pos + 1])
+                reg["degraded"] = False
+            else:
+                reg = {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "degraded": True, "exp_mkt_12m_pct": None}
+            # calibration from earlier OOS months whose labels were known by now
+            known = [r for r in oos_rows if r["tarih"].iloc[0] + pd.DateOffset(months=13) <= day]
+            if known:
+                kd = pd.concat(known, ignore_index=True).merge(lab, on=["tarih", "ticker"], how="inner")
+                calibrate(cal_state, kd, None)
+            st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
+                  "calibration": cal_state["calibration"], "regime": reg}
+            pf_, fi, cs = inputs[day]
+            frame, info = score_universe(pf_, fi, st, cs, sector_map)
+            if frame.empty:
+                continue
+            oos_rows.append(frame[["tarih", "ticker", "composite", "composite_pct", "regime_label"]].assign(tarih=day))
+            expo = exposure_from({"exposure_multiplier": 1.0}, reg)
+            orders, summ = plan_rebalance(pf, frame, st, expo, today_change=bars["chg_pct"])
+            keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
+            pf["pending"] = keep + [o for o in orders if o["ticker"] not in {x["ticker"] for x in keep}]
+        xu = float(index_close.asof(day)) if index_close is not None else np.nan
+        nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": sum(pf_weights(pf).values()), "xu100": xu})
+
+    nav_df = pd.DataFrame(nav_rows)
+    lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close)
+    # open positions at the end are marked (not realised) -> reported separately
+    open_now = {t: round((p["level"] - 1) * 100, 2) for t, p in pf["positions"].items()}
+
+    # OOS IC of the composite (12m) per fold
+    oos = pd.concat(oos_rows, ignore_index=True) if oos_rows else pd.DataFrame()
+    oos_l = oos.merge(lab, on=["tarih", "ticker"], how="inner") if not oos.empty else pd.DataFrame()
+    ic12 = daily_rank_ic(oos_l.dropna(subset=["fwd_ret"]), ["composite"], "fwd_ret") if not oos_l.empty else pd.DataFrame()
+    m, se, t, n = newey_west(ic12["composite"], 11) if not ic12.empty else (0.0, 0, 0.0, 0)
+
+    # per-year table
+    per_year = {}
+    if not nav_df.empty:
+        y = nav_df.set_index("tarih")
+        for yr, g in y.groupby(y.index.year):
+            if len(g) < 20:
+                continue
+            nom = (g["nav"].iloc[-1] / g["nav"].iloc[0] - 1) * 100
+            c = INF.cpi_ratio(cpi, g.index[0], g.index[-1])
+            xr = (g["xu100"].iloc[-1] / g["xu100"].iloc[0] - 1) * 100 if g["xu100"].notna().all() else np.nan
+            per_year[int(yr)] = {"nominal_pct": round(float(nom), 2),
+                                 "cpi_pct": round(float((c - 1) * 100), 2) if np.isfinite(c) else None,
+                                 "real_pct": round(float(((1 + nom / 100) / c - 1) * 100), 2) if np.isfinite(c) else None,
+                                 "xu100_pct": round(float(xr), 2) if np.isfinite(xr) else None}
+
+    prior = build_research_prior(ds, X, oos_l)
     report = {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-        "engine_version": C.ENGINE_VERSION,
-        "period": f"{str(pd.Timestamp(dates[0]).date())}..{str(pd.Timestamp(dates[-1]).date())}",
-        "universe_requested": len(UNIVERSE), "universe_downloaded": len(data),
-        "data_source": "Yahoo Finance adjusted OHLCV (free) + XU100/USDTRY for regime",
-        "synthetic_data_used": False,
-        "cost_round_trip_pct": C.COST_ROUND_TRIP_PCT,
-        "trade_rule": {"horizon": C.LABEL_HORIZON, "max_hold": C.MAX_HOLD, "stop_atr_mult": C.STOP_ATR_MULT,
-                       "target_rr": C.TARGET_RR, "max_open": C.MAX_OPEN_POSITIONS},
-        "oos_trades": trade_metrics(wf["trades"]),
-        "oos_portfolio": portfolio_metrics(wf["portfolio_daily"]),
-        "oos_composite_ic": wf["oos_ic"],
-        "stability": stability(wf["fold_trade_metrics"]),
-        "per_year": wf["per_year"],
-        "folds": wf["folds"],
-        "factor_ic_full_sample": {"ic_mean": prior["ic_mean"], "t_nw": prior["ic_t_nw"]},
+        "generated_at": datetime.utcnow().isoformat() + "Z", "engine_version": C.ENGINE_VERSION,
+        "objective": {"horizon_months": C.HORIZON_MONTHS, "primary": "beat CPI (real return > 0)",
+                      "secondary": "excess vs XU100"},
+        "period": f"{str(pd.Timestamp(dates[first_test_i]).date())}..{str(pd.Timestamp(idx[-1]).date())}",
+        "universe_downloaded": len(data), "rebalance_months": len(dates),
+        "cpi_source": cpi_meta, "fundamentals_coverage": round(fund_cov, 3),
+        "data_source": "Yahoo Finance adjusted OHLCV + Is Yatirim statements + CPI (EVDS/FRED)",
+        "synthetic_data_used": False, "cost_round_trip_pct": C.COST_ROUND_TRIP_PCT,
+        "rules": {"target_positions": C.TARGET_POSITIONS, "buy_pct": C.BUY_PCT, "hold_pct": C.HOLD_PCT,
+                  "min_expected_real_pct": C.MIN_EXPECTED_REAL_PCT,
+                  "catastrophe_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "catastrophe_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT},
+        "portfolio": nav_metrics(nav_df, cpi),
+        "closed_lots": lot_metrics(lots_df),
+        "open_positions_end": open_now,
+        "oos_composite_ic_12m": {"mean": round(float(m), 4), "t_nw": round(float(t), 2), "n_months": int(n)},
+        "per_year": per_year,
+        "folds": folds,
+        "factor_ic_full_sample_12m": prior.get("ic_mean"),
+        "factor_t_full_sample_12m": prior.get("ic_t_nw"),
         "limitations": ["survivorship: universe = today's liquid names",
-                        "no intraday data: same-bar stop/target resolved pessimistically",
-                        "sector neutralisation only for tickers in live sector_map"],
+                        "dividends are in adjusted prices (reinvested), idle cash earns 0",
+                        f"fundamentals coverage {round(fund_cov, 2)} (Is Yatirim best effort)",
+                        "autonomy guard neutral in backtest"],
     }
-    print(json.dumps({k: report[k] for k in ("period", "oos_trades", "oos_portfolio", "oos_composite_ic", "stability")},
+    print(json.dumps({k: report[k] for k in ("period", "portfolio", "closed_lots", "oos_composite_ic_12m", "per_year")},
                      ensure_ascii=False, indent=2, default=str))
     if save:
         atomic_json_write(C.RESEARCH_PRIOR_FILE, prior)
         atomic_json_write(C.BACKTEST_REPORT_FILE, report)
-    return {"report": report, "prior": prior}
+    return {"report": report, "prior": prior, "nav": nav_df, "lots": lots_df}
+
+
+def build_research_prior(ds: pd.DataFrame, X: Optional[pd.DataFrame], oos_l: pd.DataFrame) -> Dict:
+    zc = [f"z_{k}" for k in C.FACTORS]
+    d = ds.dropna(subset=["fwd_ret"])
+    ic = daily_rank_ic(d, zc, "fwd_ret")
+    ic_mean, ic_t = {}, {}
+    for k in C.FACTORS:
+        s = ic.get(f"z_{k}", pd.Series(dtype=float)).dropna()
+        mm, se, tt, n = newey_west(s, 11) if len(s) else (0.0, 0, 0.0, 0)
+        ic_mean[k], ic_t[k] = round(float(mm), 5), round(float(tt), 3)
+    om = factor_corr(d)
+    prior = {"generated_at": datetime.utcnow().strftime("%Y-%m-%d"), "horizon_months": C.HORIZON_MONTHS,
+             "ic_mean": ic_mean, "ic_t_nw": ic_t, "omega": np.round(om, 4).tolist() if om is not None else None,
+             "n_dates": int(len(ic)), "n_eff_dates": round(len(ic) / C.LABEL_HORIZON, 1), "regime_ic": {}}
+    if X is not None and len(X) > 500:
+        params = RM.fit_hmm(X)
+        a = RM.filtered_probs(params, X)
+        labs = pd.Series([params["labels"][int(i)] for i in a.argmax(axis=1)], index=X.index)
+        d2 = d.copy()
+        d2["regime_label"] = d2["tarih"].map(lambda t: labs.asof(t) if t >= labs.index[0] else None)
+        for L, sub in d2.dropna(subset=["regime_label"]).groupby("regime_label"):
+            icr = daily_rank_ic(sub, zc, "fwd_ret")
+            if len(icr) < 24:
+                continue
+            prior["regime_ic"][L] = {"ic_mean": {k: round(float(icr[f"z_{k}"].mean()), 5) if icr[f"z_{k}"].notna().any() else 0.0
+                                                 for k in C.FACTORS},
+                                     "n_dates": int(len(icr)), "n_eff_dates": round(len(icr) / C.LABEL_HORIZON, 1)}
+    if oos_l is not None and not oos_l.empty:
+        e = add_excess(oos_l)
+        if not e.empty:
+            prior["calibration"] = {"buckets": bucket_table(e), "cutoffs": cutoff_stats(e), "market": market_stats(e),
+                                    "source": "walk_forward_oos"}
+    return prior
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--start-date", default="2019-01-01")
+    ap.add_argument("--start-date", default="2012-01-01")
     ap.add_argument("--end-date", default=None)
     ap.add_argument("--no-save", action="store_true")
     a = ap.parse_args()

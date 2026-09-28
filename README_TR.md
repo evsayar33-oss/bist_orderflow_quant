@@ -1,50 +1,47 @@
-# Adaptive BIST Orderflow Meta-Engine V2
+# BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
-Tamamen **ücretsiz** veriyle çalışır: TradingView public scanner, Yahoo Finance (yfinance) ve isteğe bağlı İş Yatırım takas uç noktası. API anahtarı yoktur, ücretli servis yoktur. Her şey GitHub Actions üzerinde çalışır; bilgisayar gerekmez.
+**Amaç:** 12 ay içinde **TÜFE'yi yenmesi** beklenen BIST hisselerinden oluşan, ayda bir gözden geçirilen düşük devirli bir portföy. İkincil ölçüt: XU100'e göre fazla getiri.
+**Tamamen ücretsiz:** TradingView public scanner, Yahoo Finance (yfinance), İş Yatırım mali tablo uç noktası, TCMB EVDS (ücretsiz anahtar, isteğe bağlı) ve FRED (anahtarsız) TÜFE verisi. Her şey GitHub Actions'ta çalışır.
 
-## V1 → V2: ne düzeldi
+## Nasıl çalışır
+**Her gün 18:25 (kapanış sonrası)**
+* Önceki kararın emirleri bugünün açılışında uygulanır, portföy kapanış fiyatına göre değerlenir (düzeltilmiş günlük değişimle; bedelsiz bölünmeler sahte zarar üretmez).
+* **Felaket stopu:** Pozisyon, girişten sonraki en yüksek kapanıştan %35 ya da giriş fiyatından %30 düşerse ertesi açılışta satılır. Kısa vadeli ATR stopu **yoktur**.
+* Portföy değeri (NAV), XU100 ve TÜFE kaydı tutulur. Telegram'a yalnızca bir olay olduğunda mesaj gider.
 
-| V1 sorunu | V2 çözümü |
-|---|---|
-| Learner tüm evreni ve faktör kolonu olmayan eski satırları öğreniyordu | Point-in-time veri seti: yalnızca o gün kaydedilmiş faktörler + sonradan çözülen etiket (`main.build_dataset`) |
-| Havuzlanmış korelasyon, çakışan etiket, leakage | Günlük kesitsel rank IC, Newey-West t, etkin örneklem = gün/ufuk, purge'lu champion/challenger testi |
-| 10:35 snapshot (saat yanlılığı, rvol ≈ 0.6) | Kapanış sonrası 18:25 EOD çalışma, giriş **ertesi açılış**, 18:15 öncesi manuel çalışma engelli |
-| Takas %0 kapsama, sabit 50 puan | Takas opsiyonel; kapsama ölçülüyor, <%30 ise otomatik devre dışı, 2 haftada bir yeniden deneniyor; seviye değil **değişim** (Δ) kullanılıyor |
-| Kolinear 5 "faktör" (regime_fit diğerlerinin toplamı) | 9 ayrı primitif faktör, sektör-nötr z-skor; ağırlık = Ω⁻¹·IC (Grinold-Kahn), negatif IC işareti çevirebiliyor |
-| "Dipte birikim" tezi veride ters çalışıyordu | Tez sabit değil: faktör işareti/ağırlığı kanıta göre öğreniliyor (başlangıç prior'ı backtest'ten) |
-| Sıralama + sabit eşik → her gün aday | Mutlak kapı: beklenen net getiri = HMM piyasa tahmini + kalibre edilmiş fazla getiri − maliyet > %0.25 |
-| T+3 win-rate hedefi | Gerçek işlemin (ATR stop, 1.5R hedef, break-even, 10 gün zaman bariyeri) maliyet sonrası beklenen getirisi, tarih-kümeli alt güven sınırıyla |
-| Günlük değişen rejim etiketi | Sticky Gaussian HMM (XU100 getirisi, volatilite, USDTRY), yalnızca forward filtre, 5 günlük ileriye dönük piyasa tahmini |
-| Backtest canlı modeli test etmiyordu, düzeltilmemiş fiyat, maliyet yok, sahte MDD | Backtest **canlı `score_snapshot` fonksiyonunu** çağırıyor; düzeltilmiş fiyat, maliyet, tavan açılışı, portföy limitleri, günlük MTM özsermaye eğrisi |
-| Bedelsiz bölünmeler sahte −%50 | ±%10 limit + TradingView `change` ile kurumsal işlem oranı tespiti ve geriye dönük düzeltme; açık pozisyon seviyeleri ölçekleniyor |
-| Guard sayaçları sıfırlanmıyor, test kopya fonksiyonu test ediyordu | Ardışık sayaçlar, test üretim `transition()` fonksiyonunu çalıştırıyor, SAFE kilitlenmesi yok |
-| Sentetik T0xx satırları üretim verisine karıştı | Self-test yalnızca geçici klasörde çalışır; `./data`'ya yazamaz |
-| Lifecycle kapanmıyordu | Ledger = etiket simülasyonuyla birebir aynı kural (test edildi: fark 0) |
+**Her ayın ilk seansı (aylık gözden geçirme)**
+1. Faktörler:
+   * **Fiyat:** 12-1 ay momentum, 52 hafta zirvesine yakınlık, momentum istikrarı, düşük oynaklık, düşük beta, düşüş direnci, likidite.
+   * **Temel:** ROE, kâr getirisi (E/P), defter getirisi (B/P), satış getirisi, faaliyet marjı, düşük borç, temettü, reel büyüme (enflasyon üstü satış büyümesi).
+2. Geçmiş aylık kararların 12 aylık sonuçları çözülür: nominal getiri, **reel (TÜFE'den arındırılmış)** getiri ve XU100 farkı.
+3. Öğrenme: aylık kesitsel IC, Newey-West (11 gecikme), purge'lu champion/challenger, Ω⁻¹·IC ağırlıklandırma, araştırma prior'ına Bayesçi büzülme.
+4. Kalibrasyon: skor diliminden **beklenen 12 aylık reel getiri** ve **TÜFE'yi yenme olasılığı** hesaplanır.
+5. Karar kuralları:
+   * **AL:** Skor ≥ kalibre edilmiş eşik (varsayılan p85) **ve** beklenen reel getiri ≥ %3 **ve** yeterli likidite **ve** temel veride bozulma yok. Sektör başına en fazla 3 hisse, toplam hedef 12 hisse.
+   * **TUT:** Skor p60'ın üzerinde kaldıkça pozisyon korunur. Eşikler arasındaki bu boşluk kazananların yıllarca portföyde kalmasını sağlar.
+   * **SAT:** Skor p60'ın altına düşerse (tez zayıfladı) ya da şirket hem zarar edip hem de ROE'si negatife dönerse satılır.
+   * **Ağırlık:** Ters oynaklıkla dağıtılır, hisse başına en fazla %15. Toplam maruziyeti guard ve rejim belirler; kalan kısım nakitte bekler.
 
-## Günlük akış (18:25 TR)
-1. EOD snapshot → doğrulama → tatil/donmuş veri kontrolü → kurumsal işlem tespiti
-2. HMM rejim tahmini (yfinance)
-3. Etiketleri çözülen geçmiş kesitlerle öğrenme (champion/challenger, rollback) ve kalibrasyon
-4. Ledger: dünkü sinyallerin açılıştan girişi, stop/hedef/zaman çıkışları
-5. Autonomy guard → maruziyet
-6. Yarın açılış için adaylar + pozisyon büyüklüğü (%1 risk / stop mesafesi) → Telegram
+## Kurulum (Android)
+1. Zip'i **Files by Google** ile açıp "Ayıkla" deyin.
+2. GitHub'da **Add file → Upload files** ile kök klasördeki tüm `.py` dosyalarını, `requirements.txt` ve README dosyalarını yükleyin. Aynı isimli V2 dosyalarının üzerine yazılır.
+3. `.github/workflows` klasörüne girip 3 `.yml` dosyasını yükleyin.
+4. **(Önerilir, ücretsiz)** TÜFE verisi için evds2.tcmb.gov.tr'den ücretsiz üyelik açıp API anahtarı alın. Anahtarı repoda **Settings → Secrets → Actions → New secret** yoluyla `EVDS_API_KEY` adıyla ekleyin. Anahtar olmazsa sistem FRED'i kullanır; bu kaynak birkaç ay geriden gelebilir.
+5. **Actions → "Walk Forward Backtest" → Run workflow**. Bu adım 30–90 dakika sürebilir. 2012'den bugüne gerçek veriyle araştırma prior'ını ve kalibrasyonu üretir. **Canlı sistem bu dosya olmadan da çalışır, ancak ilk alımlar çok daha temkinli olur.**
+6. Günlük çalışma otomatiktir. İlk çalıştırmada aylık gözden geçirme hemen yapılır ve alımlar ertesi günün açılışında gerçekleşir.
 
-## Kurulum (Android telefondan)
-1. Zip'i telefonda **Files by Google** ile açıp "Ayıkla" deyin.
-2. Tarayıcıda GitHub reponuzu açın (Chrome menüsünden "Masaüstü sitesi" açmak kolaylaştırır).
-3. Repo ana sayfasında **Add file → Upload files** → kök klasördeki tüm `.py` dosyalarını, `requirements.txt`, `README.md`, `README_TR.md` dosyalarını seçin → **Commit changes**. Aynı isimli dosyaların üzerine yazılır.
-4. Repoda `.github/workflows` klasörüne girin → **Add file → Upload files** → zip'teki 3 adet `.yml` dosyasını seçin → Commit.
-5. `TELEGRAM_TOKEN` ve `CHAT_ID` secrets zaten tanımlı; değişiklik gerekmez.
-6. **Actions** sekmesi → "Walk Forward Backtest (research prior)" → **Run workflow**. (Bir kez; 20–60 dk sürebilir.) Bu, canlı öğrenmenin başlangıç prior'ını ve kalibrasyonunu üretir.
-7. İsteğe bağlı: "Weekly Audit & Self-Test" → Run workflow ile sistem sağlık testini çalıştırın.
-8. Günlük çalışma hafta içi 18:25'te otomatik başlar. Veriler `data/` klasöründe tutulur.
+**Artık kullanılmayan V1/V2 dosyaları (isteğe bağlı silebilirsiniz):** `data/snapshots_eod.csv`, `data/signals_ledger.csv`, `data/engine_state.json`, `data/research_prior.json`, `data/backtest_report.json`, `gecmis_veri.csv`, `signals_log.csv`, `signals_lifecycle.csv`, `longterm_ai_state.json`, `model_weights.json`, `backtest_report.*`, `VERIFY_RESULTS.*`.
 
-**Silinebilecek eski dosyalar (isteğe bağlı, artık kullanılmıyor):** `gecmis_veri.csv`, `signals_log.csv`, `signals_lifecycle.csv`, `longterm_ai_state.json`, `model_weights.json`, `backtest_report.json`, `backtest_report.md`, `VERIFY_RESULTS.txt`, `VERIFY_RESULTS.json`, `apply_guard_patch.py`. Silmeseniz de sistem onları okumaz.
+## TÜFE verisi
+Sistem kaynakları şu sırayla dener: `data/cpi_manual.csv` (isterseniz kendiniz yükleyebilirsiniz; format: `tarih,cpi`) → EVDS → FRED → önbellek. TÜİK seri kodunu değiştirirse yeni kodu `EVDS_CPI_SERIES` ortam değişkeniyle ekleyebilirsiniz. Kaynaklar birbirine oran eşlemesiyle eklenir (splice). Enflasyon verisi hiçbir zaman uydurulmaz: yayımlanmamış bir ay için reel getiri boş bırakılır.
 
-## Önemli dürüstlük notları
-* "Orderflow" faktörleri günlük bar ve hacimden türetilmiş **proxy**'lerdir. Gerçek aracı kurum/takas akışı ücretsiz ve güvenilir bir API ile alınamıyor; takas uç noktası çalışırsa otomatik devreye girer.
-* Backtest evreni bugünün likit hisseleridir (survivorship bias); rapor bunu `limitations` alanında belirtir.
-* Sistem getiri garanti etmez. Canlı OOS IC, ledger sonuçları ve haftalık denetim raporu modelin gerçekten işe yarayıp yaramadığını gösteren tek ölçüttür.
+## Dürüstlük notları
+* Hiçbir sistem "her hisse enflasyonu yenecek" garantisi veremez. Ölçülen ve raporlanan başarı ölçütleri şunlardır:
+  * 12 aylık pencerelerin yüzde kaçında portföy TÜFE'yi yendi,
+  * kapanan pozisyonların yüzde kaçı TÜFE'yi yendi,
+  * XU100'e göre fark.
+* Backtest bugünün likit hisseleriyle yapılır (survivorship bias). Temel veri geçmişinin kapsamı raporda gösterilir. Nakitte bekleyen para modelde faiz kazanmaz (muhafazakâr varsayım).
+* Canlı öğrenme için 12 aylık sonuçlar gerekir. Bu yüzden ilk yıllarda araştırma prior'ı baskın olur ve canlı kanıt biriktikçe ağırlık canlı veriye kayar.
 
-## Parametreler
-Tüm ayarlar `config.py` içindedir (maliyet %0.50 gidiş-dönüş, stop 2×ATR [%4–12], hedef 1.5R, 10 seans, maks. 12 açık pozisyon, günlük maks. 8 yeni giriş).
+## Ayarlar
+Tüm parametreler `config.py` içindedir: ufuk (`HORIZON_MONTHS`), hedef pozisyon sayısı, AL/TUT eşikleri, minimum beklenen reel getiri, felaket stopu seviyeleri, işlem maliyeti (%0.50 gidiş-dönüş).

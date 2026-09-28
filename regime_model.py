@@ -148,7 +148,7 @@ def filtered_probs(params: Dict, X: pd.DataFrame) -> np.ndarray:
     return alpha
 
 
-def expected_market_return_pct(params: Dict, p_now: np.ndarray, horizon: int = C.LABEL_HORIZON) -> float:
+def expected_market_return_pct(params: Dict, p_now: np.ndarray, horizon: int = 5) -> float:
     A = np.array(params["A"])
     mu = np.array(params["state_mean_daily_ret"])
     p = np.asarray(p_now, float)
@@ -167,7 +167,8 @@ def summarize(params: Dict, alpha: np.ndarray, dates) -> Dict:
         "label": labels[int(np.argmax(p))],
         "probs": {labels[k]: round(float(p[k]), 4) for k in range(len(labels))},
         "p_risk_off": round(float(p[0]), 4),
-        "exp_mkt_5d_pct": round(expected_market_return_pct(params, p), 3),
+        "exp_mkt_5d_pct": round(expected_market_return_pct(params, p, 5), 3),
+        "exp_mkt_12m_pct": round(expected_market_return_pct(params, p, 252), 2),
         "argmax_history": hist,
         "as_of": str(pd.Timestamp(dates[-1]).date()),
         "persistence": round(float(np.array(params["A"])[int(np.argmax(p)), int(np.argmax(p))]), 4),
@@ -177,23 +178,24 @@ def summarize(params: Dict, alpha: np.ndarray, dates) -> Dict:
 # ------------------------------------------------------------------ live update
 def breadth_fallback(snapshot: pd.DataFrame) -> Dict:
     if snapshot is None or "change_pct" not in snapshot.columns:
-        return {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0}
+        return {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0, "exp_mkt_12m_pct": None}
     ch = pd.to_numeric(snapshot["change_pct"], errors="coerce").dropna()
     if ch.empty:
-        return {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0}
+        return {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "exp_mkt_5d_pct": 0.0, "exp_mkt_12m_pct": None}
     down, med = float((ch < 0).mean()), float(ch.median())
     z = 4.0 * (down - 0.5) - 0.6 * med
     p_off = float(1.0 / (1.0 + np.exp(-z)))
     label = "RISK_OFF" if p_off > 0.66 else ("RISK_ON" if p_off < 0.33 else "NEUTRAL")
     return {"label": label, "probs": {"RISK_OFF": round(p_off, 4)}, "p_risk_off": round(p_off, 4),
-            "exp_mkt_5d_pct": 0.0}
+            "exp_mkt_5d_pct": 0.0, "exp_mkt_12m_pct": None}
 
 
-def update_regime(state: Dict, snapshot: Optional[pd.DataFrame] = None, today=None) -> Dict:
+def update_regime(state: Dict, snapshot: Optional[pd.DataFrame] = None, today=None,
+                  series: Optional[pd.DataFrame] = None) -> Dict:
     reg = state.setdefault("regime", {})
     today = pd.Timestamp(today or pd.Timestamp.now()).normalize()
     try:
-        df = download_regime_series()
+        df = series if series is not None and len(series) >= 300 else download_regime_series()
         X = make_features(df)
         params = reg.get("params")
         last_fit = pd.Timestamp(reg["last_fit"]) if reg.get("last_fit") else None
@@ -223,7 +225,8 @@ def update_regime(state: Dict, snapshot: Optional[pd.DataFrame] = None, today=No
                 "label": labels[int(np.argmax(p))],
                 "probs": {labels[k]: round(float(p[k]), 4) for k in range(len(labels))},
                 "p_risk_off": round(float(p[0]), 4),
-                "exp_mkt_5d_pct": round(expected_market_return_pct(params, p), 3),
+                "exp_mkt_5d_pct": round(expected_market_return_pct(params, p, 5), 3),
+                "exp_mkt_12m_pct": round(expected_market_return_pct(params, p, 252), 2),
             })
             reg["source"] = "hmm_propagated"
         else:

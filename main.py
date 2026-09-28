@@ -1,15 +1,15 @@
-"""Adaptive BIST Orderflow Meta-Engine V2 - daily end-of-day orchestrator.
+"""Adaptive BIST Real-Return Engine V3 — daily run after the close (18:25 TR).
 
-Run once per session AFTER the close (GitHub Actions ~18:25 TR):
-  1. EOD snapshot (TradingView, free) + optional takas
-  2. validation, stale/holiday detection, corporate-action detection
-  3. regime forecast (sticky HMM on XU100 + USDTRY, yfinance, free)
-  4. labels -> learning (champion/challenger) -> calibration
-  5. autonomy guard
-  6. ledger update with today's bar (entries/exits)
-  7. scoring + selection for TOMORROW's open, Telegram report
-`python main.py --self-test` runs the whole pipeline on synthetic data in a
-temporary folder (never touches ./data).
+Every session:
+  * execute yesterday's orders at today's OPEN, mark the portfolio to the CLOSE
+    (adjusted change -> bonus issues are harmless), catastrophe-stop check,
+  * NAV vs XU100 vs CPI bookkeeping, autonomy guard.
+First session of every month (the monthly review):
+  * price factors from adjusted yfinance history + TradingView fundamentals,
+  * resolve 12-month labels of past monthly snapshots (nominal, REAL, vs XU100),
+  * learning (champion/challenger) + calibration of expected REAL return,
+  * HOLD / SELL (thesis) / BUY decisions -> orders for the next open.
+`python main.py --self-test` runs everything on synthetic data in a temp folder.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import sys
 import tempfile
 
 if "--self-test" in sys.argv and "BOQ_DATA_DIR" not in os.environ:
-    os.environ["BOQ_DATA_DIR"] = tempfile.mkdtemp(prefix="boq_selftest_")
+    os.environ["BOQ_DATA_DIR"] = tempfile.mkdtemp(prefix="boq3_selftest_")
 
 import argparse  # noqa: E402
 from datetime import datetime  # noqa: E402
@@ -29,51 +29,24 @@ import pandas as pd  # noqa: E402
 
 import calendar_tr as cal  # noqa: E402
 import config as C  # noqa: E402
-import regime_model  # noqa: E402
+import inflation as INF  # noqa: E402
+import market_data as MD  # noqa: E402
+import regime_model as RM  # noqa: E402
 from autonomy_guard import evaluate_guard  # noqa: E402
+from backtest_validator import enrich_lots, lot_metrics, nav_metrics  # noqa: E402
 from calibration import calibrate  # noqa: E402
-from data_integrity import build_price_panel, is_stale, today_ca_ratio, validate_market_frame  # noqa: E402
-from flow_fetcher import fetch_all_data  # noqa: E402
-from labels import compute_labels  # noqa: E402
-from learner_engine import live_composite_ic, run_learning  # noqa: E402
-from meta_engine import score_snapshot  # noqa: E402
-from portfolio_ledger import add_signals, closed_returns_by_exit, performance_summary, update_ledger  # noqa: E402
-from state_manager import (SNAPSHOT_RAW_COLS, append_snapshot, load_ledger, load_research_prior,  # noqa: E402
-                           load_snapshots, load_state, save_ledger, save_snapshots, save_state)
+from data_integrity import validate_market_frame  # noqa: E402
+from factors import price_factors_at, wide_from_history  # noqa: E402
+from labels import forward_labels  # noqa: E402
+from learner_engine import daily_rank_ic, live_composite_ic, newey_west, run_learning  # noqa: E402
+from meta_engine import exposure_from, plan_rebalance, score_universe  # noqa: E402
+from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
+from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
+                           load_state, load_trade_log, save_monthly_snapshots, save_state)
 
-KEEP_SCORED_COLS = [f"z_{k}" for k in C.FACTORS] + [
-    "composite", "composite_pct", "exp_net_pct", "regime_label", "p_risk_off", "model_version", "eligible"]
-
-
-def build_dataset(snapshots: pd.DataFrame) -> pd.DataFrame:
-    """Point-in-time learning set: factor z-scores recorded on date t + labels resolved later."""
-    if snapshots is None or snapshots.empty or "z_" + C.FACTORS[0] not in snapshots.columns:
-        return pd.DataFrame()
-    panel = build_price_panel(snapshots)
-    lab = compute_labels(panel)
-    if lab.empty:
-        return pd.DataFrame()
-    cols = ["tarih", "ticker"] + [c for c in KEEP_SCORED_COLS if c in snapshots.columns and c != "eligible"]
-    feat = snapshots[cols].dropna(subset=["z_" + C.FACTORS[0]])
-    return feat.merge(lab, on=["tarih", "ticker"], how="inner")
-
-
-def fill_atr_from_history(valid: pd.DataFrame, hist: pd.DataFrame, n: int = 14) -> pd.DataFrame:
-    """If the feed did not deliver ATR, compute a simple 14-session ATR from our own stored
-    EOD bars (real data, never invented). Names with too little history stay NaN."""
-    atr = pd.to_numeric(valid["atr"], errors="coerce") if "atr" in valid else pd.Series(np.nan, index=valid.index)
-    if atr.notna().mean() >= 0.5 or hist is None or hist.empty:
-        return valid
-    h = pd.concat([hist[["tarih", "ticker", "high", "low", "close"]], valid[["tarih", "ticker", "high", "low", "close"]]])
-    h = h.sort_values(["ticker", "tarih"])
-    prev = h.groupby("ticker")["close"].shift()
-    h["tr"] = np.maximum(h["high"] - h["low"], np.maximum((h["high"] - prev).abs(), (h["low"] - prev).abs()))
-    last = h.groupby("ticker").tail(n)
-    agg = last.groupby("ticker")["tr"].agg(["mean", "count"])
-    est = agg.loc[agg["count"] >= n, "mean"]
-    out = valid.copy()
-    out["atr"] = atr.fillna(out["ticker"].map(est))
-    return out
+FUND_COLS = ["ticker", "market_cap", "sector", "roe", "pe", "pb", "ps", "net_income", "revenue",
+             "rev_growth", "op_margin", "debt_to_equity", "div_yield"]
+LABEL_COLS = ["fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_pct"]
 
 
 def send_telegram(message: str) -> bool:
@@ -90,141 +63,240 @@ def send_telegram(message: str) -> bool:
         return False
 
 
-def format_report(today, state, scored, info, events, perf) -> str:
-    reg, g, model, cal_ = state.get("regime", {}), state.get("autonomy_guard", {}), state.get("model", {}), state.get("calibration", {})
-    probs = " / ".join(f"{k} %{v * 100:.0f}" for k, v in (reg.get("probs") or {}).items())
-    L = [
-        f"🧠 <b>BIST META-ENGINE V2</b> | {today:%d.%m.%Y} (kapanış sonrası)",
-        f"🧭 Rejim (HMM): <b>{reg.get('label', '?')}</b> | {probs}",
-        f"📈 Beklenen piyasa 5G: <b>%{float(reg.get('exp_mkt_5d_pct', 0)):+.2f}</b>" + (" ⚠️ degraded" if reg.get("degraded") else ""),
-        f"🛡️ Guard: <b>{g.get('mode', '?')}</b> ({escape(str(g.get('reason', '')))}) | maruziyet x{info.get('exposure', 0):.2f}",
-        f"🧪 Model: {escape(str(model.get('champion_version')))} | {escape(str(model.get('status', '')))}",
-        f"🎯 Kalibrasyon: {cal_.get('status')} | eşik p{info.get('pct_cutoff', 0):.0f}",
-    ]
-    li = state.get("model", {}).get("composite_ic_live", {})
-    if li.get("n_dates"):
-        L.append(f"📊 Canlı OOS IC: {li.get('ic_mean', 0):+.3f} (t={li.get('t_nw', 0):.2f}, n={li['n_dates']})")
-    if perf.get("closed"):
-        L.append(f"💼 Kapanan {perf['closed']} işlem | isabet %{perf.get('hit_rate_pct', 0):.1f} | ort. net %{perf.get('avg_net_pct', 0):+.2f} | PF {perf.get('profit_factor')}")
-    if events:
-        L.append("🔔 <b>Pozisyon olayları</b>")
-        for e in events[:12]:
-            extra = f" net %{e['net']:+.2f}" if "net" in e else (f" @{e['price']}" if "price" in e else "")
-            L.append(f"• {escape(str(e['ticker']))} — {e['type']}{extra}")
-    top = scored[scored["eligible"]]
-    if not top.empty:
-        L.append("💎 <b>YARIN AÇILIŞTA ALIM ADAYLARI</b>")
-        for _, r in top.iterrows():
-            L.append(f"• <b>{escape(str(r['ticker']))}</b> | skor p{r['composite_pct']:.0f} | beklenen net %{r['exp_net_pct']:+.2f} | "
-                     f"stop -%{r['stop_dist_pct']:.1f} / hedef +%{r['stop_dist_pct'] * C.TARGET_RR:.1f} | "
-                     f"ağırlık %{r['size_pct']:.1f} | süre {C.MAX_HOLD}G")
-    else:
-        L.append("ℹ️ Bugün tüm kapıları (beklenen net getiri, likidite, guard) geçen aday yok.")
+def _fingerprint(df: pd.DataFrame) -> str:
+    top = df.sort_values("value_traded", ascending=False).head(60)
+    return f"{np.round(top['close'].to_numpy(float), 4).sum():.4f}|{np.round(top['volume'].to_numpy(float), 0).sum():.0f}"
+
+
+def resolve_labels(snaps: pd.DataFrame, wide, cpi, index_close) -> pd.DataFrame:
+    """Fill 1m/3m/12m labels of past monthly snapshots once the windows have elapsed."""
+    if snaps.empty:
+        return snaps
+    s = snaps.copy()
+    for c in LABEL_COLS:
+        if c not in s.columns:
+            s[c] = np.nan
+    need = s[s["fwd_ret"].isna() | s["fwd_3m"].isna() | s["fwd_1m"].isna()]["tarih"].unique()
+    if len(need) and wide is not None:
+        lab = forward_labels(wide, list(need), cpi, index_close)
+        if not lab.empty:
+            lab = lab.rename(columns={c: f"{c}__new" for c in LABEL_COLS})
+            s = s.merge(lab, on=["tarih", "ticker"], how="left")
+            for c in LABEL_COLS:
+                s[c] = s[c].fillna(s[f"{c}__new"])
+            s = s.drop(columns=[f"{c}__new" for c in LABEL_COLS])
+    # real return can resolve later than the nominal one (CPI publication lag)
+    m = s["fwd_ret"].notna() & s["real_ret"].isna()
+    if m.any() and cpi is not None and len(cpi):
+        cr = INF.cpi_ratio_vec(cpi, s.loc[m, "tarih"], s.loc[m, "tarih"] + pd.DateOffset(months=12))
+        s.loc[m, "real_ret"] = ((1 + s.loc[m, "fwd_ret"] / 100.0) / cr - 1.0) * 100.0
+        s.loc[m, "cpi_12m_pct"] = (cr - 1.0) * 100.0
+    return s
+
+
+def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
+    if dataset is None or dataset.empty or target not in dataset:
+        return {"n_dates": 0}
+    d = dataset.dropna(subset=[target, "composite"])
+    ic = daily_rank_ic(d, ["composite"], target)
+    if ic.empty:
+        return {"n_dates": 0}
+    s = ic["composite"]
+    lag = 11 if target == "fwd_ret" else (2 if target == "fwd_3m" else 0)
+    m, se, t, n = newey_west(s, lag)
+    return {"n_dates": n, "ic_mean": round(m, 4), "t_nw": round(t, 2), "ic_recent": round(float(s.tail(6).mean()), 4)}
+
+
+def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn):
+    pf = state["portfolio"]
+    snaps = load_monthly_snapshots()
+    universe = snap.sort_values("value_traded", ascending=False)["ticker"].head(C.SCAN_LIMIT).tolist()
+    universe = sorted(set(universe) | set(pf["positions"].keys()))
+    start = today - pd.Timedelta(days=430)
+    unresolved = []
+    if not snaps.empty:
+        pend = snaps[snaps.get("fwd_ret").isna()] if "fwd_ret" in snaps else snaps
+        pend = pend[pend["tarih"] >= today - pd.Timedelta(days=500)]
+        if not pend.empty:
+            start = min(start, pend["tarih"].min() - pd.Timedelta(days=10))
+            unresolved = sorted(set(pend["ticker"]))
+    hist = hist_fn(sorted(set(universe) | set(unresolved)), str(start.date()))
+    if len(hist) < C.MIN_CROSS_SECTION:
+        return {"status": "HISTORY_UNAVAILABLE", "n_hist": len(hist)}, []
+    wide = wide_from_history(hist)
+    snaps = resolve_labels(snaps, wide, cpi, index_close)
+
+    dataset = snaps.dropna(subset=["fwd_ret"]) if not snaps.empty and "fwd_ret" in snaps else pd.DataFrame()
+    run_learning(state, dataset, research)
+    calibrate(state, dataset, research)
+    state["model"]["ic_live_12m"] = ic_stats(snaps, "fwd_ret")
+    state["model"]["ic_live_3m"] = ic_stats(snaps, "fwd_3m")
+
+    price_f = price_factors_at(wide, index_close, today)
+    price_f = price_f[price_f["ticker"].isin(universe)]
+    fund = snap[[c for c in FUND_COLS if c in snap.columns]].copy()
+    frame, info = score_universe(price_f, fund, state, cpi_stats, state.get("sector_map"))
+    if frame.empty:
+        return {"status": "NO_FACTORS", **info}, []
+    exposure = exposure_from(guard, state.get("regime", {}))
+    chg = snap.set_index("ticker")["change_pct"]
+    orders, summ = plan_rebalance(pf, frame, state, exposure, block=bool(guard.get("block_new_entries")),
+                                  today_change=chg)
+    keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
+    pf["pending"] = keep + [o for o in orders if o["ticker"] not in {k["ticker"] for k in keep}]
+    pf["last_rebalance_month"] = today.strftime("%Y-%m")
+
+    sel = set(summ.get("holds", [])) | set(summ.get("buys", []))
+    cols = ["ticker", "sector", "close_adj", "med_value_traded", "vol_ann_pct", "beta", "composite", "composite_pct",
+            "exp_real_12m", "p_beat_cpi", "regime_label", "model_version", "fund_break"] + \
+        [f"f_{k}" for k in C.FACTORS] + [f"z_{k}" for k in C.FACTORS]
+    rec = frame[[c for c in cols if c in frame.columns]].copy()
+    rec["tarih"] = today
+    rec["selected"] = rec["ticker"].isin(sel)
+    for c in LABEL_COLS:
+        rec[c] = np.nan
+    base = snaps[snaps["tarih"] != today] if not snaps.empty else snaps
+    save_monthly_snapshots(pd.concat([base, rec], ignore_index=True) if not base.empty else rec)
+    top = frame[frame["ticker"].isin(summ.get("buys", []))].sort_values("composite", ascending=False)
+    return {"status": "OK", **info, **summ, "exposure": round(exposure, 3)}, top.to_dict("records")
+
+
+def format_monthly(today, state, rev, top) -> str:
+    reg, g, m, cal_, inf = (state.get(k, {}) for k in ("regime", "autonomy_guard", "model", "calibration", "inflation"))
+    perf = state.get("performance", {})
+    L = [f"🏛️ <b>BIST REEL GETİRİ MOTORU V3 — AYLIK GÖZDEN GEÇİRME</b> | {today:%d.%m.%Y}",
+         f"🎯 Hedef: 12 ayda TÜFE'yi yenmek (ikincil: XU100)",
+         f"📉 TÜFE yıllık %{inf.get('yoy_pct')} | beklenen 12A %{inf.get('expected_12m_pct')} ({inf.get('source')})",
+         f"🧭 Rejim: <b>{reg.get('label')}</b> | P(risk-off) %{float(reg.get('p_risk_off') or 0) * 100:.0f} | "
+         f"piyasa 12A beklenti %{rev.get('market_12m', {}).get('mkt_12m_pct')}",
+         f"🛡️ Guard: {g.get('mode')} | maruziyet %{float(rev.get('exposure', 0)) * 100:.0f}",
+         f"🧠 Model: {escape(str(m.get('champion_version')))} | {escape(str(m.get('status')))}",
+         f"🎚️ Kalibrasyon: {cal_.get('status')} | alım eşiği p{cal_.get('pct_cutoff')} / tutma p{C.HOLD_PCT:.0f}"]
+    if rev.get("sells"):
+        L.append("🔻 <b>SAT (yarın açılış):</b> " + ", ".join(rev["sells"]))
+    if rev.get("holds"):
+        L.append("✅ <b>TUT:</b> " + ", ".join(rev["holds"]))
+    if top:
+        L.append("💎 <b>AL (yarın açılış):</b>")
+        tw = rev.get("target_weights", {})
+        for r in top:
+            pb = r.get("p_beat_cpi")
+            L.append(f"• <b>{escape(str(r['ticker']))}</b> | skor p{r['composite_pct']:.0f} | beklenen reel 12A "
+                     f"%{r['exp_real_12m']:+.1f}" + (f" | TÜFE'yi yenme olasılığı %{pb * 100:.0f}" if pb == pb and pb is not None else "")
+                     + f" | ağırlık %{tw.get(r['ticker'], 0) * 100:.1f}")
+    elif not rev.get("blocked"):
+        L.append("ℹ️ Bu ay yeni alım kriterlerini (beklenen reel getiri, likidite, sektör limiti) geçen hisse yok.")
+    L.append(f"💵 Hedef nakit: %{float(rev.get('cash_target', 0)) * 100:.0f}")
+    if perf.get("nav", {}).get("days"):
+        n = perf["nav"]
+        L.append(f"📊 Portföy: toplam %{n.get('total_return_pct')} | reel %{n.get('real_total_pct')} | "
+                 f"XU100 %{n.get('xu100_total_pct')} | maks. düşüş %{n.get('max_drawdown_pct')}")
     return "\n".join(L)
 
 
-def run(force: bool = False, fetcher=fetch_all_data, today=None) -> dict:
+def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,
+        cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series) -> dict:
     real_run = today is None
     today = pd.Timestamp(today) if today is not None else cal.today_tr()
     if real_run and not force:
         now_tr = pd.Timestamp.now(tz=C.MARKET_TZ)
         if now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15:
-            print(f"ℹ️ Seans henüz kapanmadı ({now_tr:%H:%M} TR). Motor yalnızca 18:15 sonrası kapanış verisiyle çalışır.")
+            print(f"ℹ️ Seans kapanmadı ({now_tr:%H:%M}). Motor 18:15 sonrası kapanış verisiyle çalışır.")
             return {"status": "BEFORE_CLOSE"}
     if not cal.is_session(today) and not force:
-        print(f"ℹ️ {today.date()} BIST seansı değil; çalışma atlandı.")
+        print(f"ℹ️ {today.date()} BIST seansı değil.")
         return {"status": "NOT_SESSION"}
 
     state = load_state()
     research = load_research_prior()
-    snapshots = load_snapshots()
-
-    raw, meta = fetcher(state)
+    raw, meta = fetch(state)
     if not raw.empty:
         raw["tarih"] = today
-    valid, quality = validate_market_frame(raw)
+    snap, quality = validate_market_frame(raw)
     state["data_quality"] = {**quality, "fetch": meta}
-    if valid.empty or not quality.get("ok"):
-        # No signals today, but do not push the guard into a multi-day SAFE cycle
-        # because of a single feed outage.
-        state["last_run"] = {"date": str(today.date()), "status": f"DATA_BLOCKED:{quality.get('reason')}",
-                             "utc": datetime.utcnow().isoformat() + "Z"}
+    if snap.empty or not quality.get("ok"):
+        state["last_run"] = {"date": str(today.date()), "status": f"DATA_BLOCKED:{quality.get('reason')}"}
         save_state(state)
-        send_telegram(f"🛑 BIST Meta-Engine: veri kalitesi yetersiz ({escape(str(quality.get('reason')))}). Yeni sinyal üretilmedi.")
+        send_telegram(f"🛑 BIST V3: veri kalitesi yetersiz ({escape(str(quality.get('reason')))}); bugün işlem yapılmadı.")
         return {"status": "DATA_BLOCKED"}
-
-    hist = snapshots[snapshots["tarih"] < today] if not snapshots.empty else snapshots
-    last_date = hist["tarih"].max() if not hist.empty else None
-    last = hist[hist["tarih"] == last_date] if last_date is not None else pd.DataFrame()
-    if not force and is_stale(valid, last):
-        print("ℹ️ Snapshot bir önceki günle aynı (tatil / donmuş veri); çalışma atlandı.")
-        state["last_run"] = {"date": str(today.date()), "status": "STALE_SKIPPED"}
-        save_state(state)
+    fp = _fingerprint(snap)
+    if not force and state.get("last_run", {}).get("fingerprint") == fp:
+        print("ℹ️ Veri bir önceki çalışmayla aynı (tatil/donmuş veri); atlandı.")
         return {"status": "STALE"}
+    if "sector" in snap:
+        state.setdefault("sector_map", {}).update({t: s for t, s in zip(snap["ticker"], snap["sector"]) if isinstance(s, str) and s})
 
-    if "sector" in valid:
-        state.setdefault("sector_map", {}).update(
-            {t: s for t, s in zip(valid["ticker"], valid["sector"]) if isinstance(s, str) and s})
-    valid = fill_atr_from_history(valid, hist)
-    ca = today_ca_ratio(valid, last, last_date, today) if last_date is not None else {}
-    prev_takas = last.set_index("ticker")["takas_conc"] if (not last.empty and "takas_conc" in last) else None
+    # regime + index
+    index_close = None
+    try:
+        rser = regime_fn()
+        index_close = rser["idx"]
+    except Exception as exc:
+        rser = None
+        print(f"⚠️ Rejim serisi alınamadı: {exc}")
+    RM.update_regime(state, snap, today, series=rser)
 
-    # ---------------- regime forecast
-    regime_model.update_regime(state, valid, today)
+    # inflation
+    cpi, cmeta = cpi_fn()
+    cpi_stats = INF.inflation_stats(cpi)
+    state["inflation"] = {**cpi_stats, **cmeta}
 
-    # ---------------- learning on point-in-time history (+ today's bar resolves labels)
-    today_raw = valid[[c for c in SNAPSHOT_RAW_COLS if c in valid.columns]].copy()
-    panel_src = append_snapshot(hist, today_raw) if not hist.empty else today_raw
-    dataset = build_dataset(panel_src)
-    run_learning(state, dataset, research)
-    calibrate(state, dataset, research)
-    state["model"]["composite_ic_live"] = live_composite_ic(dataset)
+    # portfolio: execute pending orders at today's open, mark to close
+    if not state.get("portfolio"):
+        state["portfolio"] = new_portfolio(today)
+    pf = state["portfolio"]
+    bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
+    events, lots = apply_day(pf, bars, today)
+    if lots:
+        append_rows(C.TRADE_LOG_FILE, lots)
+    xu = float(index_close.iloc[-1]) if index_close is not None and len(index_close) else np.nan
+    wts = pf_weights(pf)
+    append_rows(C.NAV_FILE, [{"tarih": str(today.date()), "nav": round(pf["nav"], 6), "cash": round(pf["cash"], 6),
+                              "n_positions": len(pf["positions"]), "exposure": round(sum(wts.values()), 4),
+                              "xu100": xu}])
 
-    # ---------------- ledger with today's bar
-    ledger = load_ledger()
-    ledger, events = update_ledger(ledger, valid, today, ca)
+    nav_df = load_nav()
+    guard = evaluate_guard(state, features=snap, data_quality=quality.get("score", 0.0), rows=quality.get("rows"),
+                           live_ic=state.get("model", {}).get("ic_live_3m"), nav_df=nav_df)
 
-    # ---------------- guard
-    feats = valid.copy()
-    feats["atr_pct"] = (pd.to_numeric(feats["atr"], errors="coerce") if "atr" in feats else np.nan) / feats["close"] * 100.0
-    guard = evaluate_guard(state, features=feats, data_quality=quality.get("score", 0.0), rows=quality.get("rows"),
-                           live_ic=state["model"]["composite_ic_live"], trade_returns=closed_returns_by_exit(ledger, today))
+    review, top = None, []
+    if pf.get("last_rebalance_month") != today.strftime("%Y-%m"):
+        review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn)
+        state["last_rebalance"] = {"date": str(today.date()), **{k: v for k, v in review.items() if k not in ("weights",)}}
 
-    # ---------------- scoring for tomorrow
-    live = ledger[ledger["status"].isin(["OPEN", "PENDING_ENTRY"])] if not ledger.empty else ledger
-    scored, info = score_snapshot(valid, state, prev_takas, guard, open_positions=len(live),
-                                  held_tickers=set(live["ticker"]) if not live.empty else set())
-    ledger = add_signals(ledger, scored, today)
-
-    keep = [c for c in SNAPSHOT_RAW_COLS if c in scored.columns] + [c for c in KEEP_SCORED_COLS if c in scored.columns]
-    snap_today = scored[keep].copy()
-    snap_today["tarih"] = today
-    save_snapshots(append_snapshot(hist, snap_today))
-    save_ledger(ledger)
-
-    perf = performance_summary(ledger)
-    state["performance"] = perf
-    state["last_run"] = {"date": str(today.date()), "status": "OK", "n_eligible": info["n_eligible"],
-                         "weights": info["weights"], "coverage": info["coverage"], "ca_events_today": ca,
-                         "missing_sessions": [str(d.date()) for d in cal.missing_sessions(
-                             list(hist["tarih"].unique()) + [today])][-10:] if not hist.empty else [],
-                         "utc": datetime.utcnow().isoformat() + "Z"}
+    lots_all = enrich_lots(load_trade_log(), cpi, index_close)
+    state["performance"] = {"nav": nav_metrics(nav_df, cpi), "lots": lot_metrics(lots_all),
+                            "open_positions": {t: {"w": round(wts.get(t, 0), 4), "ret_pct": round((p["level"] - 1) * 100, 2),
+                                                   "since": p["entry_date"]} for t, p in pf["positions"].items()}}
+    state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp,
+                         "monthly_review": bool(review), "utc": datetime.utcnow().isoformat() + "Z"}
     save_state(state)
-    send_telegram(format_report(today, state, scored, info, events, perf))
-    print(f"✅ Tamamlandı | rejim={state['regime'].get('label')} | guard={guard['mode']} | aday={info['n_eligible']}")
-    return {"status": "OK", "state": state, "scored": scored, "info": info, "events": events}
+
+    if review and review.get("status") == "OK":
+        send_telegram(format_monthly(today, state, review, top))
+    elif review:
+        send_telegram(f"⚠️ BIST V3 aylık gözden geçirme tamamlanamadı: {escape(str(review.get('status')))}. Yarın tekrar denenecek.")
+        pf["last_rebalance_month"] = None
+        save_state(state)
+    elif events:
+        lines = [f"🔔 <b>BIST V3 portföy olayları</b> | {today:%d.%m.%Y}"]
+        for e in events[:15]:
+            extra = f" %{e['ret']:+.1f}" if "ret" in e else ""
+            lines.append(f"• {escape(str(e['ticker']))} — {e['type']}{extra}")
+        send_telegram("\n".join(lines))
+    print(f"✅ {today.date()} | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
+    return {"status": "OK", "state": state, "events": events, "review": review}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
-    ap.add_argument("--force", action="store_true", help="tatil/stale kontrolünü atla (manuel test)")
-    args = ap.parse_args()
-    if args.self_test:
+    ap.add_argument("--force", action="store_true")
+    a = ap.parse_args()
+    if a.self_test:
         from selftest import run_self_test
-        ok = run_self_test()
-        sys.exit(0 if ok else 1)
-    run(force=args.force)
+        sys.exit(0 if run_self_test() else 1)
+    run(force=a.force)
 
 
 if __name__ == "__main__":
