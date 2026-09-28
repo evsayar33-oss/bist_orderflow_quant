@@ -1,0 +1,550 @@
+{
+  "generated_at": "2026-09-28T19:22:12.628666Z",
+  "engine_version": "2.0.0",
+  "period": "2019-03-29..2026-09-28",
+  "universe_requested": 106,
+  "universe_downloaded": 103,
+  "data_source": "Yahoo Finance adjusted OHLCV (free) + XU100/USDTRY for regime",
+  "synthetic_data_used": false,
+  "cost_round_trip_pct": 0.5,
+  "trade_rule": {
+    "horizon": 5,
+    "max_hold": 10,
+    "stop_atr_mult": 2.0,
+    "target_rr": 1.5,
+    "max_open": 12
+  },
+  "oos_trades": {
+    "trades": 1527,
+    "hit_rate_pct": 47.02,
+    "avg_net_pct": 0.5843,
+    "median_net_pct": -0.3,
+    "profit_factor": 1.229,
+    "date_clustered_mean": 0.3578,
+    "date_clustered_t": 1.105,
+    "date_clustered_lcb90": -0.0571,
+    "exit_mix": {
+      "TIME": 584,
+      "STOP": 549,
+      "TARGET": 394
+    }
+  },
+  "oos_portfolio": {
+    "days": 1387,
+    "total_return_pct": 179.94,
+    "cagr_pct": 20.57,
+    "ann_vol_pct": 20.54,
+    "sharpe": 1.014,
+    "max_drawdown_pct": -33.86,
+    "calmar": 0.607
+  },
+  "oos_composite_ic": {
+    "mean": 0.03976,
+    "t_nw": 5.23,
+    "n_dates": 1367
+  },
+  "stability": {
+    "stable": true,
+    "positive_folds": 8,
+    "folds": 11,
+    "fold_means": [
+      -0.8796,
+      2.6982,
+      2.7188,
+      6.0415,
+      2.1054,
+      0.1641,
+      0.2018,
+      -0.0134,
+      0.4431,
+      0.1587,
+      -0.7154
+    ]
+  },
+  "per_year": {
+    "2021": {
+      "trades": 159,
+      "hit_rate_pct": 44.03,
+      "avg_net_pct": 0.1454,
+      "median_net_pct": -0.3,
+      "profit_factor": 1.042,
+      "date_clustered_mean": 0.0027,
+      "date_clustered_t": 0.002,
+      "date_clustered_lcb90": -1.5686,
+      "exit_mix": {
+        "TIME": 58,
+        "STOP": 55,
+        "TARGET": 46
+      }
+    },
+    "2022": {
+      "trades": 102,
+      "hit_rate_pct": 64.71,
+      "avg_net_pct": 3.317,
+      "median_net_pct": 4.8558,
+      "profit_factor": 3.293,
+      "date_clustered_mean": 3.6238,
+      "date_clustered_t": 3.523,
+      "date_clustered_lcb90": 2.3056,
+      "exit_mix": {
+        "TARGET": 44,
+        "TIME": 34,
+        "STOP": 24
+      }
+    },
+    "2023": {
+      "trades": 229,
+      "hit_rate_pct": 48.03,
+      "avg_net_pct": 0.7159,
+      "median_net_pct": -0.3,
+      "profit_factor": 1.225,
+      "date_clustered_mean": -0.1493,
+      "date_clustered_t": -0.141,
+      "date_clustered_lcb90": -1.5031,
+      "exit_mix": {
+        "TIME": 86,
+        "STOP": 84,
+        "TARGET": 59
+      }
+    },
+    "2024": {
+      "trades": 385,
+      "hit_rate_pct": 48.83,
+      "avg_net_pct": 0.9178,
+      "median_net_pct": -0.2118,
+      "profit_factor": 1.379,
+      "date_clustered_mean": 1.0992,
+      "date_clustered_t": 1.748,
+      "date_clustered_lcb90": 0.2932,
+      "exit_mix": {
+        "TIME": 155,
+        "STOP": 133,
+        "TARGET": 97
+      }
+    },
+    "2025": {
+      "trades": 407,
+      "hit_rate_pct": 45.21,
+      "avg_net_pct": 0.1916,
+      "median_net_pct": -0.3,
+      "profit_factor": 1.082,
+      "date_clustered_mean": -0.0253,
+      "date_clustered_t": -0.049,
+      "date_clustered_lcb90": -0.6811,
+      "exit_mix": {
+        "STOP": 158,
+        "TIME": 153,
+        "TARGET": 96
+      }
+    },
+    "2026": {
+      "trades": 245,
+      "hit_rate_pct": 40.82,
+      "avg_net_pct": -0.2632,
+      "median_net_pct": -0.6613,
+      "profit_factor": 0.89,
+      "date_clustered_mean": -0.4966,
+      "date_clustered_t": -0.888,
+      "date_clustered_lcb90": -1.2136,
+      "exit_mix": {
+        "TIME": 98,
+        "STOP": 95,
+        "TARGET": 52
+      }
+    }
+  },
+  "folds": [
+    {
+      "train_end": "2021-03-04",
+      "test_start": "2021-03-22",
+      "test_end": "2021-09-27",
+      "weights": {
+        "mom_3m": 0.07475,
+        "rs_1m": -0.09526,
+        "range_pos": -0.03794,
+        "rev_1d": 0.19682,
+        "flow_clv": 0.167,
+        "vol_surge": -0.05769,
+        "low_vol": -0.01906,
+        "liquidity": -0.35148,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 95.0,
+      "oos_ic_mean": -0.0182,
+      "trades": {
+        "trades": 91,
+        "hit_rate_pct": 34.07,
+        "avg_net_pct": -0.7936,
+        "median_net_pct": -3.0,
+        "profit_factor": 0.831,
+        "date_clustered_mean": -0.8796,
+        "date_clustered_t": -0.507,
+        "date_clustered_lcb90": -3.105,
+        "exit_mix": {
+          "TIME": 44,
+          "STOP": 28,
+          "TARGET": 19
+        }
+      }
+    },
+    {
+      "train_end": "2021-09-10",
+      "test_start": "2021-09-28",
+      "test_end": "2022-03-23",
+      "weights": {
+        "mom_3m": 0.08856,
+        "rs_1m": -0.01847,
+        "range_pos": 0.01708,
+        "rev_1d": 0.14943,
+        "flow_clv": 0.14554,
+        "vol_surge": -0.02355,
+        "low_vol": 0.20707,
+        "liquidity": -0.35031,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 90.0,
+      "oos_ic_mean": -0.0114,
+      "trades": {
+        "trades": 89,
+        "hit_rate_pct": 58.43,
+        "avg_net_pct": 1.7975,
+        "median_net_pct": 2.1197,
+        "profit_factor": 2.004,
+        "date_clustered_mean": 2.6982,
+        "date_clustered_t": 2.801,
+        "date_clustered_lcb90": 1.4638,
+        "exit_mix": {
+          "TARGET": 35,
+          "STOP": 31,
+          "TIME": 23
+        }
+      }
+    },
+    {
+      "train_end": "2022-03-08",
+      "test_start": "2022-03-24",
+      "test_end": "2022-09-27",
+      "weights": {
+        "mom_3m": 0.10005,
+        "rs_1m": -0.05114,
+        "range_pos": 0.01949,
+        "rev_1d": 0.10942,
+        "flow_clv": 0.14998,
+        "vol_surge": -0.0061,
+        "low_vol": 0.22645,
+        "liquidity": -0.33737,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.0184,
+      "trades": {
+        "trades": 68,
+        "hit_rate_pct": 63.24,
+        "avg_net_pct": 3.025,
+        "median_net_pct": 4.2466,
+        "profit_factor": 3.354,
+        "date_clustered_mean": 2.7188,
+        "date_clustered_t": 2.481,
+        "date_clustered_lcb90": 1.3144,
+        "exit_mix": {
+          "TARGET": 30,
+          "TIME": 20,
+          "STOP": 18
+        }
+      }
+    },
+    {
+      "train_end": "2022-09-12",
+      "test_start": "2022-09-28",
+      "test_end": "2023-03-28",
+      "weights": {
+        "mom_3m": 0.14144,
+        "rs_1m": -0.01735,
+        "range_pos": 0.0062,
+        "rev_1d": 0.09148,
+        "flow_clv": 0.14899,
+        "vol_surge": -0.01683,
+        "low_vol": 0.25145,
+        "liquidity": -0.32625,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.0649,
+      "trades": {
+        "trades": 13,
+        "hit_rate_pct": 76.92,
+        "avg_net_pct": 5.2301,
+        "median_net_pct": 8.0071,
+        "profit_factor": 3.981,
+        "date_clustered_mean": 6.0415,
+        "date_clustered_t": 0.0,
+        "date_clustered_lcb90": null,
+        "exit_mix": {
+          "TARGET": 6,
+          "TIME": 5,
+          "STOP": 2
+        }
+      }
+    },
+    {
+      "train_end": "2023-03-13",
+      "test_start": "2023-03-29",
+      "test_end": "2023-09-29",
+      "weights": {
+        "mom_3m": 0.1128,
+        "rs_1m": -0.04611,
+        "range_pos": 0.02256,
+        "rev_1d": 0.05862,
+        "flow_clv": 0.11971,
+        "vol_surge": -0.06289,
+        "low_vol": 0.29624,
+        "liquidity": -0.28107,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.0624,
+      "trades": {
+        "trades": 132,
+        "hit_rate_pct": 56.06,
+        "avg_net_pct": 2.3973,
+        "median_net_pct": 3.303,
+        "profit_factor": 1.924,
+        "date_clustered_mean": 2.1054,
+        "date_clustered_t": 1.363,
+        "date_clustered_lcb90": 0.1252,
+        "exit_mix": {
+          "TARGET": 49,
+          "STOP": 46,
+          "TIME": 37
+        }
+      }
+    },
+    {
+      "train_end": "2023-09-14",
+      "test_start": "2023-10-02",
+      "test_end": "2024-03-26",
+      "weights": {
+        "mom_3m": 0.12372,
+        "rs_1m": -0.05601,
+        "range_pos": -0.00771,
+        "rev_1d": 0.05611,
+        "flow_clv": 0.10676,
+        "vol_surge": -0.09662,
+        "low_vol": 0.26803,
+        "liquidity": -0.28504,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.0836,
+      "trades": {
+        "trades": 187,
+        "hit_rate_pct": 46.52,
+        "avg_net_pct": 0.4064,
+        "median_net_pct": -0.3,
+        "profit_factor": 1.138,
+        "date_clustered_mean": 0.1641,
+        "date_clustered_t": 0.153,
+        "date_clustered_lcb90": -1.2107,
+        "exit_mix": {
+          "TIME": 89,
+          "STOP": 60,
+          "TARGET": 38
+        }
+      }
+    },
+    {
+      "train_end": "2024-03-11",
+      "test_start": "2024-03-27",
+      "test_end": "2024-10-03",
+      "weights": {
+        "mom_3m": 0.11572,
+        "rs_1m": -0.05695,
+        "range_pos": -0.01154,
+        "rev_1d": 0.05114,
+        "flow_clv": 0.0856,
+        "vol_surge": -0.08724,
+        "low_vol": 0.31057,
+        "liquidity": -0.28124,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.1069,
+      "trades": {
+        "trades": 199,
+        "hit_rate_pct": 41.21,
+        "avg_net_pct": 0.0343,
+        "median_net_pct": -0.8297,
+        "profit_factor": 1.011,
+        "date_clustered_mean": 0.2018,
+        "date_clustered_t": 0.217,
+        "date_clustered_lcb90": -0.9894,
+        "exit_mix": {
+          "STOP": 84,
+          "TIME": 70,
+          "TARGET": 45
+        }
+      }
+    },
+    {
+      "train_end": "2024-09-18",
+      "test_start": "2024-10-04",
+      "test_end": "2025-04-03",
+      "weights": {
+        "mom_3m": 0.13179,
+        "rs_1m": -0.01307,
+        "range_pos": 0.00355,
+        "rev_1d": 0.06887,
+        "flow_clv": 0.07621,
+        "vol_surge": -0.10455,
+        "low_vol": 0.35012,
+        "liquidity": -0.25185,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 85.0,
+      "oos_ic_mean": 0.0249,
+      "trades": {
+        "trades": 211,
+        "hit_rate_pct": 46.92,
+        "avg_net_pct": -0.0192,
+        "median_net_pct": -0.3,
+        "profit_factor": 0.992,
+        "date_clustered_mean": -0.0134,
+        "date_clustered_t": -0.019,
+        "date_clustered_lcb90": -0.9044,
+        "exit_mix": {
+          "STOP": 85,
+          "TIME": 78,
+          "TARGET": 48
+        }
+      }
+    },
+    {
+      "train_end": "2025-03-17",
+      "test_start": "2025-04-04",
+      "test_end": "2025-10-06",
+      "weights": {
+        "mom_3m": 0.12064,
+        "rs_1m": -0.01612,
+        "range_pos": 0.03058,
+        "rev_1d": 0.07413,
+        "flow_clv": 0.07318,
+        "vol_surge": -0.10128,
+        "low_vol": 0.35008,
+        "liquidity": -0.23398,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 80.0,
+      "oos_ic_mean": 0.0444,
+      "trades": {
+        "trades": 200,
+        "hit_rate_pct": 47.0,
+        "avg_net_pct": 0.5865,
+        "median_net_pct": -0.3,
+        "profit_factor": 1.267,
+        "date_clustered_mean": 0.4431,
+        "date_clustered_t": 0.653,
+        "date_clustered_lcb90": -0.4261,
+        "exit_mix": {
+          "TIME": 79,
+          "STOP": 72,
+          "TARGET": 49
+        }
+      }
+    },
+    {
+      "train_end": "2025-09-19",
+      "test_start": "2025-10-07",
+      "test_end": "2026-04-03",
+      "weights": {
+        "mom_3m": 0.0897,
+        "rs_1m": -0.0024,
+        "range_pos": 0.04433,
+        "rev_1d": 0.09046,
+        "flow_clv": 0.07575,
+        "vol_surge": -0.09758,
+        "low_vol": 0.35016,
+        "liquidity": -0.24963,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 90.0,
+      "oos_ic_mean": 0.0319,
+      "trades": {
+        "trades": 193,
+        "hit_rate_pct": 46.11,
+        "avg_net_pct": 0.4494,
+        "median_net_pct": -0.3,
+        "profit_factor": 1.225,
+        "date_clustered_mean": 0.1587,
+        "date_clustered_t": 0.204,
+        "date_clustered_lcb90": -0.8391,
+        "exit_mix": {
+          "TIME": 81,
+          "STOP": 65,
+          "TARGET": 47
+        }
+      }
+    },
+    {
+      "train_end": "2026-03-18",
+      "test_start": "2026-04-06",
+      "test_end": "2026-09-28",
+      "weights": {
+        "mom_3m": 0.1006,
+        "rs_1m": -0.00278,
+        "range_pos": 0.06288,
+        "rev_1d": 0.10241,
+        "flow_clv": 0.07064,
+        "vol_surge": -0.09734,
+        "low_vol": 0.3503,
+        "liquidity": -0.21306,
+        "takas_delta": 0.0
+      },
+      "pct_cutoff": 95.0,
+      "oos_ic_mean": 0.0293,
+      "trades": {
+        "trades": 144,
+        "hit_rate_pct": 39.58,
+        "avg_net_pct": -0.4754,
+        "median_net_pct": -1.2257,
+        "profit_factor": 0.804,
+        "date_clustered_mean": -0.7154,
+        "date_clustered_t": -1.223,
+        "date_clustered_lcb90": -1.465,
+        "exit_mix": {
+          "TIME": 58,
+          "STOP": 58,
+          "TARGET": 28
+        }
+      }
+    }
+  ],
+  "factor_ic_full_sample": {
+    "ic_mean": {
+      "mom_3m": 0.00356,
+      "rs_1m": 0.00155,
+      "range_pos": 0.00969,
+      "rev_1d": 0.00502,
+      "flow_clv": 0.00683,
+      "vol_surge": -0.01462,
+      "low_vol": 0.04941,
+      "liquidity": -0.02199,
+      "takas_delta": 0.0
+    },
+    "t_nw": {
+      "mom_3m": 0.504,
+      "rs_1m": 0.22,
+      "range_pos": 1.558,
+      "rev_1d": 1.312,
+      "flow_clv": 2.056,
+      "vol_surge": -3.352,
+      "low_vol": 6.09,
+      "liquidity": -2.948,
+      "takas_delta": 0.0
+    }
+  },
+  "limitations": [
+    "survivorship: universe = today's liquid names",
+    "no intraday data: same-bar stop/target resolved pessimistically",
+    "sector neutralisation only for tickers in live sector_map"
+  ]
+}
