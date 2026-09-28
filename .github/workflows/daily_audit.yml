@@ -1,9 +1,8 @@
-name: BIST Meta-Engine V2 - Weekly Audit & Self-Test
+name: BIST Real-Return Engine V3 - Weekly Audit & Self-Test
 
 on:
   schedule:
-    # Cumartesi 10:15 Türkiye = 07:15 UTC
-    - cron: '15 7 * * 6'
+    - cron: '15 7 * * 6'   # Cumartesi 10:15 TR
   workflow_dispatch:
 
 permissions:
@@ -22,10 +21,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pandas numpy scipy requests yfinance
-      - name: Self-test (synthetic data, temporary folder only)
+      - name: Self-test (synthetic data, temp folder only)
         run: python main.py --self-test
       - name: Audit report
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
         run: python longterm_auditor.py
