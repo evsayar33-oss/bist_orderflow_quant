@@ -1,0 +1,1 @@
+signal_date,ticker,status,composite,composite_pct,exp_net_pct,regime_label,p_risk_off,model_version,atr_pct,stop_dist_pct,size_pct,signal_close,entry_date,entry_price,stop_price,target_price,breakeven_armed,expiry_date,sessions_held,last_date,last_price,mfe_pct,mae_pct,exit_date,exit_price,exit_reason,gross_ret_pct,net_ret_pct
