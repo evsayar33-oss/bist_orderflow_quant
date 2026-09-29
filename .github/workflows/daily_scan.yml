@@ -5,6 +5,11 @@ on:
     # 18:25 Türkiye = 15:25 UTC, hafta içi. Ayın ilk seansında aylık gözden geçirme otomatik yapılır.
     - cron: '25 15 * * 1-5'
   workflow_dispatch:
+    inputs:
+      yeniden_tara:
+        description: 'Bu ayın hisse taramasını şimdi yeniden yap (bekleyen alımlar iptal edilip yeni kurallarla seçilir)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -31,6 +36,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+          BOQ_RESCAN: ${{ github.event.inputs.yeniden_tara || 'false' }}
         run: python main.py
       - name: Commit data
         run: |
