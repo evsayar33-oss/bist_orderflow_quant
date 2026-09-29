@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-29T11:14:42.783345Z",
+  "generated_at": "2026-09-29T12:29:15.815704Z",
   "strategy": {
     "name": "n8_b85_iv_rank_dual",
     "n_positions": 8,
@@ -12,9 +12,9 @@
   "score": -91.28,
   "why": "walk-forward strategy lab: best 0.5*P25+0.5*median of rolling 12m excess over the hurdle",
   "meta_oos": {
-    "cagr_pct": 43.16,
-    "real_cagr_pct": 8.93,
-    "xu100_cagr_pct": 32.95,
+    "cagr_pct": 43.17,
+    "real_cagr_pct": 8.94,
+    "xu100_cagr_pct": 32.87,
     "max_drawdown_pct": -33.6,
     "rolling12m_beat_all_pct": 1.9
   }
