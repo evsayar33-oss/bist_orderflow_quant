@@ -154,3 +154,35 @@ def events_report(today, events: List[Dict], state: Dict, day_ret: Optional[floa
 
 def blocked_report(today, reason: str) -> str:
     return f"🛑 <b>BIST Reel Getiri</b> · {tarih(today)}\nVeri kalitesi yetersiz ({escape(reason)}). Bugün işlem yapılmadı."
+
+
+def status_report(today, state: Dict, refresh: bool) -> str:
+    """Short daily status — sent on every run where nothing else was sent (so a run is never silent)."""
+    pf = state.get("portfolio") or {}
+    reg, g = state.get("regime", {}) or {}, state.get("autonomy_guard", {}) or {}
+    lr = state.get("last_rebalance") or {}
+    L = [f"📋 <b>BIST Reel Getiri</b> · Günlük Durum", f"<i>{tarih(today)}</i>", ""]
+    if refresh:
+        L.append("⏳ Seans kapanmadı (ya da bugün seans yok): kapanış verisi 18:25 çalışmasında işlenir. "
+                 "Bu çalıştırmada TÜFE, faiz, kıyaslar ve piyasa durumu güncellendi.")
+        L.append("")
+    L += hurdle_block(state.get("hurdles") or {})
+    L.append("")
+    pend = [o for o in pf.get("pending", []) if o.get("action") == "BUY"]
+    psell = [o for o in pf.get("pending", []) if o.get("action") == "SELL"]
+    if pend:
+        L.append("🕘 <b>Bir sonraki açılışta alınacak</b>")
+        L.append("   " + " · ".join(f"<b>{escape(str(o['ticker']))}</b> {pct(o.get('target_w', 0) * 100, nd=0)}" for o in pend))
+    if psell:
+        L.append("🕘 <b>Bir sonraki açılışta satılacak:</b> " + " · ".join(escape(str(o["ticker"])) for o in psell))
+    pos = pf.get("positions", {}) or {}
+    if pos:
+        best = sorted(pos.items(), key=lambda kv: -kv[1].get("level", 1))
+        L.append("💼 <b>Portföy</b>  " + " · ".join(f"{escape(str(t))} {pct((p.get('level', 1) - 1) * 100, True)}" for t, p in best[:12]))
+    elif not pend:
+        L.append("💼 Portföy boş — hedefe uygun hisse çıktığında alım yapılacak.")
+    L += portfolio_line(state)[1:]
+    if lr.get("date"):
+        L.append(f"🔎 Son tarama: {tarih(lr['date'])} · {lr.get('n_scored', '—')} hisse puanlandı · sonraki: ayın ilk seansı")
+    L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))} · Sistem: {GUARD_TR.get(g.get('mode'), g.get('mode'))}")
+    return "\n".join(L)

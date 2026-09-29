@@ -198,11 +198,23 @@ def inflation_gate_check(W) -> dict:
     refresh_ok = rr["review"] is not None and len(SM.load_nav()) == n_nav and \
         str_["last_rebalance"].get("expected_inflation_12m") is not None and str_["last_run"].get("mode") == "REFRESH" \
         and str_["last_rebalance"].get("date") == str(days[0].date())
+    # engine upgrade after a review: the old review's unexecuted buys are cancelled and it is redone
+    str_["last_rebalance"]["engine_version"] = "3.3.0"
+    str_["portfolio"]["pending"] = [{"ticker": "ZZZOLD", "action": "BUY", "reason": "NEW_ENTRY", "target_w": 0.1}]
+    SM.save_state(str_)
+    ru = _run(W, today=days[1], refresh=True, fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
+              cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
+    su = SM.load_state()
+    upgrade_ok = ru["review"] is not None and su["last_rebalance"].get("engine_version") == C.ENGINE_VERSION and \
+        not any(o["ticker"] == "ZZZOLD" for o in su["portfolio"]["pending"])
+    rs = _run(W, today=days[1], refresh=True, rescan=True, fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
+              cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
+    rescan_ok = rs["review"] is not None
     for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
         if os.path.exists(f):
             os.remove(f)
     return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
-            "intraday_refresh": bool(refresh_ok)}
+            "intraday_refresh": bool(refresh_ok), "upgrade_redoes_review": bool(upgrade_ok), "manual_rescan": bool(rescan_ok)}
 
 
 def _gold_ok() -> bool:
@@ -231,6 +243,8 @@ def _tg_ok(st) -> bool:
     legacy = {**st, "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"}
     legacy.pop("active_strategy", None)
     TG.monthly_report(pd.Timestamp("2026-10-01"), legacy, rev, [])     # old string key must not crash
+    stt = TG.status_report(pd.Timestamp("2026-10-02"), legacy, True)
+    print("--- TELEGRAM (durum) ---\n" + stt + "\n---")
     return any(w in msg for w in ("Çıta", "çıta", "hedef"))
 
 

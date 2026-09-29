@@ -55,17 +55,41 @@ LABEL_COLS = ["fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_p
 
 
 def send_telegram(message: str) -> bool:
+    """Send (HTML). Logs the outcome; on an HTML parse error retries as plain text; splits long texts."""
+    import re
     import requests
-    token, chat_id = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("CHAT_ID")
+    token = (os.environ.get("TELEGRAM_TOKEN") or "").strip()
+    chat_id = (os.environ.get("CHAT_ID") or "").strip()
     if not token or not chat_id:
+        print("::warning::TELEGRAM_TOKEN / CHAT_ID secret'ı yok → mesaj yalnızca loga yazıldı.")
         print(message)
         return False
-    try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                          json={"chat_id": chat_id, "text": message[:4000], "parse_mode": "HTML"}, timeout=15)
-        return r.status_code == 200
-    except Exception:
-        return False
+    chunks, buf = [], ""
+    for line in message.split("\n"):
+        if len(buf) + len(line) + 1 > 3900 and buf:
+            chunks.append(buf)
+            buf = ""
+        buf += (("\n" if buf else "") + line)
+    chunks.append(buf)
+    ok_all = True
+    for part in chunks:
+        ok = False
+        for mode in ("HTML", None):
+            body = {"chat_id": chat_id, "text": part if mode else re.sub(r"<[^>]+>", "", part),
+                    "disable_web_page_preview": True}
+            if mode:
+                body["parse_mode"] = mode
+            try:
+                r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json=body, timeout=20)
+                if r.status_code == 200:
+                    ok = True
+                    break
+                print(f"::warning::Telegram {r.status_code}: {r.text[:300]}")
+            except Exception as exc:
+                print(f"::warning::Telegram hatası: {exc}")
+        ok_all &= ok
+    print("📨 Telegram gönderildi." if ok_all else "::error::Telegram mesajı gönderilemedi (TOKEN / CHAT_ID kontrol edin).")
+    return ok_all
 
 
 def _fingerprint(df: pd.DataFrame) -> str:
@@ -207,7 +231,7 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
 
 def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,
         cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series, cash_fn=INF.load_cash_rate,
-        bench_fn=BM.download_benchmarks, refresh: bool = False) -> dict:
+        bench_fn=BM.download_benchmarks, refresh: bool = False, rescan: bool = False) -> dict:
     real_run = today is None
     today = pd.Timestamp(today) if today is not None else cal.today_tr()
     refresh = bool(refresh)
@@ -279,6 +303,17 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         pf["pending"] = [o for o in pf["pending"] if o["action"] == "SELL"]
         pf["last_rebalance_month"] = None
         print(f"ℹ️ Enflasyon kapısı olmadan verilmiş {before - len(pf['pending'])} emir iptal edildi; aylık gözden geçirme yenileniyor.")
+    # Engine upgraded (or hurdle rule changed) after the review, or a manual rescan was asked:
+    # cancel the not-yet-executed buys of that review and redo it with the current logic.
+    stale_logic = (lr.get("status") == "OK" and pf.get("last_rebalance_month")
+                   and (lr.get("engine_version") != C.ENGINE_VERSION or lr.get("hurdle_mode") != getattr(C, "HURDLE_MODE", "max"))
+                   and any(o["action"] == "BUY" for o in pf["pending"]))
+    if rescan or stale_logic:
+        before = len(pf["pending"])
+        pf["pending"] = [o for o in pf["pending"] if o["action"] == "SELL"]
+        pf["last_rebalance_month"] = None
+        print(f"ℹ️ {'Elle yeniden tarama' if rescan else 'Motor güncellendi (' + str(lr.get('engine_version')) + ' → ' + C.ENGINE_VERSION + ')'}: "
+              f"{before - len(pf['pending'])} bekleyen alım iptal edildi, aylık gözden geçirme yeni kurallarla yenileniyor.")
     crate, cr_meta = cash_fn()
     cash_y = INF.cash_yield_at(crate, today)
     state["cash_rate"] = {**cr_meta, "net_yield_pct": round(cash_y, 2)}
@@ -319,7 +354,9 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     if pf.get("last_rebalance_month") != review_month:
         review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=as_of,
                                      bm=bm, crate=crate)
-        state["last_rebalance"] = {"date": str((as_of or today).date()), "mode": "REFRESH" if refresh else "EOD", **{k: v for k, v in review.items() if k not in ("weights",)}}
+        state["last_rebalance"] = {"date": str((as_of or today).date()), "mode": "REFRESH" if refresh else "EOD",
+                                   "engine_version": C.ENGINE_VERSION, "hurdle_mode": getattr(C, "HURDLE_MODE", "max"),
+                                   **{k: v for k, v in review.items() if k not in ("weights",)}}
 
     lots_all = enrich_lots(load_trade_log(), cpi, index_close, bench)
     state["performance"] = {"nav": nav_metrics(nav_df, cpi, bench), "lots": lot_metrics(lots_all),
@@ -340,6 +377,8 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         nv = pd.to_numeric(nav_df["nav"], errors="coerce").dropna() if nav_df is not None and "nav" in nav_df else pd.Series(dtype=float)
         day_ret = float((nv.iloc[-1] / nv.iloc[-2] - 1) * 100) if len(nv) >= 2 else None
         send_telegram(TG.events_report(today, events, state, day_ret))
+    else:
+        send_telegram(TG.status_report(today, state, refresh))
     print(f"✅ {today.date()} [{'YENİLEME' if refresh else 'EOD'}] | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
     return {"status": "OK", "state": state, "events": events, "review": review}
 
@@ -349,11 +388,12 @@ def main():
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--refresh", action="store_true", help="TÜFE/nakit/rejim güncelle, işlem yapma")
+    ap.add_argument("--rescan", action="store_true", help="bu ayın taramasını şimdi yeniden yap (bekleyen alımlar iptal)")
     a = ap.parse_args()
     if a.self_test:
         from selftest import run_self_test
         sys.exit(0 if run_self_test() else 1)
-    run(force=a.force, refresh=a.refresh)
+    run(force=a.force, refresh=a.refresh, rescan=a.rescan or os.environ.get("BOQ_RESCAN", "").lower() in ("1", "true", "evet"))
 
 
 if __name__ == "__main__":
