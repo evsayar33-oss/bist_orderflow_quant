@@ -1,5 +1,5 @@
 {
-  "version": "3.5.0",
+  "version": "3.6.0",
   "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3",
   "objective": {
     "horizon_months": 12,
@@ -310,12 +310,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.004,
-      "NEUTRAL": 0.996,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.0801,
+      "NEUTRAL": 0.916,
+      "RISK_ON": 0.0039
     },
-    "p_risk_off": 0.004,
-    "degraded": false,
+    "p_risk_off": 0.0801,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -404,8 +404,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.354,
-    "exp_mkt_12m_pct": 23.94,
+    "exp_mkt_5d_pct": 0.352,
+    "exp_mkt_12m_pct": 23.96,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -420,7 +420,7 @@
     ],
     "as_of": "2026-09-29",
     "persistence": 0.9196,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.0503,
@@ -434,7 +434,8 @@
         "mean_daily_ret_pct": 0.1344,
         "ann_vol_pct": 14.79
       }
-    }
+    },
+    "error": "regime series unavailable"
   },
   "autonomy_guard": {
     "version": "2.0.0",
@@ -1077,14 +1078,14 @@
     "fingerprint": "6596.9000|6510474889",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-09-29T10:34:09.755888Z"
+    "utc": "2026-09-29T11:23:53.608938Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.5,
+    "score": 92.4,
     "rows": 450,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1258,
+    "recommended_missing_rate": 0.1267,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1116,7 +1117,10 @@
     "usd": 22.69,
     "gold": 22.69,
     "deposit": 29.75,
-    "hurdle": 29.75,
-    "binding": "deposit"
+    "hurdle": 107.82,
+    "floor": 29.75,
+    "binding": "deposit",
+    "mode": "sum",
+    "edge": 3.0
   }
 }
