@@ -11,6 +11,10 @@
 * **Maruziyet:** Varsayılan tam yatırım; guard (WATCH %90, RECOVERY %75) ve rejim yalnızca kırpar (en az %80).
 * Portföy değeri (NAV), XU100 ve TÜFE kaydı tutulur. Telegram'a yalnızca bir olay olduğunda mesaj gider.
 
+**Seans içinde / tatilde elle çalıştırma = YENİLEME modu (V3.3)**
+* Actions → "Daily Run" 18:15'ten önce ya da seans olmayan bir günde çalıştırılırsa işlem ve NAV kaydı yapılmaz. Bunun yerine TÜFE, nakit faizi ve rejim güncellenir.
+* TÜFE olmadan verilmiş bir gözden geçirme varsa, son tamamlanan seansın kapanış verisiyle yeniden yapılır.
+
 **Her ayın ilk seansı (aylık gözden geçirme)**
 1. Faktörler:
    * **Fiyat:** 12-1 ay momentum, 52 hafta zirvesine yakınlık, momentum istikrarı, düşük oynaklık, düşük beta, düşüş direnci, likidite.

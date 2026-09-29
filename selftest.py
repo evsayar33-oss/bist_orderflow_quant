@@ -170,7 +170,24 @@ def inflation_gate_check(W) -> dict:
     for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
         if os.path.exists(f):
             os.remove(f)
-    return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy)}
+    # intraday REFRESH: ungated review (no CPI) is redone during the session without trading
+    cur["d"] = days[0]
+    M.run(today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
+          cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
+    n_nav = len(SM.load_nav())
+    cur["d"] = days[1]
+    rr = M.run(today=days[1], refresh=True, fetch=fetch, hist_fn=hist_fn,
+               regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
+               cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
+    str_ = SM.load_state()
+    refresh_ok = rr["review"] is not None and len(SM.load_nav()) == n_nav and \
+        str_["last_rebalance"].get("expected_inflation_12m") is not None and str_["last_run"].get("mode") == "REFRESH" \
+        and str_["last_rebalance"].get("date") == str(days[0].date())
+    for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
+        if os.path.exists(f):
+            os.remove(f)
+    return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
+            "intraday_refresh": bool(refresh_ok)}
 
 
 def run_self_test() -> bool:

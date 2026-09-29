@@ -107,8 +107,11 @@ def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
     return {"n_dates": n, "ic_mean": round(m, 4), "t_nw": round(t, 2), "ic_recent": round(float(s.tail(6).mean()), 4)}
 
 
-def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn):
+def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=None):
+    """`as_of` = last COMPLETED session (used by intraday refresh runs: no partial bars)."""
     pf = state["portfolio"]
+    intraday = as_of is not None
+    today = pd.Timestamp(as_of) if intraday else today
     snaps = load_monthly_snapshots()
     universe = snap.sort_values("value_traded", ascending=False)["ticker"].head(C.SCAN_LIMIT).tolist()
     universe = sorted(set(universe) | set(pf["positions"].keys()))
@@ -121,6 +124,8 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
             start = min(start, pend["tarih"].min() - pd.Timedelta(days=10))
             unresolved = sorted(set(pend["ticker"]))
     hist = hist_fn(sorted(set(universe) | set(unresolved)), str(start.date()))
+    hist = {t: g[g.index <= today] for t, g in hist.items()}
+    hist = {t: g for t, g in hist.items() if len(g)}
     if len(hist) < C.MIN_CROSS_SECTION:
         return {"status": "HISTORY_UNAVAILABLE", "n_hist": len(hist)}, []
     wide = wide_from_history(hist)
@@ -139,7 +144,7 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     if frame.empty:
         return {"status": "NO_FACTORS", **info}, []
     exposure = exposure_from(guard, state.get("regime", {}))
-    chg = snap.set_index("ticker")["change_pct"]
+    chg = None if intraday else snap.set_index("ticker")["change_pct"]
     orders, summ = plan_rebalance(pf, frame, state, exposure, block=bool(guard.get("block_new_entries")),
                                   today_change=chg)
     keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
@@ -197,17 +202,26 @@ def format_monthly(today, state, rev, top) -> str:
 
 
 def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,
-        cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series, cash_fn=INF.load_cash_rate) -> dict:
+        cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series, cash_fn=INF.load_cash_rate,
+        refresh: bool = False) -> dict:
     real_run = today is None
     today = pd.Timestamp(today) if today is not None else cal.today_tr()
-    if real_run and not force:
+    refresh = bool(refresh)
+    if real_run and not force and not refresh:
         now_tr = pd.Timestamp.now(tz=C.MARKET_TZ)
-        if now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15:
-            print(f"ℹ️ Seans kapanmadı ({now_tr:%H:%M}). Motor 18:15 sonrası kapanış verisiyle çalışır.")
-            return {"status": "BEFORE_CLOSE"}
-    if not cal.is_session(today) and not force:
+        if now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15 or not cal.is_session(today):
+            refresh = True
+            print(f"ℹ️ Kapanış verisi yok ({now_tr:%d.%m %H:%M}) → YENİLEME modu: TÜFE/nakit/rejim güncellenir, "
+                  "gerekirse aylık gözden geçirme son tamamlanan seansa göre yenilenir; işlem/NAV kaydı yapılmaz.")
+    if not refresh and not cal.is_session(today) and not force:
         print(f"ℹ️ {today.date()} BIST seansı değil.")
         return {"status": "NOT_SESSION"}
+    as_of = None
+    if refresh:
+        d = today - pd.Timedelta(days=1)
+        while not cal.is_session(d):
+            d -= pd.Timedelta(days=1)
+        as_of = d
 
     state = load_state()
     research = load_research_prior()
@@ -222,7 +236,9 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         send_telegram(f"🛑 BIST V3: veri kalitesi yetersiz ({escape(str(quality.get('reason')))}); bugün işlem yapılmadı.")
         return {"status": "DATA_BLOCKED"}
     fp = _fingerprint(snap)
-    if not force and state.get("last_run", {}).get("fingerprint") == fp:
+    if refresh:
+        fp = state.get("last_run", {}).get("fingerprint")      # a refresh never consumes the day
+    elif not force and state.get("last_run", {}).get("fingerprint") == fp:
         print("ℹ️ Veri bir önceki çalışmayla aynı (tatil/donmuş veri); atlandı.")
         return {"status": "STALE"}
     if "sector" in snap:
@@ -259,35 +275,42 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         pf["pending"] = [o for o in pf["pending"] if o["action"] == "SELL"]
         pf["last_rebalance_month"] = None
         print(f"ℹ️ Enflasyon kapısı olmadan verilmiş {before - len(pf['pending'])} emir iptal edildi; aylık gözden geçirme yenileniyor.")
-    bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
     crate, cr_meta = cash_fn()
     cash_y = INF.cash_yield_at(crate, today)
     state["cash_rate"] = {**cr_meta, "net_yield_pct": round(cash_y, 2)}
-    events, lots = apply_day(pf, bars, today, cash_yield_pct=cash_y)
-    if lots:
-        append_rows(C.TRADE_LOG_FILE, lots)
-    xu = float(index_close.iloc[-1]) if index_close is not None and len(index_close) else np.nan
+    events, lots = [], []
     wts = pf_weights(pf)
-    append_rows(C.NAV_FILE, [{"tarih": str(today.date()), "nav": round(pf["nav"], 6), "cash": round(pf["cash"], 6),
-                              "n_positions": len(pf["positions"]), "exposure": round(sum(wts.values()), 4),
-                              "xu100": xu}])
-
     nav_df = load_nav()
-    guard = evaluate_guard(state, features=snap, data_quality=quality.get("score", 0.0), rows=quality.get("rows"),
-                           live_ic=state.get("model", {}).get("ic_live_3m"), nav_df=nav_df)
+    if not refresh:
+        bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
+        events, lots = apply_day(pf, bars, today, cash_yield_pct=cash_y)
+        if lots:
+            append_rows(C.TRADE_LOG_FILE, lots)
+        xu = float(index_close.iloc[-1]) if index_close is not None and len(index_close) else np.nan
+        wts = pf_weights(pf)
+        append_rows(C.NAV_FILE, [{"tarih": str(today.date()), "nav": round(pf["nav"], 6), "cash": round(pf["cash"], 6),
+                                  "n_positions": len(pf["positions"]), "exposure": round(sum(wts.values()), 4),
+                                  "xu100": xu}])
+        nav_df = load_nav()
+        guard = evaluate_guard(state, features=snap, data_quality=quality.get("score", 0.0), rows=quality.get("rows"),
+                               live_ic=state.get("model", {}).get("ic_live_3m"), nav_df=nav_df)
+    else:
+        g0 = state.get("autonomy_guard", {}) or {}
+        guard = {"mode": g0.get("mode", "WATCH"), "block_new_entries": bool(g0.get("block_new_entries", False))}
 
     review, top = None, []
     state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
-    if pf.get("last_rebalance_month") != today.strftime("%Y-%m"):
-        review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn)
-        state["last_rebalance"] = {"date": str(today.date()), **{k: v for k, v in review.items() if k not in ("weights",)}}
+    review_month = (as_of or today).strftime("%Y-%m")
+    if pf.get("last_rebalance_month") != review_month:
+        review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=as_of)
+        state["last_rebalance"] = {"date": str((as_of or today).date()), "mode": "REFRESH" if refresh else "EOD", **{k: v for k, v in review.items() if k not in ("weights",)}}
 
     lots_all = enrich_lots(load_trade_log(), cpi, index_close)
     state["performance"] = {"nav": nav_metrics(nav_df, cpi), "lots": lot_metrics(lots_all),
                             "open_positions": {t: {"w": round(wts.get(t, 0), 4), "ret_pct": round((p["level"] - 1) * 100, 2),
                                                    "since": p["entry_date"]} for t, p in pf["positions"].items()}}
     state.pop("_no_inflation", None)
-    state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp,
+    state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp, "mode": "REFRESH" if refresh else "EOD",
                          "monthly_review": bool(review), "utc": datetime.utcnow().isoformat() + "Z"}
     save_state(state)
 
@@ -303,7 +326,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
             extra = f" %{e['ret']:+.1f}" if "ret" in e else ""
             lines.append(f"• {escape(str(e['ticker']))} — {e['type']}{extra}")
         send_telegram("\n".join(lines))
-    print(f"✅ {today.date()} | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
+    print(f"✅ {today.date()} [{'YENİLEME' if refresh else 'EOD'}] | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
     return {"status": "OK", "state": state, "events": events, "review": review}
 
 
@@ -311,11 +334,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="TÜFE/nakit/rejim güncelle, işlem yapma")
     a = ap.parse_args()
     if a.self_test:
         from selftest import run_self_test
         sys.exit(0 if run_self_test() else 1)
-    run(force=a.force)
+    run(force=a.force, refresh=a.refresh)
 
 
 if __name__ == "__main__":

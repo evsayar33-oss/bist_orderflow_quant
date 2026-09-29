@@ -53,6 +53,22 @@ pf = state.get("portfolio") or {}
 weights = m.get("champion_weights", {}) or {}
 
 # ---------------------------------------------------------------- status banners
+lr_ = state.get("last_run", {}) or {}
+st.caption(f"Son motor çalışması: {lr_.get('date', '—')} ({'yenileme' if lr_.get('mode') == 'REFRESH' else 'kapanış'}) · "
+           "state yalnızca GitHub Actions çalışınca güncellenir")
+if inf.get("expected_12m_pct") is None and os.path.exists(C.CPI_CACHE_FILE):
+    try:
+        import inflation as _INF
+        _c = pd.read_csv(C.CPI_CACHE_FILE)
+        _s = pd.Series(_c["cpi"].to_numpy(float), index=pd.to_datetime(_c["tarih"]))
+        _st = _INF.inflation_stats(_s)
+        if _st.get("expected_12m_pct") is not None:
+            inf = {**inf, **_st, "status": "CACHE_ONLY", "source": "önbellek (cpi_tr.csv)"}
+            st.info("ℹ️ TÜFE verisi mevcut (önbellek), ancak motor henüz bu veriyle çalışmadı. "
+                    "Actions → 'Daily Run' iş akışını elle çalıştırın: seans içindeyse YENİLEME modunda "
+                    "gözden geçirmeyi TÜFE ile yeniler (işlem yapmaz).")
+    except Exception:
+        pass
 cpi_status = inf.get("status")
 if inf.get("expected_12m_pct") is None:
     st.error("⛔ TÜFE verisi alınamadı → reel getiri hesaplanamıyor ve **yeni alım yapılmıyor**. "
@@ -180,7 +196,12 @@ with t1:
         st.info("Henüz pozisyon yok. Aylık gözden geçirmenin emirleri bir sonraki seansın açılışında gerçekleşir.")
     if pf.get("pending"):
         st.subheader("Yarın açılışta çalışacak emirler")
-        st.dataframe(pd.DataFrame(pf["pending"]), hide_index=True, use_container_width=True)
+        pdf = pd.DataFrame(pf["pending"])
+        st.dataframe(pdf, hide_index=True, use_container_width=True)
+        if "entry_exp_real" in pdf and (pdf["action"] == "BUY").any() and pdf.loc[pdf["action"] == "BUY", "entry_exp_real"].isna().all() \
+                and (state.get("last_rebalance") or {}).get("expected_inflation_12m") is None:
+            st.warning("Bu alım emirleri TÜFE kontrolü OLMADAN üretildi. Motorun bir sonraki çalışmasında "
+                       "(elle 'Daily Run' ya da 18:25) otomatik iptal edilip TÜFE ile yeniden değerlendirilecek.")
 
 with t2:
     if snaps.empty:
