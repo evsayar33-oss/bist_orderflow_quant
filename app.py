@@ -124,8 +124,13 @@ weights = (state.get("model", {}) or {}).get("champion_weights", {}) or {}
 cal = state.get("calibration", {}) or {}
 last = snaps[snaps["tarih"] == snaps["tarih"].max()] if not snaps.empty else pd.DataFrame()
 
+HS = state.get("health") or {}
+HEM = {"OK": "🟢", "UYARI": "🟡", "KRİTİK": "🔴"}
 st.markdown(f'<div class="sub">Güncelleme {dstr(lr.get("date"))} · Piyasa {REGIME.get(reg.get("label"), "—")} · '
-            f'Sistem {GUARD.get(g.get("mode"), "—")}</div>', unsafe_allow_html=True)
+            f'Sistem sağlığı {HEM.get(HS.get("overall"), "⚪")} {HS.get("overall", "—")}</div>', unsafe_allow_html=True)
+if HS.get("overall") == "KRİTİK":
+    st.error("Sistem sağlığı KRİTİK: " + ", ".join(HS.get("red") or []) + " — ayrıntı için “Sağlık” sekmesine bakın; "
+             "sorun çözülene kadar önerileri körü körüne uygulamayın.")
 
 # ------------------------------------------------------------------ one actionable alert at most
 inf = state.get("inflation", {}) or {}
@@ -167,7 +172,7 @@ else:
     st.markdown(f'<div class="card note mut">Portföy {dstr(pf.get("start_date"))} tarihinde başladı. '
                 'Getiri kartları ilk işlem günlerinden sonra görünür.</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
+tab1, tab2, tab3, tab4 = st.tabs(["Portföy", "Hisse Ara", "Performans", "Sağlık"])
 
 # ------------------------------------------------------------------ PORTFÖY
 with tab1:
@@ -372,9 +377,74 @@ with tab3:
                             ("Hedefi geçti" if summ else "Hepsini geçti"): {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 
+# ------------------------------------------------------------------ SAĞLIK
+with tab4:
+    if not HS.get("checks"):
+        st.markdown('<div class="card note mut">Sağlık raporu ilk günlük çalışmadan sonra oluşur.</div>', unsafe_allow_html=True)
+    else:
+        ov = HS.get("overall")
+        txt = {"OK": "Her şey normal. Veriler güncel, hesaplamalar doğrulandı, canlı sonuçlar testle uyumlu.",
+               "UYARI": "Dikkat edilmesi gereken bir şey var; sistem çalışıyor ama aşağıdaki sarı maddeleri izleyin.",
+               "KRİTİK": "Sistemde ciddi bir sorun var. Kırmızı madde çözülene kadar önerileri uygulamadan önce kontrol edin."}.get(ov, "")
+        st.markdown(f'<div class="card"><div class="lbl">Sistem sağlığı · {dstr(HS.get("date"))}</div>'
+                    f'<div class="big">{HEM.get(ov, "⚪")} {ov}</div><div class="note mut" style="margin-top:6px">{txt}</div></div>',
+                    unsafe_allow_html=True)
+        rows = "".join(f'<div class="row"><div><b>{HEM.get(c["status"], "⚪")} {c["name"]}</b>'
+                       f'<div class="mut" style="font-size:.82rem">{c["msg"]}</div></div></div>' for c in HS["checks"])
+        st.markdown(f'<div class="card"><div class="lbl">Kontroller</div>{rows}</div>', unsafe_allow_html=True)
+
+        lv = HS.get("live_vs_test") or {}
+        if lv.get("status") == "OK" and lv.get("band_ret_pct"):
+            b = lv["band_ret_pct"]
+            pos_ = max(0.0, min(100.0, lv.get("percentile", 50)))
+            bar = (f'<div class="cbar" style="position:relative;height:10px;background:linear-gradient(90deg,#f31260 0%,#f5a524 10%,'
+                   f'#17c964 25%,#17c964 100%)"><div style="position:absolute;left:calc({pos_:.0f}% - 5px);top:-4px;width:10px;height:18px;'
+                   f'border-radius:3px;background:#fff;border:2px solid #333"></div></div>')
+            ex = (f'<br>BIST100\'e göre fark: canlı {pct(lv.get("live_excess_pp"), True)} · testte normal aralık '
+                  f'{pct(lv["band_excess_pp"]["p10"], True)} … {pct(lv["band_excess_pp"]["p90"], True)}') if lv.get("band_excess_pp") else ""
+            st.markdown(f'<div class="card"><div class="lbl">Canlı sonuç vs test (canlı backtest)</div>'
+                        f'<div class="note">Portföy <b>{str(lv["months"]).replace(".", ",")}</b> aydır canlı: <b>{pct(lv["live_ret_pct"], True)}</b>. '
+                        f'Testte aynı süreli dönemlerin %80\'i {pct(b["p10"], True)} ile {pct(b["p90"], True)} arasındaydı '
+                        f'(ortanca {pct(b["p50"], True)}).{ex}</div>{bar}'
+                        f'<div class="note mut" style="margin-top:6px">İşaret testteki dönemlerin %{lv.get("percentile", 0):.0f}\'inden '
+                        f'iyi olduğunuzu gösterir. Kırmızı bölgeye (%5 altı) düşerse sistem testteki gibi davranmıyor demektir.</div></div>',
+                        unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="card note mut"><b>Canlı sonuç vs test:</b> portföy 1 aydan eskileşince, canlı getiri testte '
+                        'aynı süreli bütün dönemlerle karşılaştırılıp "normal aralıkta mı" diye burada gösterilir.</div>',
+                        unsafe_allow_html=True)
+
+        w = HS.get("win_rates") or {}
+        lab = {"closed_lots": "Kapanan pozisyon", "hit_nominal_pct": "Kârla kapanan %", "hit_beat_xu100_pct": "BIST100'ü geçen %",
+               "hit_beat_cpi_pct": "TÜFE'yi geçen %", "hit_beat_all_pct": "Toplam hedefi geçen %",
+               "avg_nominal_pct": "Ortalama getiri %", "avg_months_held": "Ortalama tutma (ay)"}
+        tbl = [{"Ölçü": lab[k], "Canlı": ("—" if v.get("live") is None else str(v.get("live")).replace(".", ",")),
+                "Test": ("—" if v.get("test") is None else str(v.get("test")).replace(".", ","))} for k, v in w.items() if k in lab]
+        if tbl:
+            st.caption("Kazanma oranları — canlı ve test")
+            st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
+
+        cm = state.get("confidence_model_meta") or {}
+        cl = state.get("confidence_live") or {}
+        ic = (state.get("model") or {}).get("ic_live_12m") or {}
+        gen = (report or {}).get("generated_at", "")[:10]
+        nxt = (pd.Timestamp.now().normalize().replace(day=1) + pd.DateOffset(months=1)).replace(day=2)
+        lines = [f'Model her ayın 2\'sinde tüm borsa verisiyle yeniden eğitilir · son: {dstr(gen) if gen else "—"} · sonraki: {dstr(nxt)}',
+                 f'Faktör ağırlıkları canlı sonuçlarla güncellenir · canlı sinyal ölçümü: {ic.get("n_dates", 0)} ay'
+                 + (f' (IC {str(ic.get("ic_mean")).replace(".", ",")})' if ic.get("n_dates") else ""),
+                 f'Güven modeli: canlı sonuçların payı <b>%{(cm.get("live_weight") or 0) * 100:.0f}</b> '
+                 f'({cm.get("n_live", 0)} sonuçlanmış gözlem; {2000} gözlemden sonra canlı veri devreye girer)']
+        for hz_, lbl_ in (("3m", "3 ay sonra (erken gösterge)"), ("12m", "12 ay sonra")):
+            c = cl.get(hz_) or {}
+            if c.get("picks_n"):
+                lines.append(f'Öneriler {lbl_}: tahmin %{c["picks_pred"] * 100:.0f} → gerçekleşen <b>%{c["picks_real"] * 100:.0f}</b> '
+                             f'({c["picks_n"]} öneri)')
+        st.markdown(f'<div class="card"><div class="lbl">Kendini geliştirme</div><div class="note">{"<br>".join(lines)}</div></div>',
+                    unsafe_allow_html=True)
+
 with st.expander("Teknik detay"):
     m = state.get("model", {}) or {}
     st.json({"model": m.get("status"), "sürüm": m.get("champion_version"), "kalibrasyon": cal.get("status"),
              "dilimler": pf.get("cohorts"), "hedef": hz, "TÜFE": inf, "nakit": state.get("cash_rate"),
-             "rejim olasılıkları": reg.get("probs"), "guard": {k: g.get(k) for k in ("mode", "reason", "drift_score", "performance_drift")},
+             "rejim olasılıkları": reg.get("probs"), "sağlık": HS.get("checks"),
              "canlı IC": {"12A": m.get("ic_live_12m"), "3A": m.get("ic_live_3m")}, "kapanan pozisyonlar": perf.get("lots")})

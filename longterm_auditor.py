@@ -29,9 +29,11 @@ def audit() -> str:
         L.append("🏆 En iyiler: " + " · ".join(f"{t} {TG.pct((p['level'] - 1) * 100, True)}" for t, p in best))
         flagged = [t for t, p in pos.items() if p.get("dd_flag")]
         if flagged:
-            L.append("⚠️ Düşüş bayrağı: " + " · ".join(flagged))
-    g = st.get("autonomy_guard", {}) or {}
-    L.append(f"🧭 Piyasa: {TG.REGIME_TR.get((st.get('regime') or {}).get('label'), '—')} · Sistem: {TG.GUARD_TR.get(g.get('mode'), '—')}")
+            L.append("⚠️ Sert düşüş (bilgi): " + " · ".join(flagged))
+    L.append(f"🧭 Piyasa: {TG.REGIME_TR.get((st.get('regime') or {}).get('label'), '—')}")
+    hl = TG.health_lines(st, full=True)
+    if hl:
+        L += [""] + hl
     return "\n".join(L)
 
 

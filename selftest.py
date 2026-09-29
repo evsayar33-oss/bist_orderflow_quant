@@ -269,6 +269,30 @@ def _confidence_ok() -> bool:
     return bool(m["coef"]["pct"] + m["coef"]["pct3"] > 0 and 0 < lo < 0.5 < hi < 1 and m.get("oos_reliability"))
 
 
+def _health_units_ok() -> bool:
+    import health as HL
+    import confidence as CF
+    idx = pd.bdate_range("2018-01-01", "2024-01-01")
+    rng = np.random.default_rng(5)
+    bt = pd.DataFrame({"tarih": idx, "nav": np.cumprod(1 + rng.normal(0.0015, 0.015, len(idx))),
+                       "xu100": np.cumprod(1 + rng.normal(0.001, 0.013, len(idx)))})
+    live = pd.DataFrame({"tarih": pd.bdate_range("2025-01-01", periods=130), "nav": np.linspace(1, 1.10, 130),
+                         "xu100": np.linspace(100, 104, 130)})
+    lv = HL.live_vs_test(live, bt)
+    bad = live.assign(nav=np.linspace(1, 0.4, 130))
+    lvb = HL.live_vs_test(bad, bt)
+    rows = []
+    for m in range(24):
+        n = 120
+        pctv = rng.uniform(0, 100, n)
+        rows.append(pd.DataFrame({"tarih": pd.Timestamp("2025-01-01") + pd.DateOffset(months=m), "ticker": [f"T{i}" for i in range(n)],
+                                  "composite_pct": pctv, "fwd_ret": (pctv - 50) * 0.5 + rng.normal(0, 30, n), "confidence": 0.5,
+                                  "max_1m": rng.uniform(0, 9, n), **{k: rng.normal(size=n) for k in CF.KEY_FACTORS}}))
+    model, meta = CF.live_update(None, pd.concat(rows, ignore_index=True))
+    return (lv.get("status") == "OK" and 0 <= lv["percentile"] <= 100 and lvb["percentile"] < lv["percentile"]
+            and meta["live_weight"] > 0 and model["source"] == "backtest+live_blend")
+
+
 def _liq_ok() -> bool:
     import backtest_optimizer as B
     cpi = pd.Series([100.0, 200.0, 400.0], index=pd.to_datetime(["2015-01-01", "2020-01-01", "2025-01-01"]))
@@ -357,6 +381,10 @@ def run_self_test() -> bool:
         "telegram_monthly_ok": _tg_ok(st),
         "hurdle_is_sum": _sum_hurdle_ok(),
         "confidence_unit": _confidence_ok(),
+        "health_units": _health_units_ok(),
+        "health_report": (st.get("health") or {}).get("overall") in ("OK", "UYARI", "KRİTİK")
+                         and len((st.get("health") or {}).get("checks", [])) >= 10,
+        "backtest_nav_saved": os.path.exists(C.BACKTEST_NAV_FILE),
         "liq_floor_scaled": _liq_ok(),
         "cohorts_live": bool(st["portfolio"].get("cohorts")) and all(len(c["tickers"]) <= C.TRANCHE_N for c in st["portfolio"]["cohorts"])
                         and len(st["portfolio"]["cohorts"]) <= C.TRANCHE_MONTHS,

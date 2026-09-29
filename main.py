@@ -44,6 +44,9 @@ from factors import price_factors_at, wide_from_history  # noqa: E402
 from labels import forward_labels  # noqa: E402
 from learner_engine import daily_rank_ic, live_composite_ic, newey_west, run_learning  # noqa: E402
 from meta_engine import GOLD_TICKER, plan_tranche, score_universe  # noqa: E402
+import confidence as CF  # noqa: E402
+import health as HL  # noqa: E402
+from state_manager import read_json  # noqa: E402
 from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
 from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
                            load_state, load_trade_log, save_monthly_snapshots, save_state)
@@ -197,9 +200,12 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
         return {"status": "NO_FACTORS", **info}, []
     chg = None if intraday else snap.set_index("ticker")["change_pct"]
     state.pop("active_strategy", None)
-    conf_model = (research or {}).get(C.CONFIDENCE_FILE_KEY) if isinstance(research, dict) else None
+    conf_prior = (research or {}).get(C.CONFIDENCE_FILE_KEY) if isinstance(research, dict) else None
+    conf_model, conf_meta = CF.live_update(conf_prior, snaps)          # self-improving confidence
+    state["confidence_model_meta"] = conf_meta
+    state["confidence_live"] = HL.confidence_live_check(snaps)
     orders, summ = plan_tranche(pf, frame, state, today, today_change=chg, conf_model=conf_model)
-    conf_all = __import__("confidence").predict(frame, conf_model)
+    conf_all = CF.predict(frame, conf_model)
     frame = frame.assign(confidence=conf_all.to_numpy())
     keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
     pf["pending"] = keep + [o for o in orders if o["ticker"] not in {k["ticker"] for k in keep}]
@@ -361,6 +367,12 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
                             "open_positions": {t: {"w": round(wts.get(t, 0), 4), "ret_pct": round((p["level"] - 1) * 100, 2),
                                                    "since": p["entry_date"]} for t, p in pf["positions"].items()}}
     state.pop("_no_inflation", None)
+    if not refresh:
+        state["last_eod_date"] = str(today.date())
+    try:
+        state["health"] = HL.evaluate(state, None, nav_df, read_json(C.BACKTEST_REPORT_FILE), today)
+    except Exception as exc:
+        state["health"] = {"overall": "UYARI", "checks": [], "error": str(exc)[:200]}
     state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp, "mode": "REFRESH" if refresh else "EOD",
                          "monthly_review": bool(review), "utc": datetime.utcnow().isoformat() + "Z"}
     save_state(state)

@@ -338,6 +338,10 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     if save:
         atomic_json_write(C.RESEARCH_PRIOR_FILE, prior)
         atomic_json_write(C.BACKTEST_REPORT_FILE, report)
+        try:
+            nav_df[["tarih", "nav", "xu100"]].to_csv(C.BACKTEST_NAV_FILE, index=False, float_format="%.6g")
+        except Exception as exc:
+            print(f"⚠️ backtest NAV yazılamadı: {exc}")
         if os.path.exists(C.STRATEGY_CONFIG_FILE):
             os.remove(C.STRATEGY_CONFIG_FILE)          # V3.8: no strategy switching
     return {"report": report, "prior": prior, "nav": nav_df, "lots": lots_df}

@@ -303,6 +303,8 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     if today_change is not None:
         elig &= ~(today_change.reindex(f.index) >= C.LIMIT_MOVE_PCT)
     vol = pd.to_numeric(f.get("vol_ann_pct"), errors="coerce")
+    if getattr(C, "ENTRY_MAX_LOTTERY_PCTILE", None) and "max_1m" in f:
+        elig &= ~(pd.to_numeric(f["max_1m"], errors="coerce").rank(pct=True) > C.ENTRY_MAX_LOTTERY_PCTILE)
     if getattr(C, "ENTRY_MAX_VOL_PCTILE", None) and vol.notna().any():
         elig &= ~(vol.rank(pct=True) > C.ENTRY_MAX_VOL_PCTILE)
     if getattr(C, "ENTRY_MIN_MCAP_PCTILE", None) and "market_cap" in f and pd.to_numeric(f["market_cap"], errors="coerce").notna().mean() > 0.5:
@@ -344,18 +346,35 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
         if len(picks) == N:
             break
     conf = {t: round(float(f.at[t, "confidence"]), 4) for t in picks}
-    if picks and getattr(C, "TRANCHE_WEIGHTING", "equal") == "inv_vol":
+    wm = getattr(C, "TRANCHE_WEIGHTING", "equal")
+    if picks and wm in ("lottery", "lottery_vol"):
+        lot = pd.to_numeric(f.get("max_1m"), errors="coerce").rank(pct=True)
+        raw = {}
+        for t in picks:
+            lr = float(lot.get(t)) if pd.notna(lot.get(t, np.nan)) else 0.5
+            r = 1.5 - lr                                             # lottery-like names get less weight
+            if wm == "lottery_vol":
+                v = float(vol.get(t)) if pd.notna(vol.get(t, np.nan)) else float(vol.median())
+                r /= max(v, 10.0) ** 0.5
+            raw[t] = r
+        sw = sum(raw.values())
+        cw_in = {t: v / sw for t, v in raw.items()}
+    elif picks and wm == "inv_vol":
         iv = {t: 1.0 / max(float(vol.get(t)) if pd.notna(vol.get(t, np.nan)) else float(vol.median()), 10.0) for t in picks}
         sw = sum(iv.values())
         cw_in = {t: v / sw for t, v in iv.items()}
     else:
         cw_in = {t: 1.0 / len(picks) for t in picks} if picks else {}
+    if getattr(C, "ENTRY_MAX_LOTTERY_PCTILE", None):
+        pass
     cohorts.append({"month": month, "tickers": picks, "confidence": conf, "w": {t: round(v, 5) for t, v in cw_in.items()}})
     # ---- target weights = union of active cohorts
     live = [c for c in cohorts if c.get("tickers")]
     tw: Dict[str, float] = {}
     for c in live:
         for t in c["tickers"]:
+            if (pf.get("stopped") or {}).get(t, "") >= c["month"]:
+                continue                                     # stopped out after this cohort bought it
             share = (c.get("w") or {}).get(t, 1.0 / len(c["tickers"]))
             tw[t] = tw.get(t, 0.0) + share / len(live)
     ncap = max(C.MAX_NAME_W, 1.0 / max(len(tw), 1))              # never forces cash when few names exist
@@ -400,12 +419,24 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
                 break
             orders.append({"ticker": t, "action": "REBAL", "reason": "CASH_REDEPLOY", "target_w": round(tw[t], 5)})
             spare -= gap
+    mode = getattr(C, "STOP_MODE", None)
+    lotr = pd.to_numeric(f.get("max_1m"), errors="coerce").rank(pct=True) if "max_1m" in f else pd.Series(dtype=float)
+    volr = vol.rank(pct=True)
+    def stop_pct(t):
+        if not mode or t not in f.index:
+            return None
+        risky = max(float(volr.get(t, 0) or 0), float(lotr.get(t, 0) or 0)) > C.STOP_HIGH_RISK_PCTILE
+        need = mode == "all" or (mode == "low_conf" and float(f.at[t, "confidence"]) < C.STOP_LOW_CONF) or (mode == "high_risk" and risky)
+        if not need:
+            return None
+        v = float(vol.get(t)) if pd.notna(vol.get(t, np.nan)) else float(vol.median())
+        return min(C.STOP_ATR_MULT * 1.25 * v / 100 / np.sqrt(252), 0.5)
     for t, w in tw.items():
         if t in pf["positions"]:
             continue
         r = f.loc[t] if t in f.index else None
         buys.append(t)
-        orders.append({"ticker": t, "action": "BUY", "reason": "NEW_ENTRY", "target_w": round(w, 5),
+        orders.append({"ticker": t, "action": "BUY", "reason": "NEW_ENTRY", "target_w": round(w, 5), "stop_pct": stop_pct(t),
                        "entry_pct": None if r is None else round(float(r["composite_pct"]), 2),
                        "entry_conf": None if r is None else round(float(r["confidence"]), 4),
                        "entry_exp_real": None if r is None or pd.isna(r["exp_real_12m"]) else round(float(r["exp_real_12m"]), 2),

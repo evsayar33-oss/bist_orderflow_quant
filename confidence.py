@@ -143,3 +143,34 @@ def grade(p: float) -> str:
     if p is None or not np.isfinite(p):
         return "—"
     return "Yüksek" if p >= 0.62 else ("Orta" if p >= 0.56 else "Düşük")
+
+
+LIVE_MIN_ROWS = 2000          # ~5 resolved monthly cross-sections before live data starts to count
+LIVE_PRIOR_ROWS = 10000       # shrinkage: the backtest model counts like 10k observations
+
+
+def live_update(prior: Optional[Dict], snaps: Optional[pd.DataFrame]) -> (Dict, Dict):
+    """Self-improvement: once live 12-month outcomes exist, refit on them and blend with the
+    backtest model (weight n_live / (n_live + LIVE_PRIOR_ROWS)). Returns (model_to_use, meta)."""
+    base = prior if prior and prior.get("coef") else dict(DEFAULT_MODEL)
+    meta = {"source": base.get("source", "prior"), "n_live": 0, "live_weight": 0.0}
+    if snaps is None or snaps.empty or "fwd_ret" not in snaps or "composite_pct" not in snaps:
+        return base, meta
+    d = snaps.dropna(subset=["fwd_ret", "composite_pct"]).copy()
+    if "confidence" in d:                       # only V3.8+ snapshots (same model definition)
+        d = d[pd.to_numeric(d["confidence"], errors="coerce").notna()]
+    meta["n_live"] = int(len(d))
+    if len(d) < LIVE_MIN_ROWS:
+        return base, meta
+    y = relative_label(d)
+    X = pd.concat([features(g) for _, g in d.groupby("tarih")]).reindex(d.index)
+    live = fit(X, y)
+    w = len(d) / (len(d) + LIVE_PRIOR_ROWS)
+    model = {"intercept": (1 - w) * base.get("intercept", 0.0) + w * live["intercept"],
+             "coef": {k: (1 - w) * float(base["coef"].get(k, 0.0)) + w * live["coef"][k] for k in FEATURES},
+             "source": "backtest+live_blend"}
+    for k in ("oos_reliability", "oos_brier_skill_pct", "oos_top10_predicted", "oos_top10_realised"):
+        if k in base:
+            model[k] = base[k]
+    meta.update({"source": model["source"], "live_weight": round(w, 3), "live_coef": {k: round(v, 3) for k, v in live["coef"].items()}})
+    return model, meta

@@ -98,6 +98,7 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
     L.append("ℹ️ <i>Güven: 12 ayda tipik bir BIST hissesinden çok kazanma olasılığı (%50 = yazı-tura). "
              "Her hisse en az 6 ay tutulur.</i>")
     L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))}")
+    L += health_lines(state)
     return "\n".join(L)
 
 
@@ -119,6 +120,9 @@ def events_report(today, events: List[Dict], state: Dict, day_ret: Optional[floa
     if day_ret is not None:
         L.append("")
         L.append(f"💼 Portföy bugün {pct(day_ret, True, 2)}")
+    hl = health_lines(state)
+    if hl and (state.get("health") or {}).get("overall") != "OK":
+        L += [""] + hl
     return "\n".join(L)
 
 
@@ -161,4 +165,35 @@ def status_report(today, state: Dict, refresh: bool) -> str:
     if lr.get("date"):
         L.append(f"🔎 Son tarama: {tarih(lr['date'])} · {lr.get('n_scored', '—')} hisse puanlandı · sonraki: ayın ilk seansı")
     L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))}")
+    L += health_lines(state)
     return "\n".join(L)
+
+
+def health_lines(state: Dict, full: bool = False) -> List[str]:
+    h = state.get("health") or {}
+    if not h.get("checks"):
+        return []
+    em = {"OK": "🟢", "UYARI": "🟡", "KRİTİK": "🔴"}
+    ov = h.get("overall", "OK")
+    if not full:
+        if ov == "OK":
+            return ["🩺 Sistem sağlığı: 🟢 her şey normal"]
+        names = h.get("red") if ov == "KRİTİK" else h.get("yellow")
+        tail = " — <b>bu ayki kararlara körü körüne uymayın</b>" if ov == "KRİTİK" else ""
+        return [f"🩺 Sistem sağlığı: {em[ov]} {escape(', '.join(names or []))}{tail}"]
+    L = [f"🩺 <b>Sistem sağlığı: {em.get(ov, '⚪')} {ov}</b>"]
+    for c in h["checks"]:
+        L.append(f"{em.get(c['status'], '⚪')} {escape(c['name'], quote=False)}: {escape(str(c['msg']), quote=False)}")
+    lv = h.get("live_vs_test") or {}
+    if lv.get("status") == "OK" and lv.get("band_ret_pct"):
+        b = lv["band_ret_pct"]
+        L.append(f"📐 Canlı {str(lv['months']).replace('.', ',')} ay: portföy {pct(lv['live_ret_pct'], True)} · testte aynı süre için normal aralık "
+                 f"{pct(b['p10'], True)} … {pct(b['p90'], True)} (ortanca {pct(b['p50'], True)})")
+    w = h.get("win_rates") or {}
+    if (w.get("closed_lots") or {}).get("live"):
+        L.append(f"🎯 Kazanma oranı (kapanan): canlı {pct(w['hit_nominal_pct']['live'], nd=0)} · test {pct(w['hit_nominal_pct']['test'], nd=0)}"
+                 f" | BIST100'ü geçen: canlı {pct(w['hit_beat_xu100_pct']['live'], nd=0)} · test {pct(w['hit_beat_xu100_pct']['test'], nd=0)}")
+    cm = state.get("confidence_model_meta") or {}
+    if cm:
+        L.append(f"🧠 Güven modeli: canlı sonuç payı %{cm.get('live_weight', 0) * 100:.0f} ({cm.get('n_live', 0)} sonuçlanmış gözlem)")
+    return L

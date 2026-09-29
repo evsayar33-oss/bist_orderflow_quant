@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.8.1"
+ENGINE_VERSION = "3.9.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -157,3 +157,13 @@ TRANCHE_WEIGHTING = "equal"        # "equal" | "inv_vol" (within each monthly co
 ENTRY_MAX_VOL_PCTILE = None        # e.g. 0.8 -> skip the most volatile 20% of stocks at entry
 ENTRY_MIN_MCAP_PCTILE = None       # e.g. 0.3 -> skip the smallest 30% (by market value) at entry
 DEFENSIVE_IN_DOWNTREND = False     # index < 200d avg -> new picks only from large (top 50% mcap) & lower-beta half
+
+# ---- V3.9 conditional ATR stop (+ breakeven), tested on the real panel
+STOP_MODE = None                  # None | "all" | "low_conf" | "high_risk"
+STOP_ATR_MULT = 3.0               # stop distance = mult x ATR(~1.25 x daily sigma) below entry
+STOP_LOW_CONF = 0.58              # "low_conf": confidence below this gets a stop
+STOP_HIGH_RISK_PCTILE = 0.7       # "high_risk": vol or lottery rank above this gets a stop
+BREAKEVEN_TRIGGER_PCT = 15.0      # once +15% above entry, stop moves to the entry price
+
+# ---- V3.9 health / live-vs-test
+BACKTEST_NAV_FILE = os.path.join(DATA_DIR, "backtest_nav_v3.csv")

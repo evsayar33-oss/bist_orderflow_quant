@@ -1,5 +1,20 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.9 — Sistem sağlığı, canlı backtest ve kendini geliştirme (yıllarca güvenle kullanım için):**
+* **Sistem sağlığı (her gün):** 11 kontrol yapılır ve genel durum 🟢/🟡/🔴 olarak özetlenir. Kontrol edilenler:
+  * **Veri:** tarama genişliği, TÜFE, bilanço verileri.
+  * **İşleyiş:** günlük çalışma, aylık tarama, takılı emir, öz test.
+  * **Model:** canlı sinyal gücü, güven oranı tutarlılığı, model yaşı.
+  * **Canlı sonuç vs test.**
+* **Nerede görünür:** Panelin **Sağlık** sekmesinde, günlük ve aylık Telegram mesajlarında tek satır, Cumartesi haftalık raporunda tam döküm. Kırmızı durumda panelin en üstünde uyarı çıkar.
+* **Canlı backtest:** Portföyün canlı getirisi, testte aynı süreli bütün dönemlerle karşılaştırılır; normal aralık ve yüzdelik dilim gösterilir. %5'in altına düşerse sistem testteki gibi davranmıyor demektir ve durum kırmızı olur.
+* **Kazanma oranları:** Kapanan pozisyonlarda kârla kapanma, BIST100'ü, TÜFE'yi ve toplam hedefi geçme oranları canlı ve testte yan yana gösterilir.
+* **Kendini geliştirme:**
+  * Model her ayın 2'sinde tüm borsa verisiyle yeniden eğitilir.
+  * Faktör ağırlıkları canlı sonuçlarla güncellenir.
+  * Güven modeli, 2.000 sonuçlanmış canlı gözlemden sonra canlı sonuçlarla harmanlanır. Canlı verinin payı veri biriktikçe artar; az veriyle aşırı tepki vermemesi için backtest modeli 10.000 gözlem ağırlığında tutulur.
+  * Önerilerin 3 ay sonraki (erken gösterge) ve 12 ay sonraki gerçekleşme oranları takip edilir.
+
 **V3.8 — %100 hisse portföyü + güven oranı (gerçek veriyle araştırılıp yeniden kuruldu):**
 * **Portföy tamamen hisse.** Altın, nakit payı ve strateji laboratuvarı kaldırıldı.
 * **Kural:**

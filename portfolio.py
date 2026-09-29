@@ -116,6 +116,7 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
                                   "entry_pct": o.get("entry_pct"), "entry_exp_real": o.get("entry_exp_real"),
                                   "entry_exp_nominal": o.get("entry_exp_nominal"), "entry_hurdle": o.get("entry_hurdle"),
                                   "entry_p_beat_all": o.get("entry_p_beat_all"), "entry_conf": o.get("entry_conf"),
+                                  "stop_level": (1.0 - o["stop_pct"]) if o.get("stop_pct") else None,
                                   "bought_today": True}
             events.append({"ticker": t, "type": "BUY", "w": round(o["target_w"], 4)})
     pf["pending"] = remaining
@@ -129,6 +130,13 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
             p["peak"] = max(p["peak"], p["level"])
             p["missing"] = 0
             p["last_close"] = float(b_close[t])
+            if p.get("stop_level") is not None:
+                if p["level"] >= 1 + C.BREAKEVEN_TRIGGER_PCT / 100:
+                    p["stop_level"] = max(p["stop_level"], 1.0)          # breakeven stop
+                if p["level"] <= p["stop_level"] and not any(o["ticker"] == t and o["action"] == "SELL" for o in pf["pending"]):
+                    _queue(pf, t, "SELL", "STOP")
+                    pf.setdefault("stopped", {})[t] = date.strftime("%Y-%m")
+                    events.append({"ticker": t, "type": "STOP_QUEUED", "level": round((p["level"] - 1) * 100, 2)})
             dd_peak = (p["level"] / p["peak"] - 1) * 100
             dd_entry = (p["level"] - 1) * 100
             if dd_entry <= -C.HARD_STOP_FROM_ENTRY_PCT:
