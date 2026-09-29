@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.7.0"
+ENGINE_VERSION = "3.8.1"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -112,7 +112,7 @@ REBALANCE_BAND = 0.05              # only trade existing holdings if weight drif
 CATASTROPHE_FROM_PEAK_PCT = 35.0   # drawdown FLAG: 35% below highest close since entry ...
 CATASTROPHE_FROM_ENTRY_PCT = 30.0  # ... or 30% below entry -> sold at the monthly review ONLY if the
                                    #     thesis also failed (score below the BUY cut-off)
-HARD_STOP_FROM_ENTRY_PCT = 50.0    # unconditional sell at the next open
+HARD_STOP_FROM_ENTRY_PCT = 1000.0  # V3.8: no forced stop (every name is re-decided within 6 months; flag stays informational)
 # Exposure: a beat-CPI investor is fully invested; the guard/regime only trim, never halve it
 EXPOSURE_BY_MODE = {"NORMAL": 1.0, "WATCH": 0.9, "RECOVERY": 0.75, "SAFE": 0.0}
 REGIME_EXPOSURE_FLOOR = 0.8
@@ -138,3 +138,22 @@ FUND_LAG_QUARTER_DAYS = 75         # point-in-time availability after period end
 FUND_LAG_ANNUAL_DAYS = 100
 
 MARKET_TZ = "Europe/Istanbul"
+
+
+# ---------------------------------------------------------------- V3.8 stock-only tranche engine
+# Research on the real 581-stock panel (2017-2026, walk-forward): holding rules ("keep while score
+# >= p60") won in 2022-26 but lost badly in 2017-21; buying the fresh top names each month and
+# holding every monthly cohort for a fixed period was robust in BOTH halves. The portfolio is
+# 100% stocks: no gold, no cash sleeve, no strategy switching.
+TRANCHE_N = 5                     # new names bought each month (top of the ranking)
+TRANCHE_MONTHS = 6                # each monthly cohort is held 6 months -> ~10 names on average
+TRANCHE_SECTOR_CAP = 2            # max names from one sector inside a monthly cohort
+MAX_NAME_W = 0.15                 # portfolio-level single-name cap (a name re-picked in several cohorts)
+PORTFOLIO_SECTOR_CAP = None       # tested 0.35 on real data: no benefit -> off (per-cohort cap of 2 stays)
+CONFIDENCE_FILE_KEY = "confidence_model"
+
+# ---- V3.8.1 drawdown controls (entry filters + weighting), tested on the real panel
+TRANCHE_WEIGHTING = "equal"        # "equal" | "inv_vol" (within each monthly cohort)
+ENTRY_MAX_VOL_PCTILE = None        # e.g. 0.8 -> skip the most volatile 20% of stocks at entry
+ENTRY_MIN_MCAP_PCTILE = None       # e.g. 0.3 -> skip the smallest 30% (by market value) at entry
+DEFENSIVE_IN_DOWNTREND = False     # index < 200d avg -> new picks only from large (top 50% mcap) & lower-beta half

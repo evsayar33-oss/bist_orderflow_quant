@@ -1,4 +1,5 @@
-"""Adaptive BIST Real-Return Engine V3 — daily run after the close (18:25 TR).
+"""Adaptive BIST Real-Return Engine V3.8 — 100% stock portfolio, monthly cohorts, calibrated confidence.
+Daily run after the close (18:25 TR).
 
 Every session:
   * execute yesterday's orders at today's OPEN, mark the portfolio to the CLOSE
@@ -8,7 +9,8 @@ First session of every month (the monthly review):
   * price factors from adjusted yfinance history + TradingView fundamentals,
   * resolve 12-month labels of past monthly snapshots (nominal, REAL, vs XU100),
   * learning (champion/challenger) + calibration of expected REAL return,
-  * HOLD / SELL (thesis) / BUY decisions -> orders for the next open.
+  * V3.8: the top TRANCHE_N stocks form a new monthly cohort, cohorts are held TRANCHE_MONTHS,
+    every pick carries a calibrated confidence -> orders for the next open.
 `python main.py --self-test` runs everything on synthetic data in a temp folder.
 """
 from __future__ import annotations
@@ -41,9 +43,7 @@ from data_integrity import validate_market_frame  # noqa: E402
 from factors import price_factors_at, wide_from_history  # noqa: E402
 from labels import forward_labels  # noqa: E402
 from learner_engine import daily_rank_ic, live_composite_ic, newey_west, run_learning  # noqa: E402
-from meta_engine import GOLD_TICKER, default_strategy, exposure_from, plan_rebalance, score_universe  # noqa: E402
-import strategy_lab as LAB  # noqa: E402
-from state_manager import read_json  # noqa: E402
+from meta_engine import GOLD_TICKER, plan_tranche, score_universe  # noqa: E402
 from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
 from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
                            load_state, load_trade_log, save_monthly_snapshots, save_state)
@@ -146,21 +146,16 @@ def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
     return {"n_dates": n, "ic_mean": round(m, 4), "t_nw": round(t, 2), "ic_recent": round(float(s.tail(6).mean()), 4)}
 
 
-def active_strategy() -> dict:
-    """Portfolio rules chosen by the walk-forward strategy lab (data/strategy_config.json)."""
-    cfg = read_json(C.STRATEGY_CONFIG_FILE) or {}
-    st = cfg.get("strategy") if isinstance(cfg, dict) else None
-    return {**default_strategy(), **(st if isinstance(st, dict) else {})}
-
-
 def gold_bar_today(bm, today):
-    gb = LAB.gold_bars(bm)
-    if gb is None:
+    """Only used to SELL a legacy V3.5-3.7 gold sleeve (V3.8 never buys gold)."""
+    if bm is None or "gold_try" not in bm or bm["gold_try"].notna().sum() < 2:
         return None
-    gb = gb[gb.index <= pd.Timestamp(today)]
-    if len(gb) < 2 or not np.isfinite(gb["chg_pct"].iloc[-1]):
+    g = bm["gold_try"].dropna()
+    g = g[g.index <= pd.Timestamp(today)]
+    if len(g) < 2:
         return None
-    return gb.iloc[[-1]].rename(index={gb.index[-1]: GOLD_TICKER})
+    return pd.DataFrame({"open": [g.iloc[-1]], "close": [g.iloc[-1]], "chg_pct": [(g.iloc[-1] / g.iloc[-2] - 1) * 100]},
+                        index=[GOLD_TICKER])
 
 
 def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=None,
@@ -200,15 +195,12 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     frame, info = score_universe(price_f, fund, state, cpi_stats, state.get("sector_map"))
     if frame.empty:
         return {"status": "NO_FACTORS", **info}, []
-    exposure = exposure_from(guard, state.get("regime", {}))
-    strat = active_strategy()
-    eq_frac, gold_w = LAB.overlay_alloc(strat.get("overlay", "none"), today, bm, crate)
-    if LAB.gold_bars(bm) is None:
-        gold_w = 0.0                       # no gold price series -> no gold sleeve
-    state["active_strategy"] = {**strat, "equity_frac": eq_frac, "gold_w": gold_w}
     chg = None if intraday else snap.set_index("ticker")["change_pct"]
-    orders, summ = plan_rebalance(pf, frame, state, exposure, block=bool(guard.get("block_new_entries")),
-                                  today_change=chg, params=strat, equity_frac=eq_frac, gold_w=gold_w)
+    state.pop("active_strategy", None)
+    conf_model = (research or {}).get(C.CONFIDENCE_FILE_KEY) if isinstance(research, dict) else None
+    orders, summ = plan_tranche(pf, frame, state, today, today_change=chg, conf_model=conf_model)
+    conf_all = __import__("confidence").predict(frame, conf_model)
+    frame = frame.assign(confidence=conf_all.to_numpy())
     keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
     pf["pending"] = keep + [o for o in orders if o["ticker"] not in {k["ticker"] for k in keep}]
     pf["last_rebalance_month"] = today.strftime("%Y-%m")
@@ -216,7 +208,7 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     sel = set(summ.get("holds", [])) | set(summ.get("buys", []))
     cols = ["ticker", "sector", "close_adj", "med_value_traded", "vol_ann_pct", "beta", "composite", "composite_pct",
             "exp_real_12m", "exp_nominal_12m", "hurdle_12m", "exp_over_hurdle", "p_beat_cpi", "p_beat_all",
-            "regime_label", "model_version", "fund_break"] + \
+            "regime_label", "model_version", "fund_break", "confidence", "max_1m"] + \
         [f"f_{k}" for k in C.FACTORS] + [f"z_{k}" for k in C.FACTORS]
     rec = frame[[c for c in cols if c in frame.columns]].copy()
     rec["tarih"] = today
@@ -225,8 +217,14 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
         rec[c] = np.nan
     base = snaps[snaps["tarih"] != today] if not snaps.empty else snaps
     save_monthly_snapshots(pd.concat([base, rec], ignore_index=True) if not base.empty else rec)
-    top = frame[frame["ticker"].isin(summ.get("buys", []))].sort_values("composite", ascending=False)
-    return {"status": "OK", **info, **summ, "exposure": round(exposure, 3)}, top.to_dict("records")
+    top = frame[frame["ticker"].isin(summ.get("picks", []))].sort_values("composite", ascending=False)
+    state["last_picks"] = {"month": summ.get("month"), "picks": [
+        {"ticker": r["ticker"], "confidence": round(float(r["confidence"]), 4), "grade": summ["confidence_grade"].get(r["ticker"]),
+         "split": summ["suggested_split"].get(r["ticker"]), "score_pct": round(float(r["composite_pct"]), 1),
+         "sector": r.get("sector") if isinstance(r.get("sector"), str) else None,
+         "exp_nominal_12m": None if pd.isna(r.get("exp_nominal_12m")) else round(float(r["exp_nominal_12m"]), 1)}
+        for _, r in top.iterrows()]}
+    return {"status": "OK", **info, **summ}, top.to_dict("records")
 
 
 def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,

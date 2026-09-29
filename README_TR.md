@@ -1,5 +1,21 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.8 — %100 hisse portföyü + güven oranı (gerçek veriyle araştırılıp yeniden kuruldu):**
+* **Portföy tamamen hisse.** Altın, nakit payı ve strateji laboratuvarı kaldırıldı.
+* **Kural:**
+  * Her ayın ilk seansında en güçlü **5 likit hisse** alınır (aynı sektörden en fazla 2).
+  * Her aylık dilim **6 ay** tutulur. Portföy aktif dilimlerin birleşimidir: ortalama 10–13 hisse, tek hisse en fazla %15.
+  * Satışların parası hemen kalan hisselere dağıtılır.
+* **Neden bu kural:** 581 hisselik gerçek panelde (2017–2026) eski "skor p60'ın altına düşene kadar tut" kuralı 2022–26'da kazandırdı ama 2017–21'de ağır kaybettirdi. Aylık dilim yapısı iki dönemde de sağlam çıktı.
+* **Güven oranı:** Hissenin 12 ayda tipik bir BIST hissesinden çok kazanma olasılığıdır (%50 = yazı-tura). Dışarıda bırakılmış yıllarda kalibre edildi: model %62 dediğinde gerçekleşen %59–61 oldu. Her alımın yanında "yeni paranın önerilen payı" da verilir.
+* **Neden "TÜFE/dolar/altını geçme olasılığı" değil:** Bir hissenin alternatifleri geçip geçmeyeceğini büyük ölçüde o yılın piyasası belirliyor (2022'de hisselerin %71'i geçti, 2024'te %15'i). Bu kısım 12 yıllık veriyle güvenilir biçimde tahmin edilemiyor; hisseler arasında para dağıtırken de zaten hepsine ortak.
+* **Gerçek veri sonucu (2017–2026, canlı kodla aynı simülasyon):**
+  * Yıllık getiri %65 (BIST100 %33).
+  * 12 aylık dönemlerde geçme: TÜFE %68, BIST100 %80, hepsi tek tek %51, toplam hedef %17.
+  * Maksimum düşüş %41 (BIST100 %32).
+  * Bağımsız denetim geleceği görme hatası bulmadı. Ancak batmış şirketlerin evrende olmaması ve bu veride seçilen birkaç ayar yüzünden gerçekçi beklenti **yıllık ~%55** civarıdır.
+* Stop yok. Sert düşen hisse bilgi olarak bildirilir, dilim süresi dolunca yeniden değerlendirilir.
+
 **V3.7 — Tüm borsa + toplam hedefin peşinde:**
 * **Canlı tarama:** 450 hisselik tavan kaldırıldı. Günde 1 milyon TL'nin üzerinde işlem gören her BIST hissesi puanlanır.
 * **Geçmiş test:** Artık 103 büyük hisseyle değil, TradingView'un listelediği **tüm BIST hisseleriyle** yapılır. Likidite eşiği her ay o tarihin parasıyla uygulanır: bugünkü 20 milyon TL, TÜFE ile geriye indirgenir. Örneğin 2015'te yaklaşık 2 milyon TL'ye karşılık gelir. Böylece orta ve küçük hisseler de test edilir.

@@ -109,9 +109,8 @@ def unit_checks() -> dict:
                   f"2025-01-0{2 + i}")
     res["drawdown_flag_not_sold"] = bool(pf["positions"]["X"].get("dd_flag")) and not pf["pending"]
     apply_day(pf, pd.DataFrame({"open": [4.9], "close": [4.9], "chg_pct": [(4.9 / 6.8 - 1) * 100]}, index=["X"]), "2025-01-08")
-    res["hard_stop_queued"] = any(o["reason"] == "CATASTROPHE_STOP" for o in pf["pending"])
-    ev, lots = apply_day(pf, pd.DataFrame({"open": [4.8], "close": [4.9], "chg_pct": [0.0]}, index=["X"]), "2025-01-09")
-    res["hard_stop_executed"] = bool(lots) and lots[0]["reason"] == "CATASTROPHE_STOP"
+    # V3.8: no forced stop — a -51% name stays until its cohort expires (research design; flag is informational)
+    res["no_forced_stop"] = not any(o["reason"] == "CATASTROPHE_STOP" for o in pf["pending"]) and "X" in pf["positions"]
     # flagged position with intact thesis is KEPT at the review; with weak thesis it is SOLD
     from meta_engine import plan_rebalance
     pf3 = new_portfolio("2025-01-02")
@@ -152,8 +151,8 @@ def unit_checks() -> dict:
 
 
 def inflation_gate_check(W) -> dict:
-    """Day 1: no CPI and no FX proxy -> review must block buys. Day 2 (same month): CPI back ->
-    the ungated review must be redone and buys must appear."""
+    """V3.8: day 1 without CPI -> the stock-only engine STILL buys (CPI is a benchmark, not a gate).
+    Day 2 (same month): CPI back -> the review is redone (idempotent: same-month cohort replaced)."""
     import main as M
     import state_manager as SM
     days = [d for d in W["days"] if d >= pd.Timestamp("2025-06-02")][:2]
@@ -168,7 +167,7 @@ def inflation_gate_check(W) -> dict:
     r1 = _run(W, today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
                cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
     st1 = SM.load_state()
-    blocked = r1["review"] is not None and not st1["portfolio"]["pending"] and \
+    blocked = r1["review"] is not None and any(o["action"] == "BUY" for o in st1["portfolio"]["pending"]) and \
         st1["last_rebalance"].get("expected_inflation_12m") is None
     cur["d"] = days[1]
     last = pd.Timestamp(days[1]) - pd.DateOffset(months=1)
@@ -213,7 +212,7 @@ def inflation_gate_check(W) -> dict:
     for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
         if os.path.exists(f):
             os.remove(f)
-    return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
+    return {"no_cpi_still_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
             "intraday_refresh": bool(refresh_ok), "upgrade_redoes_review": bool(upgrade_ok), "manual_rescan": bool(rescan_ok)}
 
 
@@ -235,7 +234,9 @@ def _gold_ok() -> bool:
 
 def _tg_ok(st) -> bool:
     import telegram_report as TG
-    rev = {"target_weights": {"AAA": 0.1}, "sells": ["BBB"], "sell_reasons": {"BBB": "RANK_EXIT"}, "holds": ["CCC"]}
+    rev = {"target_weights": {"AAA": 0.1, "DDD": 0.1, "CCC": 0.1}, "sells": ["BBB"], "sell_reasons": {"BBB": "COHORT_EXPIRY"},
+           "holds": ["CCC", "DDD"], "picks": ["AAA", "DDD"], "confidence": {"AAA": 0.64, "DDD": 0.58},
+           "confidence_grade": {"AAA": "Yüksek", "DDD": "Orta"}, "suggested_split": {"AAA": 0.64, "DDD": 0.36}}
     msg = TG.monthly_report(pd.Timestamp("2026-10-01"), st, rev, [{"ticker": "AAA", "exp_nominal_12m": 55.2, "p_beat_all": 0.61}])
     ev = TG.events_report(pd.Timestamp("2026-10-02"), [{"ticker": "AAA", "type": "BUY", "w": 0.1},
                                                        {"ticker": "BBB", "type": "SELL_RANK_EXIT", "ret": 12.3}], st, 0.8)
@@ -248,15 +249,24 @@ def _tg_ok(st) -> bool:
     return any(w in msg for w in ("Çıta", "çıta", "hedef"))
 
 
-def _overlay_ok() -> bool:
-    import strategy_lab as LAB
-    idx = pd.bdate_range("2020-01-01", "2022-01-01")
-    up = pd.DataFrame({"usdtry": np.linspace(10, 11, len(idx)), "gold_try": np.linspace(100, 200, len(idx)),
-                       "xu100": np.linspace(1, 1.2, len(idx))}, index=idx)
-    cr = pd.Series(10.0, index=pd.date_range("2019-01-01", "2022-01-01", freq="MS"))
-    d = idx[-1]
-    return (LAB.overlay_alloc("blend", d, up, cr) == (0.5, 0.5) and LAB.overlay_alloc("core25", d, up, cr) == (0.75, 0.25)
-            and LAB.overlay_alloc("dual", d, up, cr) == (0.0, 1.0) and len(LAB.variant_grid()) == 192)
+def _confidence_ok() -> bool:
+    """Calibrated confidence: fit recovers a monotone relation and predictions stay inside (0,1)."""
+    import confidence as CF
+    rng = np.random.default_rng(3)
+    rows = []
+    for m in range(40):
+        d = pd.Timestamp("2015-01-01") + pd.DateOffset(months=m)
+        n = 120
+        pctv = rng.uniform(0, 100, n)
+        ret = (pctv - 50) * 0.4 + rng.normal(0, 30, n)
+        rows.append(pd.DataFrame({"tarih": d, "ticker": [f"T{i}" for i in range(n)], "composite_pct": pctv,
+                                  "fwd_ret": ret, "max_1m": rng.uniform(0, 10, n),
+                                  **{k: rng.normal(size=n) for k in CF.KEY_FACTORS}}))
+    R = pd.concat(rows, ignore_index=True)
+    m = CF.walk_forward(R, 2017, 2018)
+    hi = CF.predict(pd.DataFrame({"composite_pct": [99.0], "max_1m": [1.0], **{k: [1.0] for k in CF.KEY_FACTORS}}), m).iloc[0]
+    lo = CF.predict(pd.DataFrame({"composite_pct": [1.0], "max_1m": [1.0], **{k: [-1.0] for k in CF.KEY_FACTORS}}), m).iloc[0]
+    return bool(m["coef"]["pct"] + m["coef"]["pct3"] > 0 and 0 < lo < 0.5 < hi < 1 and m.get("oos_reliability"))
 
 
 def _liq_ok() -> bool:
@@ -323,11 +333,8 @@ def run_self_test() -> bool:
     # small walk-forward backtest on the same synthetic history (no fundamentals history)
     import backtest_optimizer as B
     sub = {t: g[g.index <= pd.Timestamp("2026-05-29")] for t, g in list(W["hist"].items())[:70]}
-    import strategy_lab as LAB
-    small = [v for v in LAB.variant_grid() if v["name"] in ("n5_b90_cv_rank_dual", "n3_b95_cv_hurdle_blend", "n8_b85_iv_rank_core25")]
-    assert len(small) == 3, "strategy lab variant names changed"
     bt = B.run("2019-01-01", None, save=True, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame(),
-               bm=bench_of(W), crate=W["crate"], variants=small)
+               bm=bench_of(W), crate=W["crate"])
     rep = bt["report"]
 
     checks = {
@@ -344,13 +351,17 @@ def run_self_test() -> bool:
         "hurdles_computed": (st.get("hurdles") or {}).get("hurdle") is not None and (st.get("hurdles") or {}).get("gold") is not None,
         "beat_all_labels": "beat_all" in snaps and snaps["beat_all"].notna().sum() > 0,
         "multi_bench_report": "rolling12m_beat" in rep["portfolio"] and "beat_all" in next(iter(rep["per_year"].values())),
-        "strategy_lab_ran": rep.get("strategy_lab", {}).get("variants_tested", 0) >= 4 and os.path.exists(C.STRATEGY_CONFIG_FILE),
+        "tranche_backtest": (rep.get("rules") or {}).get("engine") == "stock-only monthly cohorts"
+                            and bool((rep.get("confidence_model") or {}).get("coef")),
         "gold_sleeve_unit": _gold_ok(),
         "telegram_monthly_ok": _tg_ok(st),
         "hurdle_is_sum": _sum_hurdle_ok(),
-        "overlays_unit": _overlay_ok(),
+        "confidence_unit": _confidence_ok(),
         "liq_floor_scaled": _liq_ok(),
-        "live_strategy_dict": isinstance(st.get("active_strategy"), dict),
+        "cohorts_live": bool(st["portfolio"].get("cohorts")) and all(len(c["tickers"]) <= C.TRANCHE_N for c in st["portfolio"]["cohorts"])
+                        and len(st["portfolio"]["cohorts"]) <= C.TRANCHE_MONTHS,
+        "stock_only_fully_invested": st["portfolio"]["cash"] / max(st["portfolio"]["nav"], 1e-9) < 0.08,
+        "picks_have_confidence": all(0 < x["confidence"] < 1 for x in (st.get("last_picks") or {}).get("picks", [{"confidence": 0}])),
         **{f"unit_{k}": bool(v) for k, v in u.items()},
         **{f"gate_{k}": v for k, v in gate.items()},
     }

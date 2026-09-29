@@ -10,45 +10,10 @@ import pandas as pd
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
 REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWDOWN_CONFIRMED": "düşüş + zayıflayan tez",
              "CATASTROPHE_STOP": "kesin stop (−%50)", "NEW_ENTRY": "yeni giriş",
-             "ROTATION": "varlık rotasyonu", "ALLOCATION": "varlık dağılımı"}
-OVERLAY_TR = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse/altın/mevduat rotasyonu",
-              "blend": "altın güçlüyse yarısı altın", "core25": "kalıcı %25 altın"}
-WEIGHT_TR = {"equal": "eşit ağırlık", "conviction": "skora göre ağırlık", "inv_vol": "risk dengeli ağırlık"}
+             "ROTATION": "eski altın payı kapatıldı", "ALLOCATION": "varlık dağılımı",
+             "COHORT_EXPIRY": "6 aylık süresi doldu", "NOT_SELECTED": "yeni seçimde yok"}
 
 
-def live_strategy(state: Dict) -> Dict:
-    """Live strategy dict (V3.6 key); tolerant to old states where "strategy" is a name string."""
-    for k in ("active_strategy", "strategy"):
-        v = state.get(k)
-        if isinstance(v, dict) and v:
-            return v
-    return {}
-
-
-def strategy_line(state: Dict) -> Optional[str]:
-    s = live_strategy(state)
-    if not s:
-        return None
-    w = WEIGHT_TR.get(s.get("weighting"), "risk dengeli ağırlık")
-    return f"⚙️ Strateji: {s.get('n_positions')} hisse · {w} · {OVERLAY_TR.get(s.get('overlay'), s.get('overlay'))}"
-
-
-def allocation_line(state: Dict) -> Optional[str]:
-    s = live_strategy(state)
-    try:
-        eq = float(s.get("equity_frac", 1.0) if s.get("equity_frac") is not None else 1.0)
-        gw = float(s.get("gold_w") or 0.0)
-    except (TypeError, ValueError):
-        return None
-    if eq >= 0.999 and not gw:
-        return None
-    if eq <= 0 and gw > 0:
-        return "🪙 <b>Rotasyon: hisseler yerine ALTIN</b> (gram altın / ALTINS1) — altın 12 ayda hisse ve mevduattan güçlü"
-    if eq <= 0:
-        return "🏦 <b>Rotasyon: hisseler yerine MEVDUAT / para piyasası</b> — hisse ve altın mevduatı geçemiyor"
-    if gw > 0:
-        return f"🪙 Hisse %{eq * 100:.0f} · <b>altın %{gw * 100:.0f}</b> (gram altın / ALTINS1)"
-    return f"🟡 Hisse payı %{eq * 100:.0f}, kalanı mevduatta"
 REGIME_TR = {"RISK_ON": "Olumlu 🟢", "NEUTRAL": "Nötr ⚪", "RISK_OFF": "Riskli 🔴", "UNKNOWN": "Belirsiz"}
 GUARD_TR = {"NORMAL": "Normal", "WATCH": "Temkinli", "RECOVERY": "Toparlanıyor", "SAFE": "Güvenli mod — alım yok"}
 BENCH_TR = {"cpi": "TÜFE", "usd": "Dolar", "gold": "Altın", "deposit": "Mevduat", "xu100": "BIST100"}
@@ -89,7 +54,7 @@ def portfolio_line(state: Dict) -> List[str]:
     nav = pf.get("nav", 1.0) or 1.0
     n = len(pf.get("positions", {}))
     cash = pf.get("cash", 0.0) / nav * 100 if nav else 0.0
-    out = [f"💼 Portföy: <b>{n} hisse</b> · nakit {pct(cash, nd=0)}"]
+    out = [f"💼 Portföy: <b>{n} hisse</b>" + (f" · nakit {pct(cash, nd=0)}" if cash >= 1 else "")]
     navm = (state.get("performance") or {}).get("nav") or {}
     if navm.get("days", 0) >= 2:
         b = navm.get("benchmarks_total_pct") or {}
@@ -102,36 +67,37 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
     reg, g = state.get("regime", {}), state.get("autonomy_guard", {})
     L = [f"🏛 <b>BIST Reel Getiri</b> · Aylık Rapor", f"<i>{tarih(today)} · emirler bir sonraki açılışta</i>", ""]
     L += hurdle_block(state.get("hurdles") or {})
-    al = allocation_line(state)
-    if al:
-        L += ["", al]
     L.append("")
-    tw = rev.get("target_weights", {})
-    if tw.get("ALTIN"):
-        L.append(f"🪙 <b>ALTIN</b>  ağırlık {pct(tw['ALTIN'] * 100, nd=0)} <i>(gram altın / ALTINS1)</i>")
-    if buys:
-        L.append("🟢 <b>AL</b>")
-        for r in buys:
-            pb = r.get("p_beat_all")
-            prob = f" · hedefi geçme {pct((pb or 0) * 100, nd=0)}" if pb is not None and pb == pb else ""
-            L.append(f"<b>{escape(str(r['ticker']))}</b>  ağırlık {pct(tw.get(r['ticker'], 0) * 100, nd=0)}"
-                     f" · beklenti {pct(r.get('exp_nominal_12m'))}{prob}")
+    picks = rev.get("picks") or []
+    conf, grade, split = rev.get("confidence", {}), rev.get("confidence_grade", {}), rev.get("suggested_split", {})
+    held_before = set(rev.get("holds", []))
+    if picks:
+        L.append("🟢 <b>Bu ayın alımları</b>  <i>(güven · yeni paranın önerilen payı)</i>")
+        for t in picks:
+            again = "  <i>(portföyde, ağırlığı artar)</i>" if t in held_before else ""
+            L.append(f"<b>{escape(str(t))}</b>  güven {pct(conf.get(t, 0) * 100, nd=0)} ({grade.get(t, '—')})"
+                     f" · pay {pct(split.get(t, 0) * 100, nd=0)}{again}")
+    else:
+        L.append("✋ Bu ay alım kriterini karşılayan likit hisse bulunamadı.")
     if rev.get("sells"):
         L.append("")
         L.append("🔴 <b>SAT</b>")
         for t, why in rev.get("sell_reasons", {}).items():
             L.append(f"<b>{escape(str(t))}</b>  {REASON_TR.get(why, why)}")
-    if rev.get("holds"):
+    keep = [t for t in rev.get("holds", []) if t not in picks]
+    if keep:
         L.append("")
-        L.append("⚪ <b>TUT</b>  " + " · ".join(escape(str(t)) for t in rev["holds"]))
-    if not buys and not rev.get("sells"):
-        L.append("✋ Bu ay değişiklik yok" + (" — en güçlü alternatifi güvenle geçen yeni hisse bulunamadı." if not rev.get("holds") else "."))
+        L.append("⚪ <b>TUT</b>  " + " · ".join(escape(str(t)) for t in keep))
+    exp = [t for t in rev.get("expiring_next", []) if t not in picks]
+    if exp:
+        L.append("")
+        L.append("⏳ <b>Gelecek ay 6 ayı doluyor</b>  " + " · ".join(escape(str(t)) for t in exp)
+                 + "  <i>(o ay yeniden seçilmezse satılacak)</i>")
     L.append("")
     L += portfolio_line(state)
-    sl = strategy_line(state)
-    if sl:
-        L.append(sl)
-    L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))} · Sistem: {GUARD_TR.get(g.get('mode'), g.get('mode'))}")
+    L.append("ℹ️ <i>Güven: 12 ayda tipik bir BIST hissesinden çok kazanma olasılığı (%50 = yazı-tura). "
+             "Her hisse en az 6 ay tutulur.</i>")
+    L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))}")
     return "\n".join(L)
 
 
@@ -149,7 +115,7 @@ def events_report(today, events: List[Dict], state: Dict, day_ret: Optional[floa
     for e in stops:
         L.append(f"⛔ Kesin stop: <b>{escape(e['ticker'])}</b> {pct(e.get('dd_entry'), True)} — yarın açılışta satılacak")
     for e in flags:
-        L.append(f"⚠️ Düşüş bayrağı: <b>{escape(e['ticker'])}</b> {pct(e.get('dd_peak'), True)} zirveden — ay başında tez kontrol edilecek")
+        L.append(f"⚠️ Sert düşüş: <b>{escape(e['ticker'])}</b> {pct(e.get('dd_peak'), True)} zirveden (bilgi amaçlı; hisse 6 aylık süresi dolunca yeniden değerlendirilir)")
     if day_ret is not None:
         L.append("")
         L.append(f"💼 Portföy bugün {pct(day_ret, True, 2)}")
@@ -176,17 +142,23 @@ def status_report(today, state: Dict, refresh: bool) -> str:
     psell = [o for o in pf.get("pending", []) if o.get("action") == "SELL"]
     if pend:
         L.append("🕘 <b>Bir sonraki açılışta alınacak</b>")
-        L.append("   " + " · ".join(f"<b>{escape(str(o['ticker']))}</b> {pct(o.get('target_w', 0) * 100, nd=0)}" for o in pend))
+        L.append("   " + " · ".join(f"<b>{escape(str(o['ticker']))}</b> {pct(o.get('target_w', 0) * 100, nd=0)}"
+                                  + (f" (güven {pct(o['entry_conf'] * 100, nd=0)})" if o.get("entry_conf") is not None else "")
+                                  for o in pend))
     if psell:
         L.append("🕘 <b>Bir sonraki açılışta satılacak:</b> " + " · ".join(escape(str(o["ticker"])) for o in psell))
     pos = pf.get("positions", {}) or {}
+    exp = (state.get("last_rebalance") or {}).get("expiring_next") or []
+    exp = [t for t in exp if t in pos]
+    if exp:
+        L.append("⏳ Ay başında 6 ayı dolacak: " + " · ".join(f"<b>{escape(str(t))}</b>" for t in exp))
     if pos:
         best = sorted(pos.items(), key=lambda kv: -kv[1].get("level", 1))
         L.append("💼 <b>Portföy</b>  " + " · ".join(f"{escape(str(t))} {pct((p.get('level', 1) - 1) * 100, True)}" for t, p in best[:12]))
     elif not pend:
-        L.append("💼 Portföy boş — hedefe uygun hisse çıktığında alım yapılacak.")
+        L.append("💼 Portföy boş — ilk alımlar ayın ilk seansındaki taramadan sonra yapılır.")
     L += portfolio_line(state)[1:]
     if lr.get("date"):
         L.append(f"🔎 Son tarama: {tarih(lr['date'])} · {lr.get('n_scored', '—')} hisse puanlandı · sonraki: ayın ilk seansı")
-    L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))} · Sistem: {GUARD_TR.get(g.get('mode'), g.get('mode'))}")
+    L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))}")
     return "\n".join(L)

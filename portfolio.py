@@ -64,8 +64,15 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
 
     # 2) execute orders at OPEN
     remaining = []
-    order_rank = {"SELL": 0, "REBAL": 1, "BUY": 2}
-    for o in sorted(pf["pending"], key=lambda x: order_rank.get(x["action"], 3)):
+    # sells -> trims -> new buys -> top-ups (new names get funded before existing names are topped up)
+    def _rank(o):
+        if o["action"] == "SELL":
+            return 0
+        if o["action"] == "REBAL":
+            p0 = pf["positions"].get(o["ticker"])
+            return 1 if p0 is not None and o["target_w"] * nav(pf) < p0["value"] else 3
+        return 2 if o["action"] == "BUY" else 4
+    for o in sorted(pf["pending"], key=_rank):
         t = o["ticker"]
         if t not in has or not np.isfinite(b_open.get(t, np.nan)):
             o["age"] = int(o.get("age", 0)) + 1
@@ -81,6 +88,7 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
             lots.append({"ticker": t, "entry_date": p["entry_date"], "exit_date": ds, "reason": o["reason"],
                          "nominal_ret_pct": round((proceeds / p["cost_basis"] - 1) * 100, 4),
                          "entry_pct": p.get("entry_pct"), "entry_exp_real": p.get("entry_exp_real"),
+                         "entry_conf": p.get("entry_conf"),
                          "peak_level": round(p["peak"], 4)})
             events.append({"ticker": t, "type": f"SELL_{o['reason']}", "ret": lots[-1]["nominal_ret_pct"]})
         elif o["action"] == "REBAL" and t in pf["positions"]:
@@ -107,7 +115,7 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
                                   "entry_px": float(b_open[t]), "level": 1.0, "peak": 1.0, "missing": 0,
                                   "entry_pct": o.get("entry_pct"), "entry_exp_real": o.get("entry_exp_real"),
                                   "entry_exp_nominal": o.get("entry_exp_nominal"), "entry_hurdle": o.get("entry_hurdle"),
-                                  "entry_p_beat_all": o.get("entry_p_beat_all"),
+                                  "entry_p_beat_all": o.get("entry_p_beat_all"), "entry_conf": o.get("entry_conf"),
                                   "bought_today": True}
             events.append({"ticker": t, "type": "BUY", "w": round(o["target_w"], 4)})
     pf["pending"] = remaining

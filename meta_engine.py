@@ -1,5 +1,15 @@
 """Scoring and monthly portfolio construction (live AND backtest use these functions).
 
+V3.8 (live): plan_tranche — 100% stocks, monthly cohorts:
+* every month the TRANCHE_N highest-scored liquid stocks form a new cohort
+  (max TRANCHE_SECTOR_CAP per sector, no limit-up buys),
+* every cohort is held TRANCHE_MONTHS, the portfolio is the union of the active cohorts
+  (a name picked in several months naturally carries more weight, capped at MAX_NAME_W),
+* every pick carries a calibrated confidence (confidence.py).
+The older rules below (plan_rebalance) are kept only for reference/back-compat.
+
+Legacy (V3.0-3.7):
+
 Rules (long-horizon, low turnover):
 * BUY  : composite percentile >= calibrated cut-off, expected 12m REAL return
          after costs >= MIN_EXPECTED_REAL_PCT, liquid, no fundamental break,
@@ -264,3 +274,156 @@ def exposure_from(guard: Dict, regime: Dict) -> float:
     p_off = 0.5 if p_off is None else float(p_off)
     regime_mult = float(np.clip(1.0 - 0.25 * p_off, C.REGIME_EXPOSURE_FLOOR, 1.0))
     return float(base * regime_mult)
+
+
+# ====================================================================== V3.8 tranche engine
+def _month_diff(a: str, b: str) -> int:
+    pa, pb = pd.Period(a, "M"), pd.Period(b, "M")
+    return (pb - pa).n
+
+
+def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change: Optional[pd.Series] = None,
+                 conf_model: Optional[Dict] = None) -> Tuple[List[Dict], Dict]:
+    """Orders for the next open + summary. Cohorts persist in pf["cohorts"]."""
+    from confidence import predict, grade
+    month = pd.Timestamp(today).strftime("%Y-%m")
+    K, N, cap = int(C.TRANCHE_MONTHS), int(C.TRANCHE_N), int(C.TRANCHE_SECTOR_CAP)
+    f = frame.copy()
+    f["confidence"] = predict(f, conf_model).to_numpy()
+    f = f.set_index("ticker")
+    for c in ("exp_nominal_12m", "exp_real_12m", "p_beat_all", "hurdle_12m"):
+        if c not in f.columns:
+            f[c] = np.nan
+    cohorts = [c for c in pf.get("cohorts", []) if c.get("month") != month and _month_diff(c["month"], month) < K]
+    expired = {t for c in pf.get("cohorts", []) if c.get("month") != month and _month_diff(c["month"], month) >= K
+               for t in c.get("tickers", [])}
+    # ---- new cohort
+    floor = float(state.get("liq_floor_tl") or C.MIN_MEDIAN_VALUE_TRADED_TL)
+    elig = pd.to_numeric(f["med_value_traded"], errors="coerce") >= floor
+    if today_change is not None:
+        elig &= ~(today_change.reindex(f.index) >= C.LIMIT_MOVE_PCT)
+    vol = pd.to_numeric(f.get("vol_ann_pct"), errors="coerce")
+    if getattr(C, "ENTRY_MAX_VOL_PCTILE", None) and vol.notna().any():
+        elig &= ~(vol.rank(pct=True) > C.ENTRY_MAX_VOL_PCTILE)
+    if getattr(C, "ENTRY_MIN_MCAP_PCTILE", None) and "market_cap" in f and pd.to_numeric(f["market_cap"], errors="coerce").notna().mean() > 0.5:
+        mc = pd.to_numeric(f["market_cap"], errors="coerce")
+        elig &= mc.rank(pct=True).fillna(0) >= C.ENTRY_MIN_MCAP_PCTILE
+    if getattr(C, "DEFENSIVE_IN_DOWNTREND", False) and state.get("downtrend"):
+        mc = pd.to_numeric(f.get("market_cap"), errors="coerce")
+        bt = pd.to_numeric(f.get("beta"), errors="coerce")
+        if mc.notna().mean() > 0.5:
+            elig &= mc.rank(pct=True).fillna(0) >= 0.5
+        if bt.notna().mean() > 0.5:
+            elig &= bt.rank(pct=True).fillna(1) <= 0.5
+    cand = f[elig].sort_values("composite", ascending=False)
+    # projected portfolio sector weights from the still-active older cohorts (portfolio-level cap)
+    sec_of = lambda t: (f.at[t, "sector"] if t in f.index and isinstance(f.at[t, "sector"], str) and f.at[t, "sector"] else "NA")
+    old_live = [c for c in cohorts if c.get("tickers")]
+    n_after = len(old_live) + 1
+    sec_w: Dict[str, float] = {}
+    name_w: Dict[str, float] = {}
+    for c in old_live:
+        for t in c["tickers"]:
+            add = 1.0 / (n_after * len(c["tickers"]))
+            sec_w[sec_of(t)] = sec_w.get(sec_of(t), 0.0) + add
+            name_w[t] = name_w.get(t, 0.0) + add
+    pcap = getattr(C, "PORTFOLIO_SECTOR_CAP", None)
+    step = 1.0 / (n_after * N)
+    picks, sec_n = [], {}
+    for t, r in cand.iterrows():
+        sec = sec_of(t)
+        if sec != "NA" and sec_n.get(sec, 0) >= cap:
+            continue
+        if pcap and sec != "NA" and sec_w.get(sec, 0.0) + step > pcap + 1e-9:
+            continue
+        if name_w.get(t, 0.0) > 0 and name_w[t] + step > C.MAX_NAME_W + 1e-9:
+            continue                                   # re-pick would breach the single-name cap -> next idea
+        picks.append(t)
+        sec_n[sec] = sec_n.get(sec, 0) + 1
+        sec_w[sec] = sec_w.get(sec, 0.0) + step
+        if len(picks) == N:
+            break
+    conf = {t: round(float(f.at[t, "confidence"]), 4) for t in picks}
+    if picks and getattr(C, "TRANCHE_WEIGHTING", "equal") == "inv_vol":
+        iv = {t: 1.0 / max(float(vol.get(t)) if pd.notna(vol.get(t, np.nan)) else float(vol.median()), 10.0) for t in picks}
+        sw = sum(iv.values())
+        cw_in = {t: v / sw for t, v in iv.items()}
+    else:
+        cw_in = {t: 1.0 / len(picks) for t in picks} if picks else {}
+    cohorts.append({"month": month, "tickers": picks, "confidence": conf, "w": {t: round(v, 5) for t, v in cw_in.items()}})
+    # ---- target weights = union of active cohorts
+    live = [c for c in cohorts if c.get("tickers")]
+    tw: Dict[str, float] = {}
+    for c in live:
+        for t in c["tickers"]:
+            share = (c.get("w") or {}).get(t, 1.0 / len(c["tickers"]))
+            tw[t] = tw.get(t, 0.0) + share / len(live)
+    ncap = max(C.MAX_NAME_W, 1.0 / max(len(tw), 1))              # never forces cash when few names exist
+    for _ in range(10):                                            # cap and redistribute
+        over = {t: w for t, w in tw.items() if w > ncap + 1e-12}
+        if not over:
+            break
+        extra = sum(w - ncap for w in over.values())
+        for t in over:
+            tw[t] = ncap
+        under = [t for t in tw if tw[t] < ncap - 1e-12]
+        us = sum(tw[t] for t in under)
+        if not under or us <= 0:
+            break
+        for t in under:
+            tw[t] += extra * tw[t] / us
+    tot_w = sum(tw.values())
+    if tot_w > 0 and abs(tot_w - 1.0) > 1e-9:                     # stock-only: always fully invested
+        tw = {t: w / tot_w for t, w in tw.items()}
+    # ---- orders
+    cw = pf_weights(pf)
+    held = list(pf["positions"].keys())
+    orders, sells, holds, buys = [], {}, [], []
+    for t in held:
+        if t not in tw:
+            sells[t] = "COHORT_EXPIRY" if t in expired else ("ROTATION" if t == GOLD_TICKER else "NOT_SELECTED")
+            orders.append({"ticker": t, "action": "SELL", "reason": sells[t], "target_w": 0.0})
+        else:
+            holds.append(t)
+            if abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
+                orders.append({"ticker": t, "action": "REBAL", "reason": "COHORT_WEIGHT", "target_w": round(tw[t], 5)})
+    # stock-only: idle cash (from exits / below-band drift) is re-deployed into under-weight holdings
+    rebal_set = {o["ticker"] for o in orders if o["action"] == "REBAL"}
+    cash_w = pf.get("cash", 0.0) / max(pf.get("nav", 1.0) or 1.0, 1e-12)
+    spare = cash_w + sum(cw.get(t, 0.0) for t in sells) - sum(w for t, w in tw.items() if t not in pf["positions"]) \
+        - sum(tw[o["ticker"]] - cw.get(o["ticker"], 0.0) for o in orders if o["action"] == "REBAL")
+    if spare > 0.01:
+        gaps = sorted(((tw[t] - cw.get(t, 0.0), t) for t in holds if t not in rebal_set and tw[t] - cw.get(t, 0.0) > 0.005),
+                      reverse=True)
+        for gap, t in gaps:
+            if spare <= 0.005:
+                break
+            orders.append({"ticker": t, "action": "REBAL", "reason": "CASH_REDEPLOY", "target_w": round(tw[t], 5)})
+            spare -= gap
+    for t, w in tw.items():
+        if t in pf["positions"]:
+            continue
+        r = f.loc[t] if t in f.index else None
+        buys.append(t)
+        orders.append({"ticker": t, "action": "BUY", "reason": "NEW_ENTRY", "target_w": round(w, 5),
+                       "entry_pct": None if r is None else round(float(r["composite_pct"]), 2),
+                       "entry_conf": None if r is None else round(float(r["confidence"]), 4),
+                       "entry_exp_real": None if r is None or pd.isna(r["exp_real_12m"]) else round(float(r["exp_real_12m"]), 2),
+                       "entry_exp_nominal": None if r is None or pd.isna(r["exp_nominal_12m"]) else round(float(r["exp_nominal_12m"]), 2),
+                       "entry_hurdle": None if r is None or pd.isna(r["hurdle_12m"]) else round(float(r["hurdle_12m"]), 2),
+                       "entry_p_beat_all": None if r is None or pd.isna(r["p_beat_all"]) else round(float(r["p_beat_all"]), 3)})
+    pf["cohorts"] = cohorts
+    # suggested split of NEW money across this month's picks: proportional to the confidence edge
+    edge = {t: max(conf[t] - 0.5, 0.02) for t in picks}
+    es = sum(edge.values()) or 1.0
+    split = {t: round(v / es, 4) for t, v in edge.items()}
+    exit_month = {t: max((pd.Period(c["month"], "M") + K).strftime("%Y-%m") for c in cohorts if t in c["tickers"])
+                  for t in tw}
+    nxt = (pd.Period(month, "M") + 1).strftime("%Y-%m")
+    expiring_next = sorted(t for t, m in exit_month.items() if m == nxt)
+    summary = {"engine": "tranche", "month": month, "expiring_next": expiring_next, "picks": picks, "confidence": conf,
+               "confidence_grade": {t: grade(conf[t]) for t in picks}, "suggested_split": split,
+               "buys": buys, "sells": list(sells), "sell_reasons": sells, "holds": holds,
+               "target_weights": {k: round(v, 4) for k, v in tw.items()}, "exit_month": exit_month,
+               "n_cohorts": len(live), "cash_target": round(1.0 - sum(tw.values()), 4)}
+    return orders, summary

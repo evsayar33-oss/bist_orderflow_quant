@@ -1,4 +1,4 @@
-"""BIST Reel Getiri — sade, mobil öncelikli pano (salt okunur, ./data dosyalarını okur)."""
+"""BIST Reel Getiri V3.8 — %100 hisse portföyü, aylık dilimler, kalibre güven oranı (salt okunur pano)."""
 import json
 import math
 import os
@@ -37,6 +37,10 @@ st.markdown("""
 .b-in {background: rgba(23,201,100,.15); color: #17c964;} .b-buy {background: rgba(124,108,242,.18); color: #9d90ff;}
 .b-watch {background: rgba(128,128,128,.15);} .b-no {background: rgba(243,18,96,.13); color: #f31260;}
 .note {font-size: .88rem; line-height: 1.45;}
+.cbar {height: 8px; border-radius: 4px; background: rgba(128,128,128,.18); width: 100%; margin-top: 6px;}
+.cbar > div {height: 8px; border-radius: 4px;}
+.g-hi {background: #17c964;} .g-mid {background: #f5a524;} .g-lo {background: #9aa0a6;}
+.pick {padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,.15);} .pick:last-child {border-bottom: none;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,7 +91,8 @@ FACTOR_TR = {
     "low_leverage": "düşük borç", "div_yield": "temettü", "real_growth": "enflasyon üstü büyüme",
 }
 REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWDOWN_CONFIRMED": "düşüş + zayıflayan tez",
-             "CATASTROPHE_STOP": "kesin stop", "NEW_ENTRY": "yeni giriş"}
+             "CATASTROPHE_STOP": "kesin stop", "NEW_ENTRY": "yeni giriş", "COHORT_EXPIRY": "6 aylık süresi doldu",
+             "NOT_SELECTED": "yeni seçimde yok", "ROTATION": "eski altın payı kapatıldı"}
 
 
 def dstr(s):
@@ -125,7 +130,7 @@ st.markdown(f'<div class="sub">Güncelleme {dstr(lr.get("date"))} · Piyasa {REG
 # ------------------------------------------------------------------ one actionable alert at most
 inf = state.get("inflation", {}) or {}
 if inf.get("expected_12m_pct") is None:
-    st.error("TÜFE verisi yok → yeni alım yapılmıyor. GitHub → Settings → Secrets → `EVDS_API_KEY` ekleyip “Daily Run” çalıştırın.")
+    st.warning("TÜFE verisi yok → hedef kartı hesaplanamıyor (hisse seçimi etkilenmez). `EVDS_API_KEY` ekleyin.")
 elif inf.get("status") == "PROXY":
     st.warning("Resmî TÜFE yerine USDTRY vekili kullanılıyor. `EVDS_API_KEY` ekleyin.")
 
@@ -138,8 +143,8 @@ if hz.get("hurdle") is not None and hz.get("mode") == "sum":
     st.markdown(f'<div class="card"><div class="lbl">Portföyün 12 aylık hedefi</div>'
                 f'<div class="big">{pct(hz["hurdle"])}</div>{chips}'
                 f'<div class="note mut" style="margin-top:8px">Hedef: TÜFE, dolar (+ABD enflasyonu), altın ve mevduatın '
-                f'<b>toplamını</b> en az %{edge:.0f} farkla geçmek. Hiçbir hisse alınmadan önce en güçlü tek alternatifi '
-                f'({BENCH.get(hz.get("binding"), "—")} {pct(hz.get("floor"))}) de güvenle geçmesi beklenir.</div></div>',
+                f'<b>toplamını</b> en az %{edge:.0f} farkla geçmek. Performans bu hedefe göre ölçülür; hisse seçimi her ay '
+                f'en güçlü hisseleri alır.</div></div>',
                 unsafe_allow_html=True)
 elif hz.get("hurdle") is not None:
     chips = "".join(f'<span class="chip {"on" if k == hz.get("binding") else ""}">{BENCH[k]} {pct(hz.get(k))}</span>'
@@ -165,43 +170,54 @@ else:
 tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
 
 # ------------------------------------------------------------------ PORTFÖY
-OVERLAY = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse / altın / mevduat rotasyonu",
-           "blend": "altın güçlüyse yarısı altın", "core25": "kalıcı %25 altın"}
-WEIGHT = {"equal": "eşit ağırlık", "conviction": "skora göre ağırlık", "inv_vol": "risk dengeli ağırlık"}
 with tab1:
-    stg = next((v for v in (state.get("active_strategy"), state.get("strategy")) if isinstance(v, dict) and v), {})
-    if not stg:
-        try:
-            with open(C.STRATEGY_CONFIG_FILE, encoding="utf-8") as fh:
-                _cfg = json.load(fh)
-            stg = _cfg.get("strategy") if isinstance(_cfg, dict) and isinstance(_cfg.get("strategy"), dict) else {}
-        except Exception:
-            stg = {}
-    if stg:
-        eqf, gw = num(stg.get("equity_frac")), num(stg.get("gold_w")) or 0
-        alloc = ""
-        if eqf is not None and eqf <= 0 and gw > 0:
-            alloc = '<div class="note" style="margin-top:6px">🪙 Şu an hisse yerine <b>altın</b> tutuluyor (gram altın / ALTINS1).</div>'
-        elif eqf is not None and eqf <= 0:
-            alloc = '<div class="note" style="margin-top:6px">🏦 Şu an hisse yerine <b>mevduat / para piyasası</b>.</div>'
-        elif eqf is not None and eqf < 1:
-            alloc = (f'<div class="note" style="margin-top:6px">🪙 Hisse %{eqf * 100:.0f} · altın %{gw * 100:.0f} (gram altın / ALTINS1).</div>' if gw
-                     else f'<div class="note" style="margin-top:6px">🟡 Hisse payı {pct(eqf * 100, nd=0)}, kalanı mevduatta.</div>')
-        st.markdown(f'<div class="card"><div class="lbl">Strateji</div><div class="note">'
-                    f'<b>{stg.get("n_positions")} hisse</b> · {WEIGHT.get(stg.get("weighting"), "risk dengeli ağırlık")} · '
-                    f'{OVERLAY.get(stg.get("overlay"), stg.get("overlay"))}</div>{alloc}</div>', unsafe_allow_html=True)
+    lp = state.get("last_picks") or {}
+    if lp.get("picks"):
+        GR = {"Yüksek": "g-hi", "Orta": "g-mid", "Düşük": "g-lo"}
+        rows = ""
+        for x in lp["picks"]:
+            cf = num(x.get("confidence")) or 0
+            rows += (f'<div class="pick"><div style="display:flex;justify-content:space-between;align-items:baseline">'
+                     f'<div><span class="tk">{x["ticker"]}</span> <span class="mut" style="font-size:.8rem">{x.get("sector") or ""}</span></div>'
+                     f'<div><b>%{cf * 100:.0f}</b> <span class="mut" style="font-size:.8rem">güven · {x.get("grade") or ""}</span></div></div>'
+                     f'<div class="cbar"><div class="{GR.get(x.get("grade"), "g-lo")}" style="width:{max(min((cf - 0.35) / 0.35, 1), 0.05) * 100:.0f}%"></div></div>'
+                     f'<div class="mut" style="font-size:.8rem;margin-top:4px">önerilen pay (yeni para) {pct((num(x.get("split")) or 0) * 100, nd=0)}'
+                     f' · skor {num(x.get("score_pct")) or 0:.0f}/100</div></div>')
+        cm = (report.get("confidence_model") or {}) if report else {}
+        calib = ""
+        if cm.get("oos_top10_predicted") is not None:
+            calib = (f' Geçmiş testte model aylık ilk 10 hisse için ortalama %{cm["oos_top10_predicted"] * 100:.0f} dedi, '
+                     f'gerçekleşen %{cm["oos_top10_realised"] * 100:.0f} oldu.')
+        st.markdown(f'<div class="card"><div class="lbl">Bu ayın alım önerileri · {lp.get("month", "")}</div>{rows}'
+                    f'<div class="note mut" style="margin-top:8px"><b>Güven</b> = hissenin 12 ayda tipik bir BIST hissesinden '
+                    f'daha çok kazanma olasılığı (%50 = yazı-tura).{calib} Hisseler arasında para dağıtırken bunu kullanın; '
+                    f'piyasanın genel yönü bütün hisseleri birlikte etkiler.</div></div>', unsafe_allow_html=True)
     pos = pf.get("positions", {}) or {}
     navv = pf.get("nav", 1.0) or 1.0
+    exit_m = {}
+    for c in pf.get("cohorts", []) or []:
+        try:
+            em = (pd.Period(c["month"], "M") + C.TRANCHE_MONTHS)
+        except Exception:
+            continue
+        for t in c.get("tickers", []):
+            exit_m[t] = max(exit_m.get(t, em), em)
     if pos:
         rows = ""
         for t, p in sorted(pos.items(), key=lambda kv: -kv[1]["value"]):
             w = p["value"] / navv * 100
             r = (p["level"] - 1) * 100
-            flag = ' <span class="chip">⚠️ düşüş bayrağı</span>' if p.get("dd_flag") else ""
+            flag = ' <span class="chip">⚠️ sert düşüş</span>' if p.get("dd_flag") else ""
+            ec = num(p.get("entry_conf"))
+            em = exit_m.get(t)
+            soon = em is not None and em == (pd.Period(pd.Timestamp.now(), "M") + 1)
+            flag += ' <span class="chip on">⏳ gelecek ay 6 ayı doluyor</span>' if soon else ""
+            meta = f'{dstr(p["entry_date"])} alındı' + (f' · güven %{ec * 100:.0f}' if ec is not None else "") + \
+                (f' · gözden geçirme {AYLAR[em.month - 1]} {em.year}' if em is not None else "")
             rows += (f'<div class="row"><div><span class="tk">{t}</span>{flag}<div class="mut" style="font-size:.8rem">'
-                     f'{dstr(p["entry_date"])} alındı</div></div><div style="text-align:right">'
+                     f'{meta}</div></div><div style="text-align:right">'
                      f'<div class="{cls(r)}" style="font-weight:700">{pct(r, True)}</div>'
-                     f'<div class="bar"><div style="width:{min(w / C.MAX_POSITION_W, 100):.0f}%"></div></div>'
+                     f'<div class="bar"><div style="width:{min(w / (C.MAX_NAME_W * 100) * 100, 100):.0f}%"></div></div>'
                      f'<div class="mut" style="font-size:.78rem">ağırlık {pct(w, nd=0)}</div></div></div>')
         st.markdown(f'<div class="card"><div class="lbl">{len(pos)} hisse · nakit {pct(pf.get("cash", 0) / navv * 100, nd=0)}</div>'
                     f'{rows}</div>', unsafe_allow_html=True)
@@ -213,20 +229,18 @@ with tab1:
         rows = ""
         for o in pend:
             if o["action"] == "BUY":
-                pb = num(o.get("entry_p_beat_all"))
-                extra = f' · hedefi geçme {pct(pb * 100, nd=0)}' if pb is not None else ""
+                ec = num(o.get("entry_conf"))
+                extra = f'güven %{ec * 100:.0f}' if ec is not None else ""
                 rows += (f'<div class="row"><div><span class="tk">🟢 {o["ticker"]}</span><div class="mut" style="font-size:.8rem">'
-                         f'beklenti {pct(o.get("entry_exp_nominal"))}{extra}</div></div>'
+                         f'{extra}</div></div>'
                          f'<div style="font-weight:600">{pct(o.get("target_w", 0) * 100, nd=0)}</div></div>')
             elif o["action"] == "SELL":
                 rows += (f'<div class="row"><div><span class="tk">🔴 {o["ticker"]}</span></div>'
                          f'<div class="mut">{REASON_TR.get(o.get("reason"), o.get("reason"))}</div></div>')
         if rows:
             st.markdown(f'<div class="card"><div class="lbl">Bir sonraki açılışta</div>{rows}</div>', unsafe_allow_html=True)
-    if not last.empty and "selected" in last:
-        sel = last[last["selected"].astype(str).str.lower() == "true"].sort_values("composite", ascending=False)
-        if len(sel):
-            st.caption(f"Bu ayın seçimi ({dstr(snaps['tarih'].max())}): " + " · ".join(sel["ticker"].astype(str)))
+    st.caption(f"Kural: her ay en güçlü {C.TRANCHE_N} hisse alınır (aynı sektörden en fazla {C.TRANCHE_SECTOR_CAP}), "
+               f"her aylık dilim {C.TRANCHE_MONTHS} ay tutulur; portföy tamamen hisse, tek hisse en fazla %{C.MAX_NAME_W * 100:.0f}.")
 
 # ------------------------------------------------------------------ HİSSE ARA
 with tab2:
@@ -249,46 +263,35 @@ with tab2:
                     st.markdown(f'<div class="card"><span class="tk">{t}</span> — bu ay puanlanmadı.</div>', unsafe_allow_html=True)
                 else:
                     r = row.iloc[0]
-                    cutoff = float(cal.get("pct_cutoff", C.BUY_PCT))
                     sc = num(r.get("composite_pct")) or 0
+                    picked = t in {x["ticker"] for x in (state.get("last_picks") or {}).get("picks", [])}
                     if in_pf:
                         badge, txt = "b-in", "✅ Portföyde"
-                    elif pending_buy or str(r.get("selected")).lower() == "true":
+                    elif pending_buy or picked:
                         badge, txt = "b-buy", "🟢 Alım listesinde"
-                    elif sc >= C.HOLD_PCT:
+                    elif sc >= 90:
                         badge, txt = "b-watch", "⚪ İzlemede"
                     else:
                         badge, txt = "b-no", "🔴 Şu an uygun değil"
                     why = []
-                    eo = num(r.get("exp_over_hurdle"))
-                    if not in_pf and not pending_buy:
-                        if sc < cutoff:
-                            why.append(f"Skoru alım eşiğinin altında (100 üzerinden {sc:.0f}, eşik {cutoff:.0f}).")
-                        if eo is not None and eo < C.MIN_EDGE_OVER_HURDLE_PCT:
-                            why.append("Beklenen getirisi 12 aylık hedefin altında." if hz.get("mode") == "sum"
-                                       else "Beklenen getirisi 12 aylık çıtayı yeterli farkla geçmiyor.")
-                        eof = num(r.get("exp_over_floor"))
-                        if hz.get("mode") == "sum" and eof is not None and eof < C.MIN_EDGE_OVER_HURDLE_PCT:
-                            why.append("En güçlü tek alternatifi bile (" + BENCH.get(hz.get("binding"), "—") + ") güvenle geçmiyor.")
+                    if not in_pf and not pending_buy and not picked:
+                        rank = int((last["composite"] > r["composite"]).sum()) + 1 if "composite" in last else None
+                        if rank:
+                            why.append(f"Bu ay {len(last)} hisse içinde {rank}. sırada; her ay yalnızca ilk {C.TRANCHE_N} hisse alınır.")
                         if (num(r.get("med_value_traded")) or 0) < C.MIN_MEDIAN_VALUE_TRADED_TL:
-                            why.append("İşlem hacmi (likidite) düşük.")
-                        if str(r.get("fund_break")).lower() == "true":
-                            why.append("Şirket zarar ediyor ve özsermaye kârlılığı negatif.")
-                        if not why:
-                            why.append("Kriterleri geçiyor ama sektör sınırı ya da portföy doluluğu nedeniyle alınmadı.")
+                            why.append("İşlem hacmi (likidite) alım eşiğinin altında.")
                     contrib = sorted(((k, weights.get(k, 0) * (num(r.get(f"z_{k}")) or 0)) for k in C.FACTORS),
                                      key=lambda x: x[1], reverse=True)
                     good = [FACTOR_TR[k] for k, v in contrib if v > 0.02][:3]
                     bad = [FACTOR_TR[k] for k, v in contrib[::-1] if v < -0.02][:3]
-                    pb = num(r.get("p_beat_all"))
+                    cf = num(r.get("confidence"))
                     html = (f'<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">'
                             f'<span class="big" style="font-size:1.6rem">{t}</span><span class="badge {badge}">{txt}</span></div>'
                             f'<div class="mut" style="font-size:.82rem;margin-top:2px">{r.get("sector") if isinstance(r.get("sector"), str) else ""}</div>'
                             f'<div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">'
                             f'<div><div class="lbl">Skor</div><div class="kpi v">{sc:.0f}<span class="mut" style="font-size:.9rem">/100</span></div></div>'
                             f'<div><div class="lbl">Beklenen 12A</div><div class="kpi v">{pct(r.get("exp_nominal_12m"))}</div></div>'
-                            f'<div><div class="lbl">Hedef</div><div class="kpi v">{pct(r.get("hurdle_12m"))}</div></div>'
-                            f'<div><div class="lbl">Hedefi geçme</div><div class="kpi v">{pct(pb * 100, nd=0) if pb is not None else "—"}</div></div>'
+                            f'<div><div class="lbl">Güven</div><div class="kpi v">{pct(cf * 100, nd=0) if cf is not None else "—"}</div></div>'
                             f'</div>')
                     if why:
                         html += '<div class="note" style="margin-top:12px">' + "<br>".join("• " + w for w in why) + "</div>"
@@ -340,22 +343,23 @@ with tab3:
             lines.append(f'12 aylık dönemlerin <b>{pct(p.get("rolling12m_beat_cpi_pct"), nd=0)}</b>’inde TÜFE’yi geçti.')
         st.markdown('<div class="card"><div class="lbl">Geçmiş test (gerçek veri, dışarıda bırakılmış dönemler)</div>'
                     f'<div class="note">{"<br>".join(lines)}</div></div>', unsafe_allow_html=True)
-        lab = report.get("strategy_lab") or {}
-        if lab:
-            sel = lab.get("selected") or {}
-            adopted = lab.get("adopted")
-            txt = (f'{lab.get("variants_tested")} farklı portföy kuralı gerçek veride denendi. '
-                   + ("Her yıl yalnızca o yıldan ÖNCEKİ verilerle en iyi kural seçilerek test edildi; bu seçim yöntemi "
-                      "varsayılan kurallardan iyi çıktığı için canlıya alındı." if adopted else
-                      "Kural seçimi geçmişte varsayılan kuralları geçemediği için canlıda varsayılan kurallar kullanılıyor.")
-                   + f'<br>Canlı kural: <b>{sel.get("n_positions")} hisse</b> · '
-                   f'{WEIGHT.get(sel.get("weighting"), "risk dengeli")} · '
-                   f'{OVERLAY.get(sel.get("overlay"), sel.get("overlay"))} · alım eşiği {sel.get("buy_pct") or "kalibre"}')
-            if lab.get("meta_beat_hurdle_pct") is not None:
-                txt += (f'<br>12 aylık dönemlerin <b>{pct(lab.get("meta_beat_hurdle_pct"), nd=0)}</b>’inde '
-                        + ("toplam hedefi (TÜFE+dolar+altın+mevduat+%3) geçti." if summ else "çıtanın tamamını geçti."))
-            st.markdown(f'<div class="card"><div class="lbl">Strateji laboratuvarı</div><div class="note">{txt}</div></div>',
-                        unsafe_allow_html=True)
+        ru = report.get("rules") or {}
+        if ru.get("engine"):
+            st.markdown(f'<div class="card"><div class="lbl">Test edilen kural (canlı sistemle aynı kod)</div><div class="note">'
+                        f'Her ay en güçlü <b>{ru.get("picks_per_month")}</b> hisse · her dilim <b>{ru.get("cohort_months")} ay</b> · '
+                        f'portföyde ortalama <b>{str(report.get("avg_names_held", "—")).replace(".", ",")}</b> hisse · tek hisse en fazla '
+                        f'%{(ru.get("max_name_weight") or 0) * 100:.0f} · %100 hisse. Kural sabittir, her yıl değişmez. '
+                        f'Not: birkaç ayar bu geçmiş veriyle araştırılarak seçildi ve evrende batmış şirketler yok; '
+                        f'bu yüzden gerçekçi beklenti test sonucunun yılda ~10 puan altıdır.</div></div>', unsafe_allow_html=True)
+        cm = report.get("confidence_model") or {}
+        if cm.get("oos_reliability"):
+            rows = "".join(f'<div class="row"><span>Model %{x["predicted"] * 100:.0f} dedi</span>'
+                           f'<span><b>gerçekleşen %{x["realised"] * 100:.0f}</b> <span class="mut">({x["n"]:,} gözlem)</span></span></div>'.replace(",", ".")
+                           for x in cm["oos_reliability"])
+            st.markdown(f'<div class="card"><div class="lbl">Güven oranı ne kadar doğru? (dışarıda bırakılmış yıllar)</div>{rows}'
+                        f'<div class="note mut" style="margin-top:6px">Tahmin edilen ile gerçekleşen birbirine yakınsa güven oranına '
+                        f'güvenilebilir. Yazı-turaya göre iyileşme: %{str(round(cm.get("oos_brier_skill_pct", 0) or 0, 1)).replace(".", ",")} (hisse seçiminde '
+                        f'gerçekçi düzey).</div></div>', unsafe_allow_html=True)
         py = report.get("per_year") or {}
         if py:
             tbl = []
@@ -371,6 +375,6 @@ with tab3:
 with st.expander("Teknik detay"):
     m = state.get("model", {}) or {}
     st.json({"model": m.get("status"), "sürüm": m.get("champion_version"), "kalibrasyon": cal.get("status"),
-             "alım eşiği": cal.get("pct_cutoff"), "çıta": hz, "TÜFE": inf, "nakit": state.get("cash_rate"),
+             "dilimler": pf.get("cohorts"), "hedef": hz, "TÜFE": inf, "nakit": state.get("cash_rate"),
              "rejim olasılıkları": reg.get("probs"), "guard": {k: g.get(k) for k in ("mode", "reason", "drift_score", "performance_drift")},
              "canlı IC": {"12A": m.get("ic_live_12m"), "3A": m.get("ic_live_3m")}, "kapanan pozisyonlar": perf.get("lots")})

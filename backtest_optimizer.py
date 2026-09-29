@@ -1,22 +1,20 @@
-"""Walk-forward research backtest for the V3 real-return engine (free data only).
+"""Walk-forward research + backtest of the V3.8 stock-only engine (real data, free sources).
 
-* Adjusted daily OHLCV (yfinance) for a broad liquid BIST universe since 2012,
-  XU100 + USDTRY for the regime model, Turkish CPI for real returns,
-  point-in-time fundamentals from Is Yatirim (best effort, lagged 75/100 days).
-* Monthly decisions use EXACTLY the live functions (factors.price_factors_at,
-  meta_engine.score_universe / plan_rebalance, portfolio.apply_day).
-* Walk-forward by year: factor weights are fitted only on months whose 12-month
-  labels were fully known before the test year (purged); calibration uses only
-  earlier OUT-OF-SAMPLE months; the HMM is fitted on data before the test year.
-* Output: data/research_prior_v3.json (prior + OOS calibration for the live
-  learner) and data/backtest_report_v3.json (real/CPI and XU100 metrics).
-Known limitations are written into the report (survivorship, no dividends in
-cash, fundamentals coverage).
+* Adjusted daily OHLCV (yfinance) for EVERY BIST stock TradingView lists (point-in-time liquidity floor),
+  point-in-time fundamentals (Is Yatirim, 75/100-day publication lags), CPI with a 1-month lag.
+* Factor weights are learned walk-forward (yearly folds, 13-month purge) — never on the test year.
+* The portfolio is simulated with the SAME functions the live engine uses
+  (meta_engine.plan_tranche + portfolio.apply_day; orders fill at the next session's open).
+* Rules are fixed in config.py (no strategy search). A calibrated confidence model is fitted on
+  out-of-sample scores only (confidence.walk_forward) and published in the research prior.
+Known optimism: survivorship (delisted names are missing), a few design parameters were chosen on this
+sample -> treat the headline CAGR as an upper estimate.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -34,7 +32,8 @@ from calibration import add_excess, bucket_table, calibrate, cutoff_stats, marke
 from factors import build_frame, composite, price_factors_at, wide_from_history
 from labels import forward_labels, month_start_sessions
 from learner_engine import daily_rank_ic, factor_corr, fit_weights, get_prior, newey_west
-from meta_engine import exposure_from, plan_rebalance, score_universe
+import confidence as CF
+from meta_engine import plan_tranche, score_universe
 from portfolio import apply_day, new_portfolio, weights as pf_weights
 from state_manager import atomic_json_write, load_state
 
@@ -65,6 +64,13 @@ def backtest_universe() -> List[str]:
     uni = list(dict.fromkeys(live + UNIVERSE))[: max(C.BACKTEST_UNIVERSE_MAX, len(UNIVERSE))]
     print(f"🌐 Backtest evreni: {len(uni)} hisse (TradingView listesi {len(live)})")
     return uni
+
+
+def _downtrend(index_close, day) -> bool:
+    if index_close is None or not len(index_close):
+        return False
+    s = index_close[index_close.index <= pd.Timestamp(day)].dropna()
+    return bool(len(s) >= 200 and s.iloc[-1] < s.iloc[-200:].mean())
 
 
 def liq_floor_at(cpi: Optional[pd.Series], day) -> float:
@@ -219,31 +225,47 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
               "calibration": dict(cal_state["calibration"]), "regime": reg,
               "_no_inflation": cs.get("expected_12m_pct") is None, "liq_floor_tl": liq_floor_at(cpi, day),
+              "downtrend": _downtrend(index_close, day),
               "hurdles": BM.expected_hurdles(bm, cs, INF.cash_yield_at(crate, day) if len(crate) else None, as_of=day)}
         frame, info = score_universe(pf_, fi, st, cs, sector_map)
         if frame.empty:
             continue
-        oos_rows.append(frame[["tarih", "ticker", "composite", "composite_pct", "regime_label"]].assign(tarih=day))
+        keep_cols = ["tarih", "ticker", "composite", "composite_pct", "regime_label", "med_value_traded", "max_1m"] + \
+            [c for c in CF.KEY_FACTORS if c in frame.columns]
+        oos_rows.append(frame[[c for c in keep_cols if c in frame.columns]].assign(tarih=day))
         frames[day] = (frame, st, reg)
 
-    # ---------------- strategy laboratory (walk-forward selected portfolio rules)
-    import strategy_lab as LAB
-    from meta_engine import default_strategy
-    ctx = {"days": list(sim_days), "frames": frames, "bm": bm, "crate": crate,
-           "bars": {d: pd.DataFrame({"open": O.loc[d], "close": Cl.loc[d], "chg_pct": chg.loc[d]}).dropna() for d in sim_days},
-           "gold_bars": LAB.gold_bars(bm),
-           "cash_y": (lambda d: INF.cash_yield_at(crate, d)),
-           "xu": (lambda d: float(index_close.asof(d)) if index_close is not None else np.nan)}
-    print(f"🧪 Strateji laboratuvarı başlıyor ({len(LAB.variant_grid()) + 1} varyant)...")
-    lab_res = LAB.run_lab(ctx, cpi, bench, default_strategy(), variants=variants)
-    sel = lab_res["selected"]
-    sel_res = lab_res["results"][sel["name"]]
-    def_res = lab_res["results"][lab_res["default_name"]]
-    # headline = what goes live, measured out-of-sample: the walk-forward meta strategy if the lab
-    # pick is adopted, otherwise the default rules (themselves never tuned on the test years)
-    nav_df = lab_res["meta_nav"] if lab_res["adopted"] else def_res["nav"]
-    lots_df = enrich_lots(pd.DataFrame(sel_res["lots"]), cpi, index_close, bench)
-    open_now = sel_res["open"]
+    # ---------------- V3.8: stock-only monthly-cohort simulation — SAME code path as live
+    # (meta_engine.plan_tranche + portfolio.apply_day). No strategy search: the rules are fixed
+    # in config.py (TRANCHE_N / TRANCHE_MONTHS / TRANCHE_SECTOR_CAP), so nothing is tuned on the test years.
+    print(f"🧪 Simülasyon: her ay en iyi {C.TRANCHE_N} hisse, her dilim {C.TRANCHE_MONTHS} ay, %100 hisse")
+    pf = new_portfolio(sim_days[0])
+    nav_rows, lots_all, n_names = [], [], []
+    for day in sim_days:
+        bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
+        _, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day) if len(crate) else None)
+        lots_all.extend(lots)
+        if day in frames:
+            frame, st, reg = frames[day]
+            orders, summ = plan_tranche(pf, frame, st, day, today_change=bars["chg_pct"])
+            pf["pending"] = orders
+            n_names.append(len(summ["target_weights"]))
+        wts = pf_weights(pf)
+        nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": round(sum(wts.values()), 4),
+                         "xu100": float(index_close.asof(day)) if index_close is not None else np.nan})
+    nav_df = pd.DataFrame(nav_rows)
+    lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close, bench)
+    open_now = {t: round((p["level"] - 1) * 100, 2) for t, p in pf["positions"].items()}
+
+    # ---------------- calibrated confidence model (walk-forward on OUT-OF-SAMPLE scores, investable names)
+    conf_model = dict(CF.DEFAULT_MODEL)
+    try:
+        oo = pd.concat(oos_rows, ignore_index=True).merge(lab[["tarih", "ticker", "fwd_ret"]], on=["tarih", "ticker"], how="inner")
+        oo = oo[pd.to_numeric(oo["med_value_traded"], errors="coerce") >= oo["tarih"].map(lambda d: liq_floor_at(cpi, d))]
+        y0 = pd.Timestamp(oo["tarih"].min()).year + 2
+        conf_model = CF.walk_forward(oo.dropna(subset=["fwd_ret"]), y0, pd.Timestamp(idx[-1]).year)
+    except Exception as exc:
+        print(f"⚠️ Güven modeli kurulamadı ({exc}); araştırma varsayılanı kullanılıyor.")
 
     # OOS IC of the composite (12m) per fold
     oos = pd.concat(oos_rows, ignore_index=True) if oos_rows else pd.DataFrame()
@@ -255,17 +277,21 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     per_year = {}
     if not nav_df.empty:
         y = nav_df.set_index("tarih")
+        prev_end = None
         for yr, g in y.groupby(y.index.year):
+            g0 = y.loc[[prev_end]] if prev_end is not None else g.iloc[[0]]
+            prev_end = g.index[-1]
             if len(g) < 20:
                 continue
-            nom = (g["nav"].iloc[-1] / g["nav"].iloc[0] - 1) * 100
-            c = INF.cpi_ratio(cpi, g.index[0], g.index[-1])
-            xr = (g["xu100"].iloc[-1] / g["xu100"].iloc[0] - 1) * 100 if g["xu100"].notna().all() else np.nan
+            a0 = g0.index[0]
+            nom = (g["nav"].iloc[-1] / g0["nav"].iloc[0] - 1) * 100
+            c = INF.cpi_ratio(cpi, a0, g.index[-1])
+            xr = (g["xu100"].iloc[-1] / g0["xu100"].iloc[0] - 1) * 100 if g["xu100"].notna().all() and np.isfinite(g0["xu100"].iloc[0]) else np.nan
             per_year[int(yr)] = {"nominal_pct": round(float(nom), 2),
                                  "cpi_pct": round(float((c - 1) * 100), 2) if np.isfinite(c) else None,
                                  "real_pct": round(float(((1 + nom / 100) / c - 1) * 100), 2) if np.isfinite(c) else None,
                                  "xu100_pct": round(float(xr), 2) if np.isfinite(xr) else None}
-            w = BM.window_returns(bm, cpi, crate, g.index[0], g.index[-1])
+            w = BM.window_returns(bm, cpi, crate, a0, g.index[-1])
             per_year[int(yr)].update({"usd_pct": None if not np.isfinite(w["usd"]) else round(float(w["usd"]), 2),
                                       "gold_pct": None if not np.isfinite(w["gold"]) else round(float(w["gold"]), 2),
                                       "deposit_pct": None if not np.isfinite(w["deposit"]) else round(float(w["deposit"]), 2),
@@ -274,6 +300,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                                       "beat_all": None if not np.isfinite(w["hurdle"]) else bool(nom > w["hurdle"])})
 
     prior = build_research_prior(ds, X, oos_l)
+    prior[C.CONFIDENCE_FILE_KEY] = conf_model
     report = {
         "generated_at": datetime.utcnow().isoformat() + "Z", "engine_version": C.ENGINE_VERSION,
         "hurdle_mode": getattr(C, "HURDLE_MODE", "max"), "hurdle_edge_pct": C.MIN_EDGE_OVER_HURDLE_PCT,
@@ -285,25 +312,15 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         "cpi_source": cpi_meta, "cash_rate_source": cr_meta, "fundamentals_coverage": round(fund_cov, 3),
         "data_source": "Yahoo Finance adjusted OHLCV + Is Yatirim statements + CPI (EVDS/FRED)",
         "synthetic_data_used": False, "cost_round_trip_pct": C.COST_ROUND_TRIP_PCT,
-        "rules": {"target_positions": C.TARGET_POSITIONS, "buy_pct": C.BUY_PCT, "hold_pct": C.HOLD_PCT,
-                  "min_expected_real_pct": C.MIN_EXPECTED_REAL_PCT,
-                  "drawdown_flag_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "drawdown_flag_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT,
-                  "hard_stop_entry_pct": C.HARD_STOP_FROM_ENTRY_PCT, "exposure_by_mode": C.EXPOSURE_BY_MODE},
+        "rules": {"engine": "stock-only monthly cohorts", "picks_per_month": C.TRANCHE_N,
+                  "cohort_months": C.TRANCHE_MONTHS, "sector_cap_per_cohort": C.TRANCHE_SECTOR_CAP,
+                  "max_name_weight": C.MAX_NAME_W, "rebalance_band": C.REBALANCE_BAND,
+                  "liquidity_floor_today_tl": C.MIN_MEDIAN_VALUE_TRADED_TL},
         "portfolio": nav_metrics(nav_df, cpi, bench),
-        "portfolio_basis": ("walk-forward META strategy (variant chosen each year using only earlier data)"
-                            if lab_res["adopted"] else "default rules (lab selection did not beat them out-of-sample)"),
-        "portfolio_default_rules": nav_metrics(def_res["nav"], cpi, bench),
-        "portfolio_selected_insample": nav_metrics(sel_res["nav"], cpi, bench),
+        "portfolio_basis": "walk-forward scores, fixed rules (no strategy search), same code path as live",
+        "avg_names_held": round(float(np.mean(n_names)), 1) if n_names else None,
         "closed_lots": lot_metrics(lots_df),
-        "strategy_lab": {"variants_tested": lab_res["variants_tested"], "selected": sel,
-                         "lab_best": lab_res["lab_best"], "adopted": lab_res["adopted"],
-                         "meta_oos_score": lab_res["meta_oos_score"], "default_oos_score": lab_res["default_oos_score"],
-                         "selected_score": round(float(lab_res["selected_score"]), 2),
-                         "choices_by_year": lab_res["choices_by_year"],
-                         "meta_beat_hurdle_pct": lab_res["meta_beat_hurdle_pct"],
-                         "meta_median_excess_pp": lab_res["meta_median_excess_pp"],
-                         "top10": lab_res["table"][:10],
-                         "default": next((r for r in lab_res["table"] if r["name"] == lab_res["default_name"]), None)},
+        "confidence_model": conf_model,
         "open_positions_end": open_now,
         "oos_composite_ic_12m": {"mean": round(float(m), 4), "t_nw": round(float(t), 2), "n_months": int(n)},
         "per_year": per_year,
@@ -316,17 +333,13 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                         f"fundamentals coverage {round(fund_cov, 2)} (Is Yatirim best effort)",
                         "autonomy guard neutral in backtest"],
     }
-    print(json.dumps({k: report[k] for k in ("period", "portfolio", "strategy_lab", "oos_composite_ic_12m", "per_year")},
+    print(json.dumps({k: report[k] for k in ("period", "portfolio", "avg_names_held", "oos_composite_ic_12m", "per_year")},
                      ensure_ascii=False, indent=2, default=str))
     if save:
         atomic_json_write(C.RESEARCH_PRIOR_FILE, prior)
         atomic_json_write(C.BACKTEST_REPORT_FILE, report)
-        atomic_json_write(C.STRATEGY_CONFIG_FILE, {
-            "generated_at": report["generated_at"], "strategy": sel,
-            "score": report["strategy_lab"]["selected_score"],
-            "why": "walk-forward strategy lab: best 0.5*P25+0.5*median of rolling 12m excess over the hurdle",
-            "meta_oos": {k: report["portfolio"].get(k) for k in ("cagr_pct", "real_cagr_pct", "xu100_cagr_pct",
-                                                                   "max_drawdown_pct", "rolling12m_beat_all_pct")}})
+        if os.path.exists(C.STRATEGY_CONFIG_FILE):
+            os.remove(C.STRATEGY_CONFIG_FILE)          # V3.8: no strategy switching
     return {"report": report, "prior": prior, "nav": nav_df, "lots": lots_df}
 
 
