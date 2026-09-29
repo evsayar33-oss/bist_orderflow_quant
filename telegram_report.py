@@ -9,7 +9,29 @@ import pandas as pd
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
 REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWDOWN_CONFIRMED": "düşüş + zayıflayan tez",
-             "CATASTROPHE_STOP": "kesin stop (−%50)", "NEW_ENTRY": "yeni giriş"}
+             "CATASTROPHE_STOP": "kesin stop (−%50)", "NEW_ENTRY": "yeni giriş",
+             "ROTATION": "varlık rotasyonu", "ALLOCATION": "varlık dağılımı"}
+OVERLAY_TR = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse/altın/mevduat rotasyonu"}
+
+
+def strategy_line(state: Dict) -> Optional[str]:
+    s = state.get("strategy") or {}
+    if not s:
+        return None
+    w = "eşit ağırlık" if s.get("weighting") == "equal" else "risk dengeli ağırlık"
+    return f"⚙️ Strateji: {s.get('n_positions')} hisse · {w} · {OVERLAY_TR.get(s.get('overlay'), s.get('overlay'))}"
+
+
+def allocation_line(state: Dict) -> Optional[str]:
+    s = state.get("strategy") or {}
+    eq, gw = s.get("equity_frac", 1.0), s.get("gold_w", 0.0)
+    if eq is None or (eq >= 0.999 and not gw):
+        return None
+    if eq <= 0 and gw > 0:
+        return "🪙 <b>Rotasyon: hisseler yerine ALTIN</b> (gram altın / ALTINS1) — altın 12 ayda hisse ve mevduattan güçlü"
+    if eq <= 0:
+        return "🏦 <b>Rotasyon: hisseler yerine MEVDUAT / para piyasası</b> — hisse ve altın mevduatı geçemiyor"
+    return f"🟡 Trend zayıf: hisse payı %{eq * 100:.0f}, kalanı mevduatta"
 REGIME_TR = {"RISK_ON": "Olumlu 🟢", "NEUTRAL": "Nötr ⚪", "RISK_OFF": "Riskli 🔴", "UNKNOWN": "Belirsiz"}
 GUARD_TR = {"NORMAL": "Normal", "WATCH": "Temkinli", "RECOVERY": "Toparlanıyor", "SAFE": "Güvenli mod — alım yok"}
 BENCH_TR = {"cpi": "TÜFE", "usd": "Dolar", "gold": "Altın", "deposit": "Mevduat", "xu100": "BIST100"}
@@ -59,8 +81,13 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
     reg, g = state.get("regime", {}), state.get("autonomy_guard", {})
     L = [f"🏛 <b>BIST Reel Getiri</b> · Aylık Rapor", f"<i>{tarih(today)} · emirler bir sonraki açılışta</i>", ""]
     L += hurdle_block(state.get("hurdles") or {})
+    al = allocation_line(state)
+    if al:
+        L += ["", al]
     L.append("")
     tw = rev.get("target_weights", {})
+    if tw.get("ALTIN"):
+        L.append(f"🪙 <b>ALTIN</b>  ağırlık {pct(tw['ALTIN'] * 100, nd=0)} <i>(gram altın / ALTINS1)</i>")
     if buys:
         L.append("🟢 <b>AL</b>")
         for r in buys:
@@ -80,6 +107,9 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
         L.append("✋ Bu ay değişiklik yok" + (" — çıtayı güvenle geçen yeni hisse bulunamadı." if not rev.get("holds") else "."))
     L.append("")
     L += portfolio_line(state)
+    sl = strategy_line(state)
+    if sl:
+        L.append(sl)
     L.append(f"🧭 Piyasa: {REGIME_TR.get(reg.get('label'), reg.get('label'))} · Sistem: {GUARD_TR.get(g.get('mode'), g.get('mode'))}")
     return "\n".join(L)
 

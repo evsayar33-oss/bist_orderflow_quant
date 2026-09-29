@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.4.0"
+ENGINE_VERSION = "3.5.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -34,6 +34,7 @@ BACKTEST_REPORT_FILE = os.path.join(DATA_DIR, "backtest_report_v3.json")
 CPI_CACHE_FILE = os.path.join(DATA_DIR, "cpi_tr.csv")
 CPI_MANUAL_FILE = os.path.join(DATA_DIR, "cpi_manual.csv")   # optional user upload: tarih,cpi
 FUNDAMENTALS_CACHE_FILE = os.path.join(DATA_DIR, "fundamentals_hist.csv")
+STRATEGY_CONFIG_FILE = os.path.join(DATA_DIR, "strategy_config.json")   # written by the strategy lab
 MAX_MONTHLY_SNAPSHOTS = 180         # 15 years of monthly cross-sections
 
 # ---------------------------------------------------------------- universe

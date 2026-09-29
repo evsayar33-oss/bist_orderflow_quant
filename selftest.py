@@ -205,6 +205,22 @@ def inflation_gate_check(W) -> dict:
             "intraday_refresh": bool(refresh_ok)}
 
 
+def _gold_ok() -> bool:
+    """dual overlay rotating into gold: plan must sell stocks and buy the gold sleeve."""
+    from meta_engine import plan_rebalance
+    from portfolio import new_portfolio
+    pf = new_portfolio("2025-01-02")
+    pf["cash"] = 0.9
+    pf["positions"] = {"A": {"value": 0.1, "cost_basis": 0.1, "entry_date": "2025-01-02", "level": 1.0, "peak": 1.0}}
+    fr = pd.DataFrame({"ticker": ["A", "B"], "composite_pct": [95.0, 96.0], "composite": [1, 2], "med_value_traded": [1e9] * 2,
+                       "fund_break": [False] * 2, "exp_real_12m": [10.0] * 2, "vol_ann_pct": [40.0] * 2, "sector": ["S1", "S2"]})
+    orders, summ = plan_rebalance(pf, fr, {"calibration": {"status": "CALIBRATED"}}, 1.0,
+                                  params={"n_positions": 5, "buy_pct": 90, "gate": "rank", "overlay": "dual"},
+                                  equity_frac=0.0, gold_w=1.0)
+    return any(o["ticker"] == "A" and o["action"] == "SELL" for o in orders) and \
+        any(o["ticker"] == "ALTIN" and o["action"] == "BUY" for o in orders) and not summ["buys"]
+
+
 def _tg_ok(st) -> bool:
     import telegram_report as TG
     rev = {"target_weights": {"AAA": 0.1}, "sells": ["BBB"], "sell_reasons": {"BBB": "RANK_EXIT"}, "holds": ["CCC"]}
@@ -256,8 +272,10 @@ def run_self_test() -> bool:
     # small walk-forward backtest on the same synthetic history (no fundamentals history)
     import backtest_optimizer as B
     sub = {t: g[g.index <= pd.Timestamp("2026-05-29")] for t, g in list(W["hist"].items())[:70]}
-    bt = B.run("2019-01-01", None, save=False, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame(),
-               bm=bench_of(W), crate=W["crate"])
+    import strategy_lab as LAB
+    small = [v for v in LAB.variant_grid() if v["name"] in ("n5_b90_eq_rank_dual", "n8_b85_iv_hurdle_trend", "n12_b85_eq_rank_none")]
+    bt = B.run("2019-01-01", None, save=True, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame(),
+               bm=bench_of(W), crate=W["crate"], variants=small)
     rep = bt["report"]
 
     checks = {
@@ -274,6 +292,8 @@ def run_self_test() -> bool:
         "hurdles_computed": (st.get("hurdles") or {}).get("hurdle") is not None and (st.get("hurdles") or {}).get("gold") is not None,
         "beat_all_labels": "beat_all" in snaps and snaps["beat_all"].notna().sum() > 0,
         "multi_bench_report": "rolling12m_beat" in rep["portfolio"] and "beat_all" in next(iter(rep["per_year"].values())),
+        "strategy_lab_ran": rep.get("strategy_lab", {}).get("variants_tested", 0) >= 4 and os.path.exists(C.STRATEGY_CONFIG_FILE),
+        "gold_sleeve_unit": _gold_ok(),
         "telegram_monthly_ok": _tg_ok(st),
         **{f"unit_{k}": bool(v) for k, v in u.items()},
         **{f"gate_{k}": v for k, v in gate.items()},

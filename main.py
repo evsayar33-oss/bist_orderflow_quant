@@ -41,7 +41,9 @@ from data_integrity import validate_market_frame  # noqa: E402
 from factors import price_factors_at, wide_from_history  # noqa: E402
 from labels import forward_labels  # noqa: E402
 from learner_engine import daily_rank_ic, live_composite_ic, newey_west, run_learning  # noqa: E402
-from meta_engine import exposure_from, plan_rebalance, score_universe  # noqa: E402
+from meta_engine import GOLD_TICKER, default_strategy, exposure_from, plan_rebalance, score_universe  # noqa: E402
+import strategy_lab as LAB  # noqa: E402
+from state_manager import read_json  # noqa: E402
 from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
 from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
                            load_state, load_trade_log, save_monthly_snapshots, save_state)
@@ -120,6 +122,22 @@ def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
     return {"n_dates": n, "ic_mean": round(m, 4), "t_nw": round(t, 2), "ic_recent": round(float(s.tail(6).mean()), 4)}
 
 
+def active_strategy() -> dict:
+    """Portfolio rules chosen by the walk-forward strategy lab (data/strategy_config.json)."""
+    cfg = read_json(C.STRATEGY_CONFIG_FILE) or {}
+    return {**default_strategy(), **(cfg.get("strategy") or {})}
+
+
+def gold_bar_today(bm, today):
+    gb = LAB.gold_bars(bm)
+    if gb is None:
+        return None
+    gb = gb[gb.index <= pd.Timestamp(today)]
+    if len(gb) < 2 or not np.isfinite(gb["chg_pct"].iloc[-1]):
+        return None
+    return gb.iloc[[-1]].rename(index={gb.index[-1]: GOLD_TICKER})
+
+
 def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=None,
                    bm=None, crate=None):
     """`as_of` = last COMPLETED session (used by intraday refresh runs: no partial bars)."""
@@ -158,9 +176,14 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     if frame.empty:
         return {"status": "NO_FACTORS", **info}, []
     exposure = exposure_from(guard, state.get("regime", {}))
+    strat = active_strategy()
+    eq_frac, gold_w = LAB.overlay_alloc(strat.get("overlay", "none"), today, bm, crate)
+    if LAB.gold_bars(bm) is None:
+        gold_w = 0.0                       # no gold price series -> no gold sleeve
+    state["strategy"] = {**strat, "equity_frac": eq_frac, "gold_w": gold_w}
     chg = None if intraday else snap.set_index("ticker")["change_pct"]
     orders, summ = plan_rebalance(pf, frame, state, exposure, block=bool(guard.get("block_new_entries")),
-                                  today_change=chg)
+                                  today_change=chg, params=strat, equity_frac=eq_frac, gold_w=gold_w)
     keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
     pf["pending"] = keep + [o for o in orders if o["ticker"] not in {k["ticker"] for k in keep}]
     pf["last_rebalance_month"] = today.strftime("%Y-%m")
@@ -271,6 +294,9 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     nav_df = load_nav()
     if not refresh:
         bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
+        gbar = gold_bar_today(bm, today)
+        if gbar is not None:
+            bars = pd.concat([bars, gbar])
         events, lots = apply_day(pf, bars, today, cash_yield_pct=cash_y)
         if lots:
             append_rows(C.TRADE_LOG_FILE, lots)

@@ -154,7 +154,21 @@ else:
 tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
 
 # ------------------------------------------------------------------ PORTFÖY
+OVERLAY = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse / altın / mevduat rotasyonu"}
 with tab1:
+    stg = state.get("strategy") or {}
+    if stg:
+        eqf, gw = num(stg.get("equity_frac")), num(stg.get("gold_w")) or 0
+        alloc = ""
+        if eqf is not None and eqf <= 0 and gw > 0:
+            alloc = '<div class="note" style="margin-top:6px">🪙 Şu an hisse yerine <b>altın</b> tutuluyor (gram altın / ALTINS1).</div>'
+        elif eqf is not None and eqf <= 0:
+            alloc = '<div class="note" style="margin-top:6px">🏦 Şu an hisse yerine <b>mevduat / para piyasası</b>.</div>'
+        elif eqf is not None and eqf < 1:
+            alloc = f'<div class="note" style="margin-top:6px">🟡 Trend zayıf: hisse payı {pct(eqf * 100, nd=0)}.</div>'
+        st.markdown(f'<div class="card"><div class="lbl">Strateji</div><div class="note">'
+                    f'<b>{stg.get("n_positions")} hisse</b> · {"eşit ağırlık" if stg.get("weighting") == "equal" else "risk dengeli ağırlık"} · '
+                    f'{OVERLAY.get(stg.get("overlay"), stg.get("overlay"))}</div>{alloc}</div>', unsafe_allow_html=True)
     pos = pf.get("positions", {}) or {}
     navv = pf.get("nav", 1.0) or 1.0
     if pos:
@@ -295,6 +309,21 @@ with tab3:
             lines.append(f'12 aylık dönemlerin <b>{pct(p.get("rolling12m_beat_cpi_pct"), nd=0)}</b>’inde TÜFE’yi geçti.')
         st.markdown('<div class="card"><div class="lbl">Geçmiş test (gerçek veri, dışarıda bırakılmış dönemler)</div>'
                     f'<div class="note">{"<br>".join(lines)}</div></div>', unsafe_allow_html=True)
+        lab = report.get("strategy_lab") or {}
+        if lab:
+            sel = lab.get("selected") or {}
+            adopted = lab.get("adopted")
+            txt = (f'{lab.get("variants_tested")} farklı portföy kuralı gerçek veride denendi. '
+                   + ("Her yıl yalnızca o yıldan ÖNCEKİ verilerle en iyi kural seçilerek test edildi; bu seçim yöntemi "
+                      "varsayılan kurallardan iyi çıktığı için canlıya alındı." if adopted else
+                      "Kural seçimi geçmişte varsayılan kuralları geçemediği için canlıda varsayılan kurallar kullanılıyor.")
+                   + f'<br>Canlı kural: <b>{sel.get("n_positions")} hisse</b> · '
+                   f'{"eşit ağırlık" if sel.get("weighting") == "equal" else "risk dengeli"} · '
+                   f'{OVERLAY.get(sel.get("overlay"), sel.get("overlay"))} · alım eşiği {sel.get("buy_pct") or "kalibre"}')
+            if lab.get("meta_beat_hurdle_pct") is not None:
+                txt += f'<br>12 aylık dönemlerin <b>{pct(lab.get("meta_beat_hurdle_pct"), nd=0)}</b>’inde çıtanın tamamını geçti.'
+            st.markdown(f'<div class="card"><div class="lbl">Strateji laboratuvarı</div><div class="note">{txt}</div></div>',
+                        unsafe_allow_html=True)
         py = report.get("per_year") or {}
         if py:
             tbl = []

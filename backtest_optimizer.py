@@ -87,7 +87,8 @@ def cpi_stats_at(cpi: pd.Series, date, proxy: bool = False) -> Dict:
 def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         data: Optional[Dict] = None, regime_df: Optional[pd.DataFrame] = None,
         cpi: Optional[pd.Series] = None, pit: Optional[pd.DataFrame] = None,
-        bm: Optional[pd.DataFrame] = None, crate: Optional[pd.Series] = None) -> Dict:
+        bm: Optional[pd.DataFrame] = None, crate: Optional[pd.Series] = None,
+        variants: Optional[List[Dict]] = None) -> Dict:
     state = load_state()
     sector_map = state.get("sector_map", {})
     data = data if data is not None else MD.download_history(UNIVERSE, start, end, min_rows=300)
@@ -167,55 +168,56 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         folds.append({"test_start": str(T0.date()), "train_months": len(train_dates), "weights": w,
                       "factor_ic_train": {f: meta["factor_stats"][f]["ic_mean"] for f in C.FACTORS}})
 
+    # ---------------- scoring pass: one scored cross-section per rebalance date (strategy-independent)
     alpha_cache = {}
-    pf = new_portfolio(dates[first_test_i])
-    nav_rows, lots_all = [], []
     sim_days = idx[(idx >= dates[first_test_i])]
     O, Cl = wide["open"], wide["close"]
     chg = Cl.pct_change(fill_method=None) * 100.0
-    reb_set = set(fold_of_date.keys())
-    expo_log = []
     cal_state = {"calibration": {}}
-    for day in sim_days:
-        bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
-        ev, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day))
-        lots_all.extend(lots)
-        if day in reb_set:
-            k, w, params = fold_of_date[day]
-            if params is not None:
-                if k not in alpha_cache:
-                    alpha_cache[k] = RM.filtered_probs(params, X)
-                pos = X.index.searchsorted(day, side="right") - 1
-                reg = RM.summarize(params, alpha_cache[k][: pos + 1], X.index[: pos + 1])
-                reg["degraded"] = False
-            else:
-                reg = {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "degraded": True, "exp_mkt_12m_pct": None}
-            # calibration from earlier OOS months whose labels were known by now
-            known = [r for r in oos_rows if r["tarih"].iloc[0] + pd.DateOffset(months=13) <= day]
-            if known:
-                kd = pd.concat(known, ignore_index=True).merge(lab, on=["tarih", "ticker"], how="inner")
-                calibrate(cal_state, kd, None)
-            pf_, fi, cs = inputs[day]
-            st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
-                  "calibration": cal_state["calibration"], "regime": reg,
-                  "_no_inflation": cs.get("expected_12m_pct") is None,
-                  "hurdles": BM.expected_hurdles(bm, cs, INF.cash_yield_at(crate, day) if len(crate) else None, as_of=day)}
-            frame, info = score_universe(pf_, fi, st, cs, sector_map)
-            if frame.empty:
-                continue
-            oos_rows.append(frame[["tarih", "ticker", "composite", "composite_pct", "regime_label"]].assign(tarih=day))
-            expo = exposure_from({"mode": "NORMAL"}, reg)
-            orders, summ = plan_rebalance(pf, frame, st, expo, today_change=bars["chg_pct"])
-            keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
-            pf["pending"] = keep + [o for o in orders if o["ticker"] not in {x["ticker"] for x in keep}]
-            expo_log.append(expo)
-        xu = float(index_close.asof(day)) if index_close is not None else np.nan
-        nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": sum(pf_weights(pf).values()), "xu100": xu})
+    frames = {}
+    for day in sorted(fold_of_date.keys()):
+        k, w, params = fold_of_date[day]
+        if params is not None:
+            if k not in alpha_cache:
+                alpha_cache[k] = RM.filtered_probs(params, X)
+            pos = X.index.searchsorted(day, side="right") - 1
+            reg = RM.summarize(params, alpha_cache[k][: pos + 1], X.index[: pos + 1])
+            reg["degraded"] = False
+        else:
+            reg = {"label": "UNKNOWN", "probs": {}, "p_risk_off": 0.5, "degraded": True, "exp_mkt_12m_pct": None}
+        known = [r for r in oos_rows if r["tarih"].iloc[0] + pd.DateOffset(months=13) <= day]
+        if known:
+            kd = pd.concat(known, ignore_index=True).merge(lab, on=["tarih", "ticker"], how="inner")
+            calibrate(cal_state, kd, None)
+        pf_, fi, cs = inputs[day]
+        st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
+              "calibration": dict(cal_state["calibration"]), "regime": reg,
+              "_no_inflation": cs.get("expected_12m_pct") is None,
+              "hurdles": BM.expected_hurdles(bm, cs, INF.cash_yield_at(crate, day) if len(crate) else None, as_of=day)}
+        frame, info = score_universe(pf_, fi, st, cs, sector_map)
+        if frame.empty:
+            continue
+        oos_rows.append(frame[["tarih", "ticker", "composite", "composite_pct", "regime_label"]].assign(tarih=day))
+        frames[day] = (frame, st, reg)
 
-    nav_df = pd.DataFrame(nav_rows)
-    lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close, bench)
-    # open positions at the end are marked (not realised) -> reported separately
-    open_now = {t: round((p["level"] - 1) * 100, 2) for t, p in pf["positions"].items()}
+    # ---------------- strategy laboratory (walk-forward selected portfolio rules)
+    import strategy_lab as LAB
+    from meta_engine import default_strategy
+    ctx = {"days": list(sim_days), "frames": frames, "bm": bm, "crate": crate,
+           "bars": {d: pd.DataFrame({"open": O.loc[d], "close": Cl.loc[d], "chg_pct": chg.loc[d]}).dropna() for d in sim_days},
+           "gold_bars": LAB.gold_bars(bm),
+           "cash_y": (lambda d: INF.cash_yield_at(crate, d)),
+           "xu": (lambda d: float(index_close.asof(d)) if index_close is not None else np.nan)}
+    print(f"🧪 Strateji laboratuvarı başlıyor ({len(LAB.variant_grid()) + 1} varyant)...")
+    lab_res = LAB.run_lab(ctx, cpi, bench, default_strategy(), variants=variants)
+    sel = lab_res["selected"]
+    sel_res = lab_res["results"][sel["name"]]
+    def_res = lab_res["results"][lab_res["default_name"]]
+    # headline = what goes live, measured out-of-sample: the walk-forward meta strategy if the lab
+    # pick is adopted, otherwise the default rules (themselves never tuned on the test years)
+    nav_df = lab_res["meta_nav"] if lab_res["adopted"] else def_res["nav"]
+    lots_df = enrich_lots(pd.DataFrame(sel_res["lots"]), cpi, index_close, bench)
+    open_now = sel_res["open"]
 
     # OOS IC of the composite (12m) per fold
     oos = pd.concat(oos_rows, ignore_index=True) if oos_rows else pd.DataFrame()
@@ -259,7 +261,20 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                   "drawdown_flag_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "drawdown_flag_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT,
                   "hard_stop_entry_pct": C.HARD_STOP_FROM_ENTRY_PCT, "exposure_by_mode": C.EXPOSURE_BY_MODE},
         "portfolio": nav_metrics(nav_df, cpi, bench),
+        "portfolio_basis": ("walk-forward META strategy (variant chosen each year using only earlier data)"
+                            if lab_res["adopted"] else "default rules (lab selection did not beat them out-of-sample)"),
+        "portfolio_default_rules": nav_metrics(def_res["nav"], cpi, bench),
+        "portfolio_selected_insample": nav_metrics(sel_res["nav"], cpi, bench),
         "closed_lots": lot_metrics(lots_df),
+        "strategy_lab": {"variants_tested": lab_res["variants_tested"], "selected": sel,
+                         "lab_best": lab_res["lab_best"], "adopted": lab_res["adopted"],
+                         "meta_oos_score": lab_res["meta_oos_score"], "default_oos_score": lab_res["default_oos_score"],
+                         "selected_score": round(float(lab_res["selected_score"]), 2),
+                         "choices_by_year": lab_res["choices_by_year"],
+                         "meta_beat_hurdle_pct": lab_res["meta_beat_hurdle_pct"],
+                         "meta_median_excess_pp": lab_res["meta_median_excess_pp"],
+                         "top10": lab_res["table"][:10],
+                         "default": next((r for r in lab_res["table"] if r["name"] == lab_res["default_name"]), None)},
         "open_positions_end": open_now,
         "oos_composite_ic_12m": {"mean": round(float(m), 4), "t_nw": round(float(t), 2), "n_months": int(n)},
         "per_year": per_year,
@@ -272,11 +287,17 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                         f"fundamentals coverage {round(fund_cov, 2)} (Is Yatirim best effort)",
                         "autonomy guard neutral in backtest"],
     }
-    print(json.dumps({k: report[k] for k in ("period", "portfolio", "closed_lots", "oos_composite_ic_12m", "per_year")},
+    print(json.dumps({k: report[k] for k in ("period", "portfolio", "strategy_lab", "oos_composite_ic_12m", "per_year")},
                      ensure_ascii=False, indent=2, default=str))
     if save:
         atomic_json_write(C.RESEARCH_PRIOR_FILE, prior)
         atomic_json_write(C.BACKTEST_REPORT_FILE, report)
+        atomic_json_write(C.STRATEGY_CONFIG_FILE, {
+            "generated_at": report["generated_at"], "strategy": sel,
+            "score": report["strategy_lab"]["selected_score"],
+            "why": "walk-forward strategy lab: best 0.5*P25+0.5*median of rolling 12m excess over the hurdle",
+            "meta_oos": {k: report["portfolio"].get(k) for k in ("cagr_pct", "real_cagr_pct", "xu100_cagr_pct",
+                                                                   "max_drawdown_pct", "rolling12m_beat_all_pct")}})
     return {"report": report, "prior": prior, "nav": nav_df, "lots": lots_df}
 
 
