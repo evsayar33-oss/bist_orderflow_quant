@@ -11,7 +11,8 @@ Forward-looking (decision time) expectations:
   USD  -> blend of trailing 12m and 6m pace of USDTRY + US inflation assumption
   Gold -> no forecastable own-drift: expected = USD hurdle (gold keeps USD real value)
   Deposit -> current net money-market yield
-  hurdle = max(components)  (the binding one is reported)
+  hurdle = SUM(components) + margin when HURDLE_MODE == 'sum' (V3.6, user goal), else max;
+  floor  = max(components) (best single alternative) is always reported too
 Realised (labels, backtest, live report): actual returns of each over the same window.
 """
 from __future__ import annotations
@@ -104,8 +105,18 @@ def window_returns(bm: Optional[pd.DataFrame], cpi: Optional[pd.Series], crate: 
     out["deposit"] = (g - 1) * 100 if np.isfinite(g) else np.nan
     comps = [out[k] for k in C.HURDLE_COMPONENTS if np.isfinite(out.get(k, np.nan))]
     # the hurdle is only defined when CPI is known (primary objective)
-    out["hurdle"] = max(comps) if comps and np.isfinite(out["cpi"]) else np.nan
+    ok = bool(comps) and np.isfinite(out["cpi"])
+    out["floor"] = max(comps) if ok else np.nan
+    out["hurdle"] = combine(comps) if ok else np.nan
     return out
+
+
+def combine(comps) -> float:
+    """Target from the components: sum (+ margin) in 'sum' mode, max otherwise."""
+    comps = [float(c) for c in comps]
+    if getattr(C, "HURDLE_MODE", "max") == "sum":
+        return sum(comps) + C.MIN_EDGE_OVER_HURDLE_PCT
+    return max(comps)
 
 
 def expected_hurdles(bm: Optional[pd.DataFrame], cpi_stats: Dict, cash_yield_pct: Optional[float], as_of=None) -> Dict:
@@ -127,4 +138,6 @@ def expected_hurdles(bm: Optional[pd.DataFrame], cpi_stats: Dict, cash_yield_pct
     if exp["cpi"] is None or not comps:
         return {**exp, "hurdle": None, "binding": None}
     binding = max(comps, key=comps.get)
-    return {**exp, "hurdle": round(float(comps[binding]), 2), "binding": binding}
+    return {**exp, "hurdle": round(float(combine(comps.values())), 2), "floor": round(float(comps[binding]), 2),
+            "binding": binding, "mode": getattr(C, "HURDLE_MODE", "max"),
+            "edge": C.MIN_EDGE_OVER_HURDLE_PCT}

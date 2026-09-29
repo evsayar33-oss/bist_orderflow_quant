@@ -74,6 +74,8 @@ def score_universe(price_f: pd.DataFrame, fund_inputs: Optional[pd.DataFrame], s
     hurdle = hz.get("hurdle")
     frame["hurdle_12m"] = hurdle if hurdle is not None else np.nan
     frame["exp_over_hurdle"] = frame["exp_nominal_12m"] - hurdle if hurdle is not None else np.nan
+    floor = hz.get("floor", hurdle if hz.get("mode") != "sum" else None)
+    frame["exp_over_floor"] = frame["exp_nominal_12m"] - floor if floor is not None else np.nan
     frame["p_beat_all"] = bucket_lookup(frame["composite_pct"], table, "p_beat_all") if calibrated else np.nan
     frame["fund_break"] = fund_break(frame)
     frame["regime_label"] = reg.get("label", "UNKNOWN")
@@ -107,7 +109,7 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
     max_w = max(C.MAX_POSITION_W, 1.0 / max(n_pos, 1) + 0.05)
     max_sector = C.MAX_PER_SECTOR if n_pos >= 8 else 2
     f = frame.set_index("ticker")
-    for c in ("exp_over_hurdle", "exp_real_12m", "exp_nominal_12m", "p_beat_all", "hurdle_12m"):
+    for c in ("exp_over_hurdle", "exp_over_floor", "exp_real_12m", "exp_nominal_12m", "p_beat_all", "hurdle_12m"):
         if c not in f.columns:
             f[c] = np.nan
     cur = [t for t in pf["positions"].keys() if t != GOLD_TICKER]
@@ -152,7 +154,13 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
     if no_inflation:
         elig &= False          # inflation unknown -> cannot judge the hurdle -> no new buys
     elif P.get("gate", "hurdle") == "hurdle":
-        if calibrated and f["exp_over_hurdle"].notna().any():
+        sum_mode = (state.get("hurdles") or {}).get("mode") == "sum"
+        if calibrated and sum_mode and f["exp_over_floor"].notna().any():
+            # V3.6: target = CPI+USD+gold+deposit (+3). Entry floor = must at least beat the
+            # strongest single alternative by the margin (otherwise that alternative is simply better);
+            # candidates are then ranked by distance to the SUM target and its probability.
+            elig &= f["exp_over_floor"] >= C.MIN_EDGE_OVER_HURDLE_PCT
+        elif calibrated and f["exp_over_hurdle"].notna().any():
             # must be expected to beat CPI, USD (+US inflation), gold and TL deposit by a margin
             elig &= f["exp_over_hurdle"] >= C.MIN_EDGE_OVER_HURDLE_PCT
         elif calibrated and has_real:

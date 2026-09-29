@@ -228,7 +228,26 @@ def _tg_ok(st) -> bool:
     ev = TG.events_report(pd.Timestamp("2026-10-02"), [{"ticker": "AAA", "type": "BUY", "w": 0.1},
                                                        {"ticker": "BBB", "type": "SELL_RANK_EXIT", "ret": 12.3}], st, 0.8)
     print("\n--- TELEGRAM (aylık) ---\n" + msg + "\n--- TELEGRAM (olay) ---\n" + ev + "\n---")
-    return "Çıta" in msg or "çıta" in msg
+    legacy = {**st, "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"}
+    legacy.pop("active_strategy", None)
+    TG.monthly_report(pd.Timestamp("2026-10-01"), legacy, rev, [])     # old string key must not crash
+    return any(w in msg for w in ("Çıta", "çıta", "hedef"))
+
+
+def _sum_hurdle_ok() -> bool:
+    import benchmarks as BM
+    if getattr(C, "HURDLE_MODE", "max") != "sum":
+        return True
+    idx = pd.bdate_range("2020-01-01", "2022-01-01")
+    bm = pd.DataFrame({"usdtry": np.linspace(10, 12, len(idx)), "gold_try": np.linspace(100, 125, len(idx)),
+                       "xu100": np.linspace(1, 2, len(idx))}, index=idx)
+    cpi = pd.Series(np.linspace(100, 140, 25), index=pd.date_range("2020-01-01", periods=25, freq="MS"))
+    w = BM.window_returns(bm, cpi, None, idx[0], idx[260])
+    comps = [w[k] for k in C.HURDLE_COMPONENTS if np.isfinite(w.get(k, np.nan))]
+    e = BM.expected_hurdles(bm, {"expected_12m_pct": 30.0}, 29.8, as_of=idx[-1])
+    return (abs(w["hurdle"] - (sum(comps) + C.MIN_EDGE_OVER_HURDLE_PCT)) < 1e-9 and w["floor"] == max(comps)
+            and abs(e["hurdle"] - round(30.0 + e["usd"] + e["gold"] + 29.8 + C.MIN_EDGE_OVER_HURDLE_PCT, 2)) < 0.02
+            and e["mode"] == "sum")
 
 
 def run_self_test() -> bool:
@@ -295,6 +314,8 @@ def run_self_test() -> bool:
         "strategy_lab_ran": rep.get("strategy_lab", {}).get("variants_tested", 0) >= 4 and os.path.exists(C.STRATEGY_CONFIG_FILE),
         "gold_sleeve_unit": _gold_ok(),
         "telegram_monthly_ok": _tg_ok(st),
+        "hurdle_is_sum": _sum_hurdle_ok(),
+        "live_strategy_dict": isinstance(st.get("active_strategy"), dict),
         **{f"unit_{k}": bool(v) for k, v in u.items()},
         **{f"gate_{k}": v for k, v in gate.items()},
     }

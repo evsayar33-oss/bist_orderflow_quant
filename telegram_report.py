@@ -14,8 +14,17 @@ REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWD
 OVERLAY_TR = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse/altın/mevduat rotasyonu"}
 
 
+def live_strategy(state: Dict) -> Dict:
+    """Live strategy dict (V3.6 key); tolerant to old states where "strategy" is a name string."""
+    for k in ("active_strategy", "strategy"):
+        v = state.get(k)
+        if isinstance(v, dict) and v:
+            return v
+    return {}
+
+
 def strategy_line(state: Dict) -> Optional[str]:
-    s = state.get("strategy") or {}
+    s = live_strategy(state)
     if not s:
         return None
     w = "eşit ağırlık" if s.get("weighting") == "equal" else "risk dengeli ağırlık"
@@ -23,9 +32,13 @@ def strategy_line(state: Dict) -> Optional[str]:
 
 
 def allocation_line(state: Dict) -> Optional[str]:
-    s = state.get("strategy") or {}
-    eq, gw = s.get("equity_frac", 1.0), s.get("gold_w", 0.0)
-    if eq is None or (eq >= 0.999 and not gw):
+    s = live_strategy(state)
+    try:
+        eq = float(s.get("equity_frac", 1.0) if s.get("equity_frac") is not None else 1.0)
+        gw = float(s.get("gold_w") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if eq >= 0.999 and not gw:
         return None
     if eq <= 0 and gw > 0:
         return "🪙 <b>Rotasyon: hisseler yerine ALTIN</b> (gram altın / ALTINS1) — altın 12 ayda hisse ve mevduattan güçlü"
@@ -56,9 +69,13 @@ def pct(v, sign: bool = False, nd: int = 1) -> str:
 
 
 def hurdle_block(h: Dict) -> List[str]:
-    if not h or h.get("hurdle") is None:
-        return ["🎯 <b>Çıta hesaplanamadı</b> — TÜFE verisi yok, yeni alım yapılmadı."]
+    if not isinstance(h, dict) or h.get("hurdle") is None:
+        return ["🎯 <b>Hedef hesaplanamadı</b> — TÜFE verisi yok, yeni alım yapılmadı."]
     parts = [f"{BENCH_TR[k]} {pct(h.get(k))}" for k in ("cpi", "usd", "gold", "deposit") if h.get(k) is not None]
+    if h.get("mode") == "sum":
+        edge = h.get("edge", 3.0)
+        return [f"🎯 <b>12 aylık hedef: {pct(h['hurdle'])}</b>  <i>(hepsinin toplamı + %{edge:.0f})</i>",
+                "   " + " + ".join(parts)]
     return [f"🎯 <b>12 aylık çıta: {pct(h['hurdle'])}</b>  <i>(en yüksek: {BENCH_TR.get(h.get('binding'), '?')})</i>",
             "   " + " · ".join(parts)]
 
@@ -92,7 +109,7 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
         L.append("🟢 <b>AL</b>")
         for r in buys:
             pb = r.get("p_beat_all")
-            prob = f" · çıtayı geçme {pct((pb or 0) * 100, nd=0)}" if pb is not None and pb == pb else ""
+            prob = f" · hedefi geçme {pct((pb or 0) * 100, nd=0)}" if pb is not None and pb == pb else ""
             L.append(f"<b>{escape(str(r['ticker']))}</b>  ağırlık {pct(tw.get(r['ticker'], 0) * 100, nd=0)}"
                      f" · beklenti {pct(r.get('exp_nominal_12m'))}{prob}")
     if rev.get("sells"):
@@ -104,7 +121,7 @@ def monthly_report(today, state: Dict, rev: Dict, buys: List[Dict]) -> str:
         L.append("")
         L.append("⚪ <b>TUT</b>  " + " · ".join(escape(str(t)) for t in rev["holds"]))
     if not buys and not rev.get("sells"):
-        L.append("✋ Bu ay değişiklik yok" + (" — çıtayı güvenle geçen yeni hisse bulunamadı." if not rev.get("holds") else "."))
+        L.append("✋ Bu ay değişiklik yok" + (" — en güçlü alternatifi güvenle geçen yeni hisse bulunamadı." if not rev.get("holds") else "."))
     L.append("")
     L += portfolio_line(state)
     sl = strategy_line(state)

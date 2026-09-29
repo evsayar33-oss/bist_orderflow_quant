@@ -1,6 +1,7 @@
 """Haftalık sade özet (salt okunur). Canlı sonuçları motorun state dosyasından okur."""
 from __future__ import annotations
 
+import config as C
 import telegram_report as TG
 from main import send_telegram
 from state_manager import load_state
@@ -16,10 +17,11 @@ def audit() -> str:
     L += TG.portfolio_line(st)
     rb = nav.get("rolling12m_beat") or {}
     if rb:
-        L.append("🎯 12 aylık dönemlerde çıtayı geçme: " + " · ".join(
-            f"{TG.BENCH_TR.get(k, 'Hepsi' if k == 'all' else k)} {TG.pct(v, nd=0)}" for k, v in rb.items()))
+        allk = "Toplam hedef" if getattr(C, "HURDLE_MODE", "max") == "sum" else "Hepsi"
+        L.append("🎯 12 aylık dönemlerde geçme: " + " · ".join(
+            f"{TG.BENCH_TR.get(k, allk if k == 'all' else k)} {TG.pct(v, nd=0)}" for k, v in rb.items()))
     if lots.get("closed_lots"):
-        L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · hepsini geçen {TG.pct(lots.get('hit_beat_all_pct'), nd=0)}"
+        L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · hedefi geçen {TG.pct(lots.get('hit_beat_all_pct'), nd=0)}"
                  f" · ort. {lots.get('avg_months_held')} ay")
     pos = (st.get("portfolio") or {}).get("positions", {}) or {}
     if pos:

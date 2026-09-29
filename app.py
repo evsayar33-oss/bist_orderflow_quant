@@ -130,7 +130,18 @@ elif inf.get("status") == "PROXY":
     st.warning("Resmî TÜFE yerine USDTRY vekili kullanılıyor. `EVDS_API_KEY` ekleyin.")
 
 # ------------------------------------------------------------------ hurdle card
-if hz.get("hurdle") is not None:
+if hz.get("hurdle") is not None and hz.get("mode") == "sum":
+    keys = [k for k in ("cpi", "usd", "gold", "deposit") if hz.get(k) is not None]
+    chips = '<span class="mut"> + </span>'.join(f'<span class="chip">{BENCH[k]} {pct(hz.get(k))}</span>' for k in keys)
+    edge = hz.get("edge", C.MIN_EDGE_OVER_HURDLE_PCT)
+    chips += f'<span class="mut"> + </span><span class="chip on">Fark %{edge:.0f}</span>'
+    st.markdown(f'<div class="card"><div class="lbl">Portföyün 12 aylık hedefi</div>'
+                f'<div class="big">{pct(hz["hurdle"])}</div>{chips}'
+                f'<div class="note mut" style="margin-top:8px">Hedef: TÜFE, dolar (+ABD enflasyonu), altın ve mevduatın '
+                f'<b>toplamını</b> en az %{edge:.0f} farkla geçmek. Hiçbir hisse alınmadan önce en güçlü tek alternatifi '
+                f'({BENCH.get(hz.get("binding"), "—")} {pct(hz.get("floor"))}) de güvenle geçmesi beklenir.</div></div>',
+                unsafe_allow_html=True)
+elif hz.get("hurdle") is not None:
     chips = "".join(f'<span class="chip {"on" if k == hz.get("binding") else ""}">{BENCH[k]} {pct(hz.get(k))}</span>'
                     for k in ("cpi", "usd", "gold", "deposit") if hz.get(k) is not None)
     st.markdown(f'<div class="card"><div class="lbl">Hisselerin geçmesi gereken 12 aylık çıta</div>'
@@ -156,7 +167,14 @@ tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
 # ------------------------------------------------------------------ PORTFÖY
 OVERLAY = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse / altın / mevduat rotasyonu"}
 with tab1:
-    stg = state.get("strategy") or {}
+    stg = next((v for v in (state.get("active_strategy"), state.get("strategy")) if isinstance(v, dict) and v), {})
+    if not stg:
+        try:
+            with open(C.STRATEGY_CONFIG_FILE, encoding="utf-8") as fh:
+                _cfg = json.load(fh)
+            stg = _cfg.get("strategy") if isinstance(_cfg, dict) and isinstance(_cfg.get("strategy"), dict) else {}
+        except Exception:
+            stg = {}
     if stg:
         eqf, gw = num(stg.get("equity_frac")), num(stg.get("gold_w")) or 0
         alloc = ""
@@ -193,7 +211,7 @@ with tab1:
         for o in pend:
             if o["action"] == "BUY":
                 pb = num(o.get("entry_p_beat_all"))
-                extra = f' · çıtayı geçme {pct(pb * 100, nd=0)}' if pb is not None else ""
+                extra = f' · hedefi geçme {pct(pb * 100, nd=0)}' if pb is not None else ""
                 rows += (f'<div class="row"><div><span class="tk">🟢 {o["ticker"]}</span><div class="mut" style="font-size:.8rem">'
                          f'beklenti {pct(o.get("entry_exp_nominal"))}{extra}</div></div>'
                          f'<div style="font-weight:600">{pct(o.get("target_w", 0) * 100, nd=0)}</div></div>')
@@ -244,7 +262,11 @@ with tab2:
                         if sc < cutoff:
                             why.append(f"Skoru alım eşiğinin altında (100 üzerinden {sc:.0f}, eşik {cutoff:.0f}).")
                         if eo is not None and eo < C.MIN_EDGE_OVER_HURDLE_PCT:
-                            why.append("Beklenen getirisi 12 aylık çıtayı yeterli farkla geçmiyor.")
+                            why.append("Beklenen getirisi 12 aylık hedefin altında." if hz.get("mode") == "sum"
+                                       else "Beklenen getirisi 12 aylık çıtayı yeterli farkla geçmiyor.")
+                        eof = num(r.get("exp_over_floor"))
+                        if hz.get("mode") == "sum" and eof is not None and eof < C.MIN_EDGE_OVER_HURDLE_PCT:
+                            why.append("En güçlü tek alternatifi bile (" + BENCH.get(hz.get("binding"), "—") + ") güvenle geçmiyor.")
                         if (num(r.get("med_value_traded")) or 0) < C.MIN_MEDIAN_VALUE_TRADED_TL:
                             why.append("İşlem hacmi (likidite) düşük.")
                         if str(r.get("fund_break")).lower() == "true":
@@ -262,8 +284,8 @@ with tab2:
                             f'<div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">'
                             f'<div><div class="lbl">Skor</div><div class="kpi v">{sc:.0f}<span class="mut" style="font-size:.9rem">/100</span></div></div>'
                             f'<div><div class="lbl">Beklenen 12A</div><div class="kpi v">{pct(r.get("exp_nominal_12m"))}</div></div>'
-                            f'<div><div class="lbl">Çıta</div><div class="kpi v">{pct(r.get("hurdle_12m"))}</div></div>'
-                            f'<div><div class="lbl">Çıtayı geçme</div><div class="kpi v">{pct(pb * 100, nd=0) if pb is not None else "—"}</div></div>'
+                            f'<div><div class="lbl">Hedef</div><div class="kpi v">{pct(r.get("hurdle_12m"))}</div></div>'
+                            f'<div><div class="lbl">Hedefi geçme</div><div class="kpi v">{pct(pb * 100, nd=0) if pb is not None else "—"}</div></div>'
                             f'</div>')
                     if why:
                         html += '<div class="note" style="margin-top:12px">' + "<br>".join("• " + w for w in why) + "</div>"
@@ -300,11 +322,13 @@ with tab3:
     if report:
         p = report.get("portfolio", {}) or {}
         rb = p.get("rolling12m_beat") or {}
+        summ = report.get("hurdle_mode") == "sum"
         lines = [f'Test dönemi {p.get("start", "")[:4]}–{p.get("end", "")[:4]} · yıllık <b>{pct(p.get("cagr_pct"))}</b> '
                  f'(BIST100 {pct(p.get("xu100_cagr_pct"))}) · maks. düşüş {pct(p.get("max_drawdown_pct"))}']
         if rb:
-            lines.append("12 aylık dönemlerde çıtayı geçme oranı: " +
-                         " · ".join(f'{BENCH.get(k, "Hepsi" if k == "all" else k)} <b>{pct(v, nd=0)}</b>' for k, v in rb.items()))
+            lines.append("12 aylık dönemlerde geçme oranı: " +
+                         " · ".join(f'{BENCH.get(k, ("Toplam hedef" if summ else "Hepsi") if k == "all" else k)} <b>{pct(v, nd=0)}</b>'
+                                    for k, v in rb.items()))
         elif p.get("rolling12m_beat_cpi_pct") is not None:
             lines.append(f'12 aylık dönemlerin <b>{pct(p.get("rolling12m_beat_cpi_pct"), nd=0)}</b>’inde TÜFE’yi geçti.')
         st.markdown('<div class="card"><div class="lbl">Geçmiş test (gerçek veri, dışarıda bırakılmış dönemler)</div>'
@@ -321,7 +345,8 @@ with tab3:
                    f'{"eşit ağırlık" if sel.get("weighting") == "equal" else "risk dengeli"} · '
                    f'{OVERLAY.get(sel.get("overlay"), sel.get("overlay"))} · alım eşiği {sel.get("buy_pct") or "kalibre"}')
             if lab.get("meta_beat_hurdle_pct") is not None:
-                txt += f'<br>12 aylık dönemlerin <b>{pct(lab.get("meta_beat_hurdle_pct"), nd=0)}</b>’inde çıtanın tamamını geçti.'
+                txt += (f'<br>12 aylık dönemlerin <b>{pct(lab.get("meta_beat_hurdle_pct"), nd=0)}</b>’inde '
+                        + ("toplam hedefi (TÜFE+dolar+altın+mevduat+%3) geçti." if summ else "çıtanın tamamını geçti."))
             st.markdown(f'<div class="card"><div class="lbl">Strateji laboratuvarı</div><div class="note">{txt}</div></div>',
                         unsafe_allow_html=True)
         py = report.get("per_year") or {}
@@ -331,7 +356,8 @@ with tab3:
                 tbl.append({"Yıl": str(y), "Portföy": pct(v.get("nominal_pct"), True), "TÜFE": pct(v.get("cpi_pct")),
                             "Dolar": pct(v.get("usd_pct")), "Altın": pct(v.get("gold_pct")), "Mevduat": pct(v.get("deposit_pct")),
                             "BIST100": pct(v.get("xu100_pct"), True),
-                            "Hepsini geçti": {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
+                            **({"Hedef (toplam)": pct(v.get("hurdle_pct"))} if summ else {}),
+                            ("Hedefi geçti" if summ else "Hepsini geçti"): {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 
 with st.expander("Teknik detay"):

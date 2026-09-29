@@ -243,11 +243,13 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
             per_year[int(yr)].update({"usd_pct": None if not np.isfinite(w["usd"]) else round(float(w["usd"]), 2),
                                       "gold_pct": None if not np.isfinite(w["gold"]) else round(float(w["gold"]), 2),
                                       "deposit_pct": None if not np.isfinite(w["deposit"]) else round(float(w["deposit"]), 2),
+                                      "hurdle_pct": None if not np.isfinite(w["hurdle"]) else round(float(w["hurdle"]), 2),
                                       "beat_all": None if not np.isfinite(w["hurdle"]) else bool(nom > w["hurdle"])})
 
     prior = build_research_prior(ds, X, oos_l)
     report = {
         "generated_at": datetime.utcnow().isoformat() + "Z", "engine_version": C.ENGINE_VERSION,
+        "hurdle_mode": getattr(C, "HURDLE_MODE", "max"), "hurdle_edge_pct": C.MIN_EDGE_OVER_HURDLE_PCT,
         "objective": {"horizon_months": C.HORIZON_MONTHS,
                       "primary": "beat ALL of " + ", ".join(C.HURDLE_COMPONENTS) + f" (USD incl. {C.US_INFLATION_PCT}% US inflation)",
                       "secondary": "excess vs XU100"},

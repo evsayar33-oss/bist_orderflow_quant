@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.5.0"
+ENGINE_VERSION = "3.6.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -21,7 +21,11 @@ BENCHMARK_SECONDARY = "XU100"       # reported: excess return vs index
 # V3.4 multi-benchmark hurdle: a pick must be expected to beat ALL of these (12m).
 HURDLE_COMPONENTS = ["cpi", "usd", "gold", "deposit"]
 US_INFLATION_PCT = 3.0              # "dolar enflasyonu": USD must keep its real value
-MIN_EDGE_OVER_HURDLE_PCT = 3.0      # expected 12m return must exceed the hurdle by this much
+MIN_EDGE_OVER_HURDLE_PCT = 3.0      # margin (pp) added on top of the target
+# V3.6: TARGET = SUM of the components (CPI + USD + gold + deposit) + margin  -> user's goal.
+# "max" = old rule (strongest single alternative). The strongest single alternative is still
+# used as the minimum ENTRY FLOOR: a stock that cannot even beat the best alternative is never bought.
+HURDLE_MODE = os.environ.get("BOQ_HURDLE_MODE", "sum")
 
 # ---------------------------------------------------------------- paths
 DATA_DIR = os.environ.get("BOQ_DATA_DIR", "data")

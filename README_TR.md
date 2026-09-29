@@ -1,5 +1,16 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.6 — Toplam hedef + panel düzeltmesi:**
+* **Hedef:** Hedef artık tek tek ölçütler değil, **toplamları + %3**: TÜFE + dolar (+%3 ABD enflasyonu) + gram altın + mevduat. Örneğin %29,7 + %22,7 + %22,7 + %29,8 + %3 = **%107,9**.
+* Bu hedef dört yerde kullanılır:
+  * hisselerin sıralaması,
+  * "hedefi geçme olasılığı" kalibrasyonu,
+  * backtest'te "hedefi geçti" ölçümü,
+  * strateji laboratuvarının puanı.
+* **Giriş tabanı:** Bir hisse alınmadan önce en güçlü tek alternatifi (örn. mevduat) en az %3 geçmesi beklenir. Bunu geçemeyen hisse yerine o alternatifi tutmak zaten daha iyidir. Tabanı geçen adaylar, toplam hedefe en yakın beklentiden başlayarak seçilir.
+* Eski kurala dönmek için Actions ortamına `BOQ_HURDLE_MODE=max` eklenebilir.
+* **Panel düzeltmesi:** "Strateji" kartındaki `AttributeError` çökmesi giderildi. Canlı strateji artık `active_strategy` anahtarında tutulur ve eski durum dosyaları da sorunsuz okunur.
+
 **V3.5 — Strateji laboratuvarı:** Backtest artık 72 farklı portföy kuralını gerçek veride dener: hisse sayısı (5/8/12), alım ve tutma eşikleri, ağırlıklandırma, giriş kapısı ve varlık rotasyonu (hisse / altın / mevduat). Her yıl yalnızca o yıldan önceki verilerle en iyi kural seçilir; yani seçim geriye bakarak yapılmaz. Bu seçim yöntemi varsayılan kuralları geçerse kazanan kural `data/strategy_config.json` dosyasına yazılır ve canlı sistem onu kullanır. Geçemezse varsayılan kurallar kalır. Rotasyonda altın seçilirse Telegram "gram altın / ALTINS1" der.
 
 **V3.4 — Çok ölçütlü çıta:** Bir hissenin 12 ayda yalnızca TÜFE'yi değil, **hepsini** geçmesi beklenir: TÜFE, dolar (USDTRY değişimi + %3 ABD enflasyonu), gram altın (TL) ve TL mevduat/para piyasası. Bunlardan en yükseği "çıta" olur; aday, çıtayı en az %3 farkla geçmeyi beklemelidir. BIST100 ikincil ölçüt olarak raporlanır. Arayüz ve Telegram mesajları sadeleştirildi.

@@ -125,7 +125,8 @@ def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
 def active_strategy() -> dict:
     """Portfolio rules chosen by the walk-forward strategy lab (data/strategy_config.json)."""
     cfg = read_json(C.STRATEGY_CONFIG_FILE) or {}
-    return {**default_strategy(), **(cfg.get("strategy") or {})}
+    st = cfg.get("strategy") if isinstance(cfg, dict) else None
+    return {**default_strategy(), **(st if isinstance(st, dict) else {})}
 
 
 def gold_bar_today(bm, today):
@@ -180,7 +181,7 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     eq_frac, gold_w = LAB.overlay_alloc(strat.get("overlay", "none"), today, bm, crate)
     if LAB.gold_bars(bm) is None:
         gold_w = 0.0                       # no gold price series -> no gold sleeve
-    state["strategy"] = {**strat, "equity_frac": eq_frac, "gold_w": gold_w}
+    state["active_strategy"] = {**strat, "equity_frac": eq_frac, "gold_w": gold_w}
     chg = None if intraday else snap.set_index("ticker")["change_pct"]
     orders, summ = plan_rebalance(pf, frame, state, exposure, block=bool(guard.get("block_new_entries")),
                                   today_change=chg, params=strat, equity_frac=eq_frac, gold_w=gold_w)
