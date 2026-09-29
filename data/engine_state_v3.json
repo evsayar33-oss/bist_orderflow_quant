@@ -310,12 +310,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0801,
-      "NEUTRAL": 0.916,
-      "RISK_ON": 0.0039
+      "RISK_OFF": 0.002,
+      "NEUTRAL": 0.998,
+      "RISK_ON": 0.0
     },
-    "p_risk_off": 0.0801,
-    "degraded": true,
+    "p_risk_off": 0.002,
+    "degraded": false,
     "params": {
       "K": 3,
       "means": [
@@ -404,8 +404,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.352,
-    "exp_mkt_12m_pct": 23.96,
+    "exp_mkt_5d_pct": 0.355,
+    "exp_mkt_12m_pct": 23.94,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -420,7 +420,7 @@
     ],
     "as_of": "2026-09-29",
     "persistence": 0.9196,
-    "source": "hmm_propagated",
+    "source": "hmm_yfinance",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.0503,
@@ -1078,14 +1078,14 @@
     "fingerprint": "6596.9000|6510474889",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-09-29T11:23:53.608938Z"
+    "utc": "2026-09-29T11:58:21.855395Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.4,
     "rows": 450,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1267,
+    "recommended_missing_rate": 0.1262,
     "fetch": {
       "source": "tradingview",
       "fields": {
