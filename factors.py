@@ -51,6 +51,8 @@ def price_factors_at(wide: Dict[str, pd.DataFrame], index_close: Optional[pd.Ser
         dd = np.nanmin(W / peak - 1.0, axis=0)
         med_val = np.nanmedian(V * Cv, axis=0)
         max_1m = np.nanmax(W[-21:] / W[-22:-1] - 1.0, axis=0) * 100    # lottery (MAX) effect: biggest daily jump, 1m
+        ret_3m = (W[-1] / W[-64] - 1.0) * 100                            # V3.10 "value trap" check: started to rise?
+        from_low = (W[-1] / np.nanmin(W, axis=0) - 1.0) * 100
         beta = np.full(len(tick), np.nan)
         if index_close is not None and len(index_close):
             ic = index_close.reindex(close.index).ffill().iloc[pos - 252: pos + 1].to_numpy(float)
@@ -66,7 +68,7 @@ def price_factors_at(wide: Dict[str, pd.DataFrame], index_close: Optional[pd.Ser
         "ticker": tick, "close_adj": last, "mom_12_1": mom * 100, "high_52w": high_52w,
         "trend_consistency": trend, "low_vol": -vol6 * 100, "vol_ann_pct": vol6 * 100, "low_beta": -beta,
         "beta": beta, "dd_resilience": dd * 100, "liquidity": np.log1p(med_val), "med_value_traded": med_val,
-        "max_1m": max_1m,
+        "max_1m": max_1m, "ret_3m": ret_3m, "from_52w_low": from_low,
     })
     df = df[valid & np.isfinite(last)]
     df["tarih"] = pd.Timestamp(close.index[pos]).normalize()

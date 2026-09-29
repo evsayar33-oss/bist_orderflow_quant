@@ -244,7 +244,8 @@ with tab1:
                          f'<div class="mut">{REASON_TR.get(o.get("reason"), o.get("reason"))}</div></div>')
         if rows:
             st.markdown(f'<div class="card"><div class="lbl">Bir sonraki açılışta</div>{rows}</div>', unsafe_allow_html=True)
-    st.caption(f"Kural: her ay en güçlü {C.TRANCHE_N} hisse alınır (aynı sektörden en fazla {C.TRANCHE_SECTOR_CAP}), "
+    st.caption(f"Kural: her ay en güçlü {C.TRANCHE_N} hisse alınır (aynı sektörden en fazla {C.TRANCHE_SECTOR_CAP}; "
+               f"ucuz ama hâlâ düşmekte olan 'değer tuzağı' hisseler alınmaz), "
                f"her aylık dilim {C.TRANCHE_MONTHS} ay tutulur; portföy tamamen hisse, tek hisse en fazla %{C.MAX_NAME_W * 100:.0f}.")
 
 # ------------------------------------------------------------------ HİSSE ARA

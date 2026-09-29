@@ -317,7 +317,20 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
             elig &= mc.rank(pct=True).fillna(0) >= 0.5
         if bt.notna().mean() > 0.5:
             elig &= bt.rank(pct=True).fillna(1) <= 0.5
-    cand = f[elig].sort_values("composite", ascending=False)
+    vt = getattr(C, "VALUE_TRAP_MODE", None)
+    rank_col = "composite"
+    if vt and "ret_3m" in f and "from_52w_low" in f:
+        turn = (pd.to_numeric(f["ret_3m"], errors="coerce").rank(pct=True)
+                + pd.to_numeric(f["from_52w_low"], errors="coerce").rank(pct=True)) / 2
+        f["turn_pct"] = turn.rank(pct=True)
+        if vt == "filter":
+            elig &= ~(f["turn_pct"] < getattr(C, "VALUE_TRAP_CUT", 1 / 3))
+        elif vt == "blend":
+            z = (turn - turn.mean()) / (turn.std() or 1.0)
+            cz = (f["composite"] - f["composite"].mean()) / (f["composite"].std() or 1.0)
+            f["sel_score"] = cz + 0.5 * z.fillna(0)
+            rank_col = "sel_score"
+    cand = f[elig].sort_values(rank_col, ascending=False)
     # projected portfolio sector weights from the still-active older cohorts (portfolio-level cap)
     sec_of = lambda t: (f.at[t, "sector"] if t in f.index and isinstance(f.at[t, "sector"], str) and f.at[t, "sector"] else "NA")
     old_live = [c for c in cohorts if c.get("tickers")]
@@ -345,6 +358,11 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
         sec_w[sec] = sec_w.get(sec, 0.0) + step
         if len(picks) == N:
             break
+    if getattr(C, "WINNER_EXTENSION", False):
+        for t in sorted(expired):
+            p0 = pf["positions"].get(t)
+            if p0 and t in f.index and p0.get("level", 1) >= 1.5 and float(f.at[t, "composite_pct"]) >= 80 and t not in picks:
+                picks.append(t)                                    # extend a strong winner into the new cohort
     conf = {t: round(float(f.at[t, "confidence"]), 4) for t in picks}
     wm = getattr(C, "TRANCHE_WEIGHTING", "equal")
     if picks and wm in ("lottery", "lottery_vol"):
@@ -404,6 +422,8 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
             orders.append({"ticker": t, "action": "SELL", "reason": sells[t], "target_w": 0.0})
         else:
             holds.append(t)
+            if not getattr(C, "TRIM_WINNERS", True) and cw.get(t, 0.0) > tw[t] and cw.get(t, 0.0) - tw[t] <= 0.10:
+                continue                                           # let the winner run
             if abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
                 orders.append({"ticker": t, "action": "REBAL", "reason": "COHORT_WEIGHT", "target_w": round(tw[t], 5)})
     # stock-only: idle cash (from exits / below-band drift) is re-deployed into under-weight holdings

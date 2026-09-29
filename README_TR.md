@@ -1,5 +1,12 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.10 — Değer tuzağı koruması (büyük kazananların ortak özelliklerinden):**
+* **Analiz:** 2020, 2022 ve diğer bütün yıllarda, 6 ayda en çok yükselen %5'lik hisselerin alındıkları andaki özellikleri incelendi. Ortak nokta şuydu: dipten dönmeye başlamış (son 3 ayda yükselen, 52 haftalık dibinden uzaklaşmış), küçük ve oynak hisseler. Ucuzluk büyük kazananların ortak özelliği değildi.
+* **Kanıt:** Sistemin en güçlü %10'u içinde hâlâ düşmekte olan hisselerin 6 aylık medyan getirisi %13, yükselişe geçenlerin %17. Bu fark her dönemde aynı yönde (2020+2022'de %30'a karşı %56).
+* **Kural:** Ucuz ama "yükseliş puanı" (son 3 ay getirisi + 52 hafta dibinden uzaklık) en düşük üçte birde olan hisseler alınmaz.
+* **Gerçek veri sonucu:** Yıllık getiri eşiğe göre %63–67; yani anlamlı değişmiyor. Ama BIST100'ü geçme oranı %80'den %85–91'e, toplam hedefi geçme oranı %17'den %18–23'e çıkıyor. Düşüş aynı kalıyor.
+* **Denenip elenenler:** Kazananı kırpmama, kazananı uzatma, ayda 4 hisse, skor-yükseliş harmanı.
+
 **V3.9 — Sistem sağlığı, canlı backtest ve kendini geliştirme (yıllarca güvenle kullanım için):**
 * **Sistem sağlığı (her gün):** 11 kontrol yapılır ve genel durum 🟢/🟡/🔴 olarak özetlenir. Kontrol edilenler:
   * **Veri:** tarama genişliği, TÜFE, bilanço verileri.

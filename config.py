@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.9.0"
+ENGINE_VERSION = "3.10.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -167,3 +167,12 @@ BREAKEVEN_TRIGGER_PCT = 15.0      # once +15% above entry, stop moves to the ent
 
 # ---- V3.9 health / live-vs-test
 BACKTEST_NAV_FILE = os.path.join(DATA_DIR, "backtest_nav_v3.csv")
+
+# ---- V3.9.1 profit rules (tested; adopted only if they help in BOTH 2017-21 and 2022-26)
+TRIM_WINNERS = True               # False -> an overweight winner may drift up to +10pp before being trimmed
+WINNER_EXTENSION = False          # True -> at expiry keep names up >= +50% AND still in the top 20% of scores
+
+# ---- V3.10 value-trap guard: cheap stocks that are STILL falling underperform (research: every period)
+VALUE_TRAP_MODE = "filter"        # ON (V3.10): skip cheap stocks still in the bottom third of 'turn' (3m return + distance from 52w low)
+# real-data test: return ~unchanged across thresholds (63-67%/yr), beat-BIST100 80% -> 85-91%, sum target 17% -> 18-23%
+VALUE_TRAP_CUT = 1 / 3            # "filter": skip names whose 'turn' percentile is below this
