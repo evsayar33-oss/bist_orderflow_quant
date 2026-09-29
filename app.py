@@ -1,4 +1,4 @@
-"""Streamlit dashboard — BIST Real-Return Engine V3 (read-only, reads ./data)."""
+"""BIST Reel Getiri — sade, mobil öncelikli pano (salt okunur, ./data dosyalarını okur)."""
 import json
 import math
 import os
@@ -8,7 +8,37 @@ import streamlit as st
 
 import config as C
 
-st.set_page_config(page_title="BIST Reel Getiri Motoru V3", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="BIST Reel Getiri", layout="centered", page_icon="🏛️", initial_sidebar_state="collapsed")
+
+# ------------------------------------------------------------------ style
+st.markdown("""
+<style>
+#MainMenu, footer, header [data-testid="stToolbar"] {visibility: hidden;}
+.block-container {padding-top: 1.2rem; padding-bottom: 3rem; max-width: 760px;}
+.hdr {font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .1rem;}
+.sub {opacity: .65; font-size: .85rem; margin-bottom: 1rem;}
+.card {border: 1px solid rgba(128,128,128,.22); border-radius: 16px; padding: 14px 16px; margin: 8px 0;
+       background: rgba(128,128,128,.06);}
+.big {font-size: 2.1rem; font-weight: 700; line-height: 1.1; letter-spacing: -.02em;}
+.lbl {font-size: .78rem; opacity: .65; text-transform: uppercase; letter-spacing: .04em;}
+.chip {display: inline-block; padding: 3px 10px; margin: 4px 6px 0 0; border-radius: 999px; font-size: .82rem;
+       border: 1px solid rgba(128,128,128,.3);}
+.chip.on {border-color: #f5a524; background: rgba(245,165,36,.14); font-weight: 600;}
+.kpi {text-align: left;}
+.kpi .v, .v {font-size: 1.35rem; font-weight: 700;}
+.pos {color: #17c964;} .neg {color: #f31260;} .mut {opacity: .6;}
+.row {display: flex; justify-content: space-between; align-items: center; padding: 10px 0;
+      border-bottom: 1px solid rgba(128,128,128,.15);}
+.row:last-child {border-bottom: none;}
+.tk {font-weight: 700; font-size: 1.02rem;}
+.bar {height: 6px; border-radius: 3px; background: rgba(128,128,128,.18); margin-top: 5px; width: 120px;}
+.bar > div {height: 6px; border-radius: 3px; background: #7c6cf2;}
+.badge {display: inline-block; padding: 4px 12px; border-radius: 10px; font-weight: 600; font-size: .9rem;}
+.b-in {background: rgba(23,201,100,.15); color: #17c964;} .b-buy {background: rgba(124,108,242,.18); color: #9d90ff;}
+.b-watch {background: rgba(128,128,128,.15);} .b-no {background: rgba(243,18,96,.13); color: #f31260;}
+.note {font-size: .88rem; line-height: 1.45;}
+</style>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=120)
@@ -24,13 +54,47 @@ def _csv(path):
     return pd.read_csv(path, low_memory=False) if os.path.exists(path) else pd.DataFrame()
 
 
-def fmt(v, prefix="%", nd=1, sign=False):
+def num(v):
     try:
         x = float(v)
-        if math.isnan(x):
-            return "—"
-        return f"{prefix}{x:+.{nd}f}" if sign else f"{prefix}{x:.{nd}f}"
+        return None if math.isnan(x) else x
     except (TypeError, ValueError):
+        return None
+
+
+def pct(v, sign=False, nd=1):
+    x = num(v)
+    if x is None:
+        return "—"
+    s = f"{abs(x):.{nd}f}".replace(".", ",")
+    return (("+" if x >= 0 else "−") if sign else ("−" if x < 0 else "")) + "%" + s
+
+
+def cls(v):
+    x = num(v)
+    return "mut" if x is None else ("pos" if x >= 0 else "neg")
+
+
+AYLAR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+BENCH = {"cpi": "TÜFE", "usd": "Dolar", "gold": "Altın", "deposit": "Mevduat", "xu100": "BIST100"}
+REGIME = {"RISK_ON": "Olumlu", "NEUTRAL": "Nötr", "RISK_OFF": "Riskli"}
+GUARD = {"NORMAL": "Normal", "WATCH": "Temkinli", "RECOVERY": "Toparlanıyor", "SAFE": "Güvenli mod"}
+FACTOR_TR = {
+    "mom_12_1": "12 aylık momentum", "high_52w": "52 hafta zirvesine yakınlık", "trend_consistency": "istikrarlı yükseliş",
+    "low_vol": "düşük oynaklık", "low_beta": "piyasadan bağımsızlık", "dd_resilience": "düşüşlere dayanıklılık",
+    "liquidity": "likidite", "roe": "özsermaye kârlılığı", "earnings_yield": "kâra göre ucuzluk",
+    "book_yield": "defter değerine göre ucuzluk", "sales_yield": "satışlara göre ucuzluk", "op_margin": "faaliyet marjı",
+    "low_leverage": "düşük borç", "div_yield": "temettü", "real_growth": "enflasyon üstü büyüme",
+}
+REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWDOWN_CONFIRMED": "düşüş + zayıflayan tez",
+             "CATASTROPHE_STOP": "kesin stop", "NEW_ENTRY": "yeni giriş"}
+
+
+def dstr(s):
+    try:
+        d = pd.Timestamp(s)
+        return f"{d.day} {AYLAR[d.month - 1]} {d.year}"
+    except Exception:
         return "—"
 
 
@@ -38,225 +102,212 @@ state = _json(C.STATE_FILE)
 report = _json(C.BACKTEST_REPORT_FILE)
 nav = _csv(C.NAV_FILE)
 snaps = _csv(C.MONTHLY_SNAPSHOT_FILE)
-trades = _csv(C.TRADE_LOG_FILE)
 
-st.title("🏛️ BIST Reel Getiri Motoru V3")
-st.caption("Uzun vadeli al-unut: 12 ayda TÜFE'yi yenmesi beklenen hisseler, aylık gözden geçirme. İkincil ölçüt: XU100.")
+st.markdown('<div class="hdr">🏛️ BIST Reel Getiri</div>', unsafe_allow_html=True)
 if not state:
-    st.warning("Henüz V3 state yok. Actions: önce 'Walk Forward Backtest', sonra 'Daily Run' çalışmalı.")
+    st.markdown('<div class="sub">Henüz veri yok. GitHub Actions → önce “Walk Forward Backtest”, sonra “Daily Run”.</div>',
+                unsafe_allow_html=True)
     st.stop()
 
-inf, reg, g, m, cal = (state.get(k, {}) or {} for k in ("inflation", "regime", "autonomy_guard", "model", "calibration"))
+pf = state.get("portfolio") or {}
+reg, g = state.get("regime", {}) or {}, state.get("autonomy_guard", {}) or {}
+hz = state.get("hurdles", {}) or {}
 perf = state.get("performance", {}) or {}
 navm = perf.get("nav", {}) or {}
-pf = state.get("portfolio") or {}
-weights = m.get("champion_weights", {}) or {}
+lr = state.get("last_run", {}) or {}
+weights = (state.get("model", {}) or {}).get("champion_weights", {}) or {}
+cal = state.get("calibration", {}) or {}
+last = snaps[snaps["tarih"] == snaps["tarih"].max()] if not snaps.empty else pd.DataFrame()
 
-# ---------------------------------------------------------------- status banners
-lr_ = state.get("last_run", {}) or {}
-st.caption(f"Son motor çalışması: {lr_.get('date', '—')} ({'yenileme' if lr_.get('mode') == 'REFRESH' else 'kapanış'}) · "
-           "state yalnızca GitHub Actions çalışınca güncellenir")
-if inf.get("expected_12m_pct") is None and os.path.exists(C.CPI_CACHE_FILE):
-    try:
-        import inflation as _INF
-        _c = pd.read_csv(C.CPI_CACHE_FILE)
-        _s = pd.Series(_c["cpi"].to_numpy(float), index=pd.to_datetime(_c["tarih"]))
-        _st = _INF.inflation_stats(_s)
-        if _st.get("expected_12m_pct") is not None:
-            inf = {**inf, **_st, "status": "CACHE_ONLY", "source": "önbellek (cpi_tr.csv)"}
-            st.info("ℹ️ TÜFE verisi mevcut (önbellek), ancak motor henüz bu veriyle çalışmadı. "
-                    "Actions → 'Daily Run' iş akışını elle çalıştırın: seans içindeyse YENİLEME modunda "
-                    "gözden geçirmeyi TÜFE ile yeniler (işlem yapmaz).")
-    except Exception:
-        pass
-cpi_status = inf.get("status")
+st.markdown(f'<div class="sub">Güncelleme {dstr(lr.get("date"))} · Piyasa {REGIME.get(reg.get("label"), "—")} · '
+            f'Sistem {GUARD.get(g.get("mode"), "—")}</div>', unsafe_allow_html=True)
+
+# ------------------------------------------------------------------ one actionable alert at most
+inf = state.get("inflation", {}) or {}
 if inf.get("expected_12m_pct") is None:
-    st.error("⛔ TÜFE verisi alınamadı → reel getiri hesaplanamıyor ve **yeni alım yapılmıyor**. "
-             "Çözüm: evds3.tcmb.gov.tr → Profilim → API Key Kopyala, sonra GitHub → Settings → Secrets → Actions → "
-             "`EVDS_API_KEY` ekleyin.")
-elif cpi_status == "PROXY":
-    st.warning("⚠️ Resmî TÜFE yerine USDTRY vekili kullanılıyor (+5 puan güvenlik payıyla). "
-               "Kesin sonuç için `EVDS_API_KEY` secret'ını ekleyin.")
-elif cpi_status == "STALE":
-    st.warning(f"⚠️ TÜFE serisi güncel değil (son ay {inf.get('last_month')}). `EVDS_API_KEY` ekleyin.")
-if navm.get("days", 0) < 2:
-    st.info(f"ℹ️ Portföy {pf.get('start_date', '—')} tarihinde başladı; performans metrikleri ilk işlem günlerinden sonra dolacak.")
+    st.error("TÜFE verisi yok → yeni alım yapılmıyor. GitHub → Settings → Secrets → `EVDS_API_KEY` ekleyip “Daily Run” çalıştırın.")
+elif inf.get("status") == "PROXY":
+    st.warning("Resmî TÜFE yerine USDTRY vekili kullanılıyor. `EVDS_API_KEY` ekleyin.")
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("TÜFE (yıllık)", fmt(inf.get("yoy_pct")), f"beklenen 12A {fmt(inf.get('expected_12m_pct'))} · {inf.get('source') or 'yok'}")
-c2.metric("Rejim", reg.get("label", "—"), f"P(risk-off) {fmt((reg.get('p_risk_off') or 0) * 100, nd=0)}")
-c3.metric("Portföy reel getiri", fmt(navm.get("real_total_pct"), sign=True), f"nominal {fmt(navm.get('total_return_pct'), sign=True)}")
-_ex = fmt(navm.get("excess_vs_xu100_cagr_pp"), prefix="", sign=True)
-c4.metric("XU100'e göre (yıllık)", _ex if _ex == "—" else _ex + " puan",
-          f"maks. düşüş {fmt(navm.get('max_drawdown_pct'))}")
-c5.metric("Guard", g.get("mode", "—"), str(g.get("reason", ""))[:30])
+# ------------------------------------------------------------------ hurdle card
+if hz.get("hurdle") is not None:
+    chips = "".join(f'<span class="chip {"on" if k == hz.get("binding") else ""}">{BENCH[k]} {pct(hz.get(k))}</span>'
+                    for k in ("cpi", "usd", "gold", "deposit") if hz.get(k) is not None)
+    st.markdown(f'<div class="card"><div class="lbl">Hisselerin geçmesi gereken 12 aylık çıta</div>'
+                f'<div class="big">{pct(hz["hurdle"])}</div>{chips}'
+                f'<div class="note mut" style="margin-top:8px">Seçilen her hissenin 12 ayda TÜFE, dolar (+ABD enflasyonu), '
+                f'altın ve mevduatın hepsini en az %{C.MIN_EDGE_OVER_HURDLE_PCT:.0f} farkla geçmesi beklenir.</div></div>',
+                unsafe_allow_html=True)
 
+# ------------------------------------------------------------------ KPIs
+bt = (navm.get("benchmarks_total_pct") or {})
+if navm.get("days", 0) >= 2:
+    kp = "".join(f'<div style="flex:1;min-width:0"><div class="lbl">{lbl}</div><div class="kpi v {cls(v)}">{pct(v, True)}</div></div>'
+                 for lbl, v in (("Portföy", navm.get("total_return_pct")), ("Reel", navm.get("real_total_pct")),
+                                ("BIST100", bt.get("xu100", navm.get("xu100_total_pct")))))
+    st.markdown(f'<div class="card"><div class="lbl" style="margin-bottom:6px">Başlangıçtan bu yana</div>'
+                f'<div style="display:flex;gap:12px">{kp}</div></div>', unsafe_allow_html=True)
+else:
+    st.markdown(f'<div class="card note mut">Portföy {dstr(pf.get("start_date"))} tarihinde başladı. '
+                'Getiri kartları ilk işlem günlerinden sonra görünür.</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------- stock search
-def render_stock(t: str):
-    last_date = snaps["tarih"].max()
-    last = snaps[snaps["tarih"] == last_date]
-    row = last[last["ticker"] == t]
-    pos = (pf.get("positions") or {}).get(t)
-    pend = [o for o in (pf.get("pending") or []) if o["ticker"] == t]
-    st.subheader(f"{t}")
-    if pos:
-        navv = pf.get("nav", 1.0) or 1.0
-        st.success(f"📌 Portföyde | ağırlık %{pos['value'] / navv * 100:.1f} | girişten {fmt((pos['level'] - 1) * 100, sign=True)} "
-                   f"| zirveden {fmt((pos['level'] / pos['peak'] - 1) * 100, sign=True)} | giriş {pos['entry_date']}")
-    for o in pend:
-        st.info(f"🕒 Bekleyen emir (yarın açılış): {o['action']} — {o['reason']} — hedef ağırlık %{o.get('target_w', 0) * 100:.1f}")
-    if row.empty:
-        st.warning(f"{t} son aylık taramada ({last_date}) puanlanmadı (likidite/fiyat geçmişi yetersiz ya da listede değil).")
-        return
-    r = row.iloc[0]
-    n = len(last)
-    rank = int((last["composite"] > r["composite"]).sum()) + 1
-    cutoff = float(cal.get("pct_cutoff", C.BUY_PCT))
-    a, b, c, d = st.columns(4)
-    a.metric("Skor yüzdeliği", fmt(r.get("composite_pct"), prefix="p", nd=0), f"sıra {rank}/{n}")
-    b.metric("Beklenen reel 12A", fmt(r.get("exp_real_12m"), sign=True),
-             None if cal.get("status") == "CALIBRATED" else "kalibrasyon yok: yalnız piyasa beklentisi")
-    c.metric("TÜFE'yi yenme olasılığı", fmt((r.get("p_beat_cpi") or float("nan")) * 100, nd=0))
-    d.metric("Yıllık oynaklık", fmt(r.get("vol_ann_pct")), f"beta {fmt(r.get('beta'), prefix='', nd=2)}")
-    reasons = []
-    if bool(r.get("selected")):
-        reasons.append("✅ Bu ay portföy için SEÇİLDİ (al ya da tut).")
-    else:
-        if float(r.get("composite_pct", 0)) < cutoff:
-            reasons.append(f"Skor alım eşiğinin altında (p{r.get('composite_pct', 0):.0f} < p{cutoff:.0f}).")
-        er = r.get("exp_real_12m")
-        if er is None or (isinstance(er, float) and math.isnan(er)):
-            reasons.append("Beklenen reel getiri hesaplanamadı (TÜFE verisi yok).")
-        elif float(er) < C.MIN_EXPECTED_REAL_PCT:
-            reasons.append(f"Beklenen reel getiri eşiğin altında (%{float(er):.1f} < %{C.MIN_EXPECTED_REAL_PCT:.0f}).")
-        if float(r.get("med_value_traded") or 0) < C.MIN_MEDIAN_VALUE_TRADED_TL:
-            reasons.append("Likidite (3 aylık medyan işlem hacmi) yetersiz.")
-        if str(r.get("fund_break")).lower() == "true":
-            reasons.append("Temel bozulma: zarar + negatif ROE.")
-        if not reasons:
-            reasons.append("Kriterleri geçti ama sektör limiti / hedef pozisyon sayısı / maruziyet nedeniyle alınmadı.")
-    st.markdown("**Karar gerekçesi:** " + " ".join(reasons))
-    sec = r.get("sector")
-    if isinstance(sec, str):
-        peers = last[last["sector"] == sec].sort_values("composite", ascending=False)
-        st.caption(f"Sektör: {sec} — sektör içi sıra {int((peers['composite'] > r['composite']).sum()) + 1}/{len(peers)}")
-    rows = []
-    for k in C.FACTORS:
-        z = r.get(f"z_{k}")
-        w = weights.get(k, 0.0)
-        rows.append({"Faktör": k, "Ham değer": r.get(f"f_{k}"), "z-skor": z, "Ağırlık": w,
-                     "Katkı (w·z)": (w * z) if z is not None and not (isinstance(z, float) and math.isnan(z)) else None})
-    fd = pd.DataFrame(rows).sort_values("Katkı (w·z)", ascending=False)
-    st.markdown("**Faktör dökümü** (skoru yukarı/aşağı çeken etkenler)")
-    st.bar_chart(fd.set_index("Faktör")["Katkı (w·z)"])
-    st.dataframe(fd, hide_index=True, use_container_width=True)
-    h = snaps[snaps["ticker"] == t].sort_values("tarih")
-    if len(h) > 1:
-        st.markdown("**Aylık skor geçmişi (yüzdelik)**")
-        st.line_chart(h.set_index("tarih")["composite_pct"])
-    lab_cols = [c for c in ["tarih", "composite_pct", "fwd_3m", "fwd_ret", "real_ret", "xu_excess"] if c in h]
-    if "fwd_3m" in h and h["fwd_3m"].notna().any():
-        st.markdown("**Geçmiş kararların gerçekleşen sonuçları** (fwd_ret = 12A nominal, real_ret = 12A reel)")
-        st.dataframe(h[lab_cols].dropna(subset=["fwd_3m"]).tail(24), hide_index=True, use_container_width=True)
+tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
 
-
-if not snaps.empty:
-    all_t = sorted(set(snaps[snaps["tarih"] == snaps["tarih"].max()]["ticker"].astype(str)) | set((pf.get("positions") or {}).keys()))
-    q = st.text_input("🔎 Hisse ara", placeholder="örn. THYAO, ASELS …").strip().upper()
-    if q:
-        hits = [t for t in all_t if q in t]
-        if not hits:
-            st.warning(f"'{q}' son aylık taramada yok.")
-        else:
-            sel = hits[0] if len(hits) == 1 or q in hits else st.selectbox("Eşleşen hisseler", hits)
-            with st.container(border=True):
-                render_stock(q if q in hits else sel)
-
-t1, t2, t3, t4, t5 = st.tabs(["📌 Portföy", "💎 Aylık seçim", "📈 Performans", "🧠 Model", "📚 Backtest"])
-
-with t1:
+# ------------------------------------------------------------------ PORTFÖY
+with tab1:
     pos = pf.get("positions", {}) or {}
+    navv = pf.get("nav", 1.0) or 1.0
     if pos:
-        navv = pf.get("nav", 1.0) or 1.0
-        df = pd.DataFrame([{"Hisse": t, "Ağırlık %": round(p["value"] / navv * 100, 2),
-                            "Getiri % (giriş sonrası)": round((p["level"] - 1) * 100, 2),
-                            "Zirveden %": round((p["level"] / p["peak"] - 1) * 100, 2),
-                            "Giriş": p["entry_date"], "Giriş skoru": p.get("entry_pct"),
-                            "Beklenen reel 12A %": p.get("entry_exp_real")} for t, p in pos.items()])
-        st.dataframe(df.sort_values("Ağırlık %", ascending=False), hide_index=True, use_container_width=True)
-        cr = state.get("cash_rate", {}) or {}
-        st.caption(f"Nakit: %{pf.get('cash', 0) / navv * 100:.1f} (net getiri varsayımı yıllık %{cr.get('net_yield_pct', 0)}) | "
-                   f"Düşüş bayrağı: zirveden -%{C.CATASTROPHE_FROM_PEAK_PCT:.0f} / girişten -%{C.CATASTROPHE_FROM_ENTRY_PCT:.0f} "
-                   f"(aylık gözden geçirmede tez de bozulduysa satılır) | Kesin stop: girişten -%{C.HARD_STOP_FROM_ENTRY_PCT:.0f}")
-        flagged = [t for t, p in pos.items() if p.get("dd_flag")]
-        if flagged:
-            st.warning("⚠️ Düşüş bayraklı pozisyonlar (aylık gözden geçirmede tez kontrol edilecek): " + ", ".join(flagged))
+        rows = ""
+        for t, p in sorted(pos.items(), key=lambda kv: -kv[1]["value"]):
+            w = p["value"] / navv * 100
+            r = (p["level"] - 1) * 100
+            flag = ' <span class="chip">⚠️ düşüş bayrağı</span>' if p.get("dd_flag") else ""
+            rows += (f'<div class="row"><div><span class="tk">{t}</span>{flag}<div class="mut" style="font-size:.8rem">'
+                     f'{dstr(p["entry_date"])} alındı</div></div><div style="text-align:right">'
+                     f'<div class="{cls(r)}" style="font-weight:700">{pct(r, True)}</div>'
+                     f'<div class="bar"><div style="width:{min(w / C.MAX_POSITION_W, 100):.0f}%"></div></div>'
+                     f'<div class="mut" style="font-size:.78rem">ağırlık {pct(w, nd=0)}</div></div></div>')
+        st.markdown(f'<div class="card"><div class="lbl">{len(pos)} hisse · nakit {pct(pf.get("cash", 0) / navv * 100, nd=0)}</div>'
+                    f'{rows}</div>', unsafe_allow_html=True)
     else:
-        st.info("Henüz pozisyon yok. Aylık gözden geçirmenin emirleri bir sonraki seansın açılışında gerçekleşir.")
-    if pf.get("pending"):
-        st.subheader("Yarın açılışta çalışacak emirler")
-        pdf = pd.DataFrame(pf["pending"])
-        st.dataframe(pdf, hide_index=True, use_container_width=True)
-        if "entry_exp_real" in pdf and (pdf["action"] == "BUY").any() and pdf.loc[pdf["action"] == "BUY", "entry_exp_real"].isna().all() \
-                and (state.get("last_rebalance") or {}).get("expected_inflation_12m") is None:
-            st.warning("Bu alım emirleri TÜFE kontrolü OLMADAN üretildi. Motorun bir sonraki çalışmasında "
-                       "(elle 'Daily Run' ya da 18:25) otomatik iptal edilip TÜFE ile yeniden değerlendirilecek.")
+        st.markdown('<div class="card note mut">Henüz pozisyon yok. Aylık seçimdeki emirler bir sonraki seans açılışında gerçekleşir.</div>',
+                    unsafe_allow_html=True)
+    pend = pf.get("pending", []) or []
+    if pend:
+        rows = ""
+        for o in pend:
+            if o["action"] == "BUY":
+                pb = num(o.get("entry_p_beat_all"))
+                extra = f' · çıtayı geçme {pct(pb * 100, nd=0)}' if pb is not None else ""
+                rows += (f'<div class="row"><div><span class="tk">🟢 {o["ticker"]}</span><div class="mut" style="font-size:.8rem">'
+                         f'beklenti {pct(o.get("entry_exp_nominal"))}{extra}</div></div>'
+                         f'<div style="font-weight:600">{pct(o.get("target_w", 0) * 100, nd=0)}</div></div>')
+            elif o["action"] == "SELL":
+                rows += (f'<div class="row"><div><span class="tk">🔴 {o["ticker"]}</span></div>'
+                         f'<div class="mut">{REASON_TR.get(o.get("reason"), o.get("reason"))}</div></div>')
+        if rows:
+            st.markdown(f'<div class="card"><div class="lbl">Bir sonraki açılışta</div>{rows}</div>', unsafe_allow_html=True)
+    if not last.empty and "selected" in last:
+        sel = last[last["selected"].astype(str).str.lower() == "true"].sort_values("composite", ascending=False)
+        if len(sel):
+            st.caption(f"Bu ayın seçimi ({dstr(snaps['tarih'].max())}): " + " · ".join(sel["ticker"].astype(str)))
 
-with t2:
-    if snaps.empty:
-        st.info("Aylık kesit yok.")
+# ------------------------------------------------------------------ HİSSE ARA
+with tab2:
+    if last.empty:
+        st.info("Henüz aylık tarama yok.")
     else:
-        last = snaps[snaps["tarih"] == snaps["tarih"].max()]
-        st.caption(f"Son aylık gözden geçirme: {snaps['tarih'].max()} | alım eşiği p{cal.get('pct_cutoff')} | tutma eşiği p{C.HOLD_PCT:.0f}")
-        only_sel = st.toggle("Yalnızca seçilenler", value=False)
-        view = last[last["selected"].astype(str).str.lower() == "true"] if only_sel and "selected" in last else last
-        cols = [c for c in ["ticker", "sector", "composite_pct", "exp_real_12m", "p_beat_cpi", "vol_ann_pct",
-                            "f_roe", "f_earnings_yield", "f_book_yield", "f_mom_12_1", "f_high_52w", "selected"] if c in view]
-        st.dataframe(view.sort_values("composite", ascending=False)[cols].head(60), hide_index=True, use_container_width=True)
+        q = st.text_input("Hisse kodu", placeholder="örn. THYAO").strip().upper()
+        all_t = sorted(set(last["ticker"].astype(str)) | set((pf.get("positions") or {}).keys()))
+        if q:
+            hits = [t for t in all_t if q in t]
+            if not hits:
+                st.markdown(f'<div class="card note">“{q}” bu ayın taramasında yok (likidite ya da fiyat geçmişi yetersiz).</div>',
+                            unsafe_allow_html=True)
+            else:
+                t = q if q in hits else (hits[0] if len(hits) == 1 else st.selectbox("Eşleşenler", hits))
+                row = last[last["ticker"] == t]
+                in_pf = t in (pf.get("positions") or {})
+                pending_buy = any(o["ticker"] == t and o["action"] == "BUY" for o in (pf.get("pending") or []))
+                if row.empty:
+                    st.markdown(f'<div class="card"><span class="tk">{t}</span> — bu ay puanlanmadı.</div>', unsafe_allow_html=True)
+                else:
+                    r = row.iloc[0]
+                    cutoff = float(cal.get("pct_cutoff", C.BUY_PCT))
+                    sc = num(r.get("composite_pct")) or 0
+                    if in_pf:
+                        badge, txt = "b-in", "✅ Portföyde"
+                    elif pending_buy or str(r.get("selected")).lower() == "true":
+                        badge, txt = "b-buy", "🟢 Alım listesinde"
+                    elif sc >= C.HOLD_PCT:
+                        badge, txt = "b-watch", "⚪ İzlemede"
+                    else:
+                        badge, txt = "b-no", "🔴 Şu an uygun değil"
+                    why = []
+                    eo = num(r.get("exp_over_hurdle"))
+                    if not in_pf and not pending_buy:
+                        if sc < cutoff:
+                            why.append(f"Skoru alım eşiğinin altında (100 üzerinden {sc:.0f}, eşik {cutoff:.0f}).")
+                        if eo is not None and eo < C.MIN_EDGE_OVER_HURDLE_PCT:
+                            why.append("Beklenen getirisi 12 aylık çıtayı yeterli farkla geçmiyor.")
+                        if (num(r.get("med_value_traded")) or 0) < C.MIN_MEDIAN_VALUE_TRADED_TL:
+                            why.append("İşlem hacmi (likidite) düşük.")
+                        if str(r.get("fund_break")).lower() == "true":
+                            why.append("Şirket zarar ediyor ve özsermaye kârlılığı negatif.")
+                        if not why:
+                            why.append("Kriterleri geçiyor ama sektör sınırı ya da portföy doluluğu nedeniyle alınmadı.")
+                    contrib = sorted(((k, weights.get(k, 0) * (num(r.get(f"z_{k}")) or 0)) for k in C.FACTORS),
+                                     key=lambda x: x[1], reverse=True)
+                    good = [FACTOR_TR[k] for k, v in contrib if v > 0.02][:3]
+                    bad = [FACTOR_TR[k] for k, v in contrib[::-1] if v < -0.02][:3]
+                    pb = num(r.get("p_beat_all"))
+                    html = (f'<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">'
+                            f'<span class="big" style="font-size:1.6rem">{t}</span><span class="badge {badge}">{txt}</span></div>'
+                            f'<div class="mut" style="font-size:.82rem;margin-top:2px">{r.get("sector") if isinstance(r.get("sector"), str) else ""}</div>'
+                            f'<div style="display:flex;gap:18px;margin-top:12px;flex-wrap:wrap">'
+                            f'<div><div class="lbl">Skor</div><div class="kpi v">{sc:.0f}<span class="mut" style="font-size:.9rem">/100</span></div></div>'
+                            f'<div><div class="lbl">Beklenen 12A</div><div class="kpi v">{pct(r.get("exp_nominal_12m"))}</div></div>'
+                            f'<div><div class="lbl">Çıta</div><div class="kpi v">{pct(r.get("hurdle_12m"))}</div></div>'
+                            f'<div><div class="lbl">Çıtayı geçme</div><div class="kpi v">{pct(pb * 100, nd=0) if pb is not None else "—"}</div></div>'
+                            f'</div>')
+                    if why:
+                        html += '<div class="note" style="margin-top:12px">' + "<br>".join("• " + w for w in why) + "</div>"
+                    if good:
+                        html += f'<div class="note" style="margin-top:10px"><span class="pos">▲ Güçlü:</span> {", ".join(good)}</div>'
+                    if bad:
+                        html += f'<div class="note"><span class="neg">▼ Zayıf:</span> {", ".join(bad)}</div>'
+                    st.markdown(html + "</div>", unsafe_allow_html=True)
+                    h = snaps[snaps["ticker"] == t].sort_values("tarih")
+                    if len(h) > 1:
+                        st.caption("Aylık skor geçmişi")
+                        st.line_chart(h.set_index("tarih")["composite_pct"], height=160)
 
-with t3:
+# ------------------------------------------------------------------ PERFORMANS
+with tab3:
     if len(nav) >= 2:
         n = nav.copy()
         n["tarih"] = pd.to_datetime(n["tarih"])
         n = n.set_index("tarih")
-        chart = pd.DataFrame({"Portföy": n["nav"] / n["nav"].iloc[0]})
+        ch = pd.DataFrame({"Portföy": n["nav"] / n["nav"].iloc[0]})
         if "xu100" in n and n["xu100"].notna().any():
             x = n["xu100"].ffill().bfill()
-            chart["XU100"] = x / x.iloc[0]
-        st.line_chart(chart)
+            ch["BIST100"] = x / x.iloc[0]
+        st.line_chart(ch, height=220)
+        if bt:
+            rows = f'<div class="row"><span class="tk">Portföy</span><span class="{cls(navm.get("total_return_pct"))}" style="font-weight:700">{pct(navm.get("total_return_pct"), True)}</span></div>'
+            for k in ("cpi", "usd", "gold", "deposit", "xu100"):
+                if bt.get(k) is not None:
+                    rows += f'<div class="row"><span>{BENCH[k]}</span><span class="mut">{pct(bt.get(k), True)}</span></div>'
+            st.markdown(f'<div class="card"><div class="lbl">Başlangıçtan bu yana</div>{rows}</div>', unsafe_allow_html=True)
     else:
-        st.info("Performans grafiği için en az iki işlem günü gerekiyor.")
-    st.json(navm)
-    st.subheader("Kapanan pozisyonlar")
-    st.json(perf.get("lots", {}))
-    if not trades.empty:
-        st.dataframe(trades.tail(50), hide_index=True, use_container_width=True)
+        st.markdown('<div class="card note mut">Canlı performans grafiği en az iki işlem gününden sonra görünür.</div>',
+                    unsafe_allow_html=True)
+    if report:
+        p = report.get("portfolio", {}) or {}
+        rb = p.get("rolling12m_beat") or {}
+        lines = [f'Test dönemi {p.get("start", "")[:4]}–{p.get("end", "")[:4]} · yıllık <b>{pct(p.get("cagr_pct"))}</b> '
+                 f'(BIST100 {pct(p.get("xu100_cagr_pct"))}) · maks. düşüş {pct(p.get("max_drawdown_pct"))}']
+        if rb:
+            lines.append("12 aylık dönemlerde çıtayı geçme oranı: " +
+                         " · ".join(f'{BENCH.get(k, "Hepsi" if k == "all" else k)} <b>{pct(v, nd=0)}</b>' for k, v in rb.items()))
+        elif p.get("rolling12m_beat_cpi_pct") is not None:
+            lines.append(f'12 aylık dönemlerin <b>{pct(p.get("rolling12m_beat_cpi_pct"), nd=0)}</b>’inde TÜFE’yi geçti.')
+        st.markdown('<div class="card"><div class="lbl">Geçmiş test (gerçek veri, dışarıda bırakılmış dönemler)</div>'
+                    f'<div class="note">{"<br>".join(lines)}</div></div>', unsafe_allow_html=True)
+        py = report.get("per_year") or {}
+        if py:
+            tbl = []
+            for y, v in py.items():
+                tbl.append({"Yıl": str(y), "Portföy": pct(v.get("nominal_pct"), True), "TÜFE": pct(v.get("cpi_pct")),
+                            "Dolar": pct(v.get("usd_pct")), "Altın": pct(v.get("gold_pct")), "Mevduat": pct(v.get("deposit_pct")),
+                            "BIST100": pct(v.get("xu100_pct"), True),
+                            "Hepsini geçti": {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
+            st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 
-with t4:
-    if weights:
-        st.subheader("Faktör ağırlıkları")
-        st.bar_chart(pd.Series(weights).sort_values())
-    st.json({"status": m.get("status"), "ic_live_12m": m.get("ic_live_12m"), "ic_live_3m": m.get("ic_live_3m"),
-             "calibration_status": cal.get("status"), "bucket_table": cal.get("bucket_table"),
-             "market": cal.get("market"), "regime": reg.get("probs"), "inflation": inf,
-             "cash_rate": state.get("cash_rate"), "last_rebalance_gate": (state.get("last_rebalance") or {}).get("gate")})
-
-with t5:
-    if not report:
-        st.info("V3 backtest raporu yok.")
-    else:
-        cs = (report.get("cpi_source") or {}).get("status") or (report.get("cpi_source") or {}).get("source")
-        st.caption(f"{report.get('period')} | TÜFE kaynağı: {cs} | temel veri kapsamı {report.get('fundamentals_coverage')}")
-        if not any((v or {}).get("cpi_pct") is not None for v in (report.get("per_year") or {}).values()):
-            st.warning("Bu backtest TÜFE verisi olmadan çalışmış; reel sütunlar boş. EVDS anahtarını ekleyip backtest'i yeniden çalıştırın.")
-        a, b = st.columns(2)
-        a.subheader("Portföy (OOS)")
-        a.json(report.get("portfolio", {}))
-        b.subheader("Kapanan pozisyonlar")
-        b.json(report.get("closed_lots", {}))
-        if report.get("per_year"):
-            st.subheader("Yıllık: nominal / TÜFE / reel / XU100")
-            st.dataframe(pd.DataFrame(report["per_year"]).T, use_container_width=True)
-        st.json({"oos_ic_12m": report.get("oos_composite_ic_12m"), "factor_ic_12m": report.get("factor_ic_full_sample_12m"),
-                 "limitations": report.get("limitations")})
+with st.expander("Teknik detay"):
+    m = state.get("model", {}) or {}
+    st.json({"model": m.get("status"), "sürüm": m.get("champion_version"), "kalibrasyon": cal.get("status"),
+             "alım eşiği": cal.get("pct_cutoff"), "çıta": hz, "TÜFE": inf, "nakit": state.get("cash_rate"),
+             "rejim olasılıkları": reg.get("probs"), "guard": {k: g.get(k) for k in ("mode", "reason", "drift_score", "performance_drift")},
+             "canlı IC": {"12A": m.get("ic_live_12m"), "3A": m.get("ic_live_3m")}, "kapanan pozisyonlar": perf.get("lots")})

@@ -16,13 +16,15 @@ import numpy as np
 import pandas as pd
 
 import config as C
+from benchmarks import window_returns
 from inflation import cpi_ratio_vec
 
 H12 = 252
 
 
 def forward_labels(wide: Dict[str, pd.DataFrame], dates: List, cpi: Optional[pd.Series],
-                   index_close: Optional[pd.Series]) -> pd.DataFrame:
+                   index_close: Optional[pd.Series], bm: Optional[pd.DataFrame] = None,
+                   crate: Optional[pd.Series] = None) -> pd.DataFrame:
     O, Cl = wide["open"], wide["close"]
     idx = Cl.index
     Ov, Cv = O.to_numpy(float), Cl.to_numpy(float)
@@ -48,14 +50,22 @@ def forward_labels(wide: Dict[str, pd.DataFrame], dates: List, cpi: Optional[pd.
                 rec["xu_excess"] = rec["fwd_ret"] - (ic[e] / ic[pos] - 1.0) * 100.0
             else:
                 rec["xu_excess"] = np.full(len(tick), np.nan)
+            w = window_returns(bm, cpi, crate, idx[pos + 1], idx[e])
+            rec["hurdle_ret"] = w["hurdle"]
+            rec["b_usd"], rec["b_gold"], rec["b_deposit"] = w["usd"], w["gold"], w["deposit"]
+            rec["beat_all"] = np.where(np.isfinite(w["hurdle"]), (rec["fwd_ret"] > w["hurdle"]).astype(float), np.nan) \
+                if np.isfinite(w["hurdle"]) else np.full(len(tick), np.nan)
         else:
             rec["real_ret"] = rec["xu_excess"] = np.full(len(tick), np.nan)
             rec["cpi_12m_pct"] = np.nan
+            rec["hurdle_ret"] = rec["b_usd"] = rec["b_gold"] = rec["b_deposit"] = np.nan
+            rec["beat_all"] = np.full(len(tick), np.nan)
         df = pd.DataFrame(rec)
         df = df[np.isfinite(df["fwd_1m"]) | np.isfinite(df["fwd_ret"])]
         out.append(df)
     if not out:
-        return pd.DataFrame(columns=["tarih", "ticker", "fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_pct"])
+        return pd.DataFrame(columns=["tarih", "ticker", "fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_pct",
+                                     "hurdle_ret", "b_usd", "b_gold", "b_deposit", "beat_all"])
     return pd.concat(out, ignore_index=True)
 
 

@@ -11,7 +11,8 @@ import pandas as pd
 from inflation import cpi_ratio, cpi_ratio_vec
 
 
-def enrich_lots(lots: pd.DataFrame, cpi: Optional[pd.Series], index_close: Optional[pd.Series]) -> pd.DataFrame:
+def enrich_lots(lots: pd.DataFrame, cpi: Optional[pd.Series], index_close: Optional[pd.Series],
+                bench: Optional[Dict] = None) -> pd.DataFrame:
     if lots is None or lots.empty:
         return pd.DataFrame()
     L = lots.copy()
@@ -27,6 +28,12 @@ def enrich_lots(lots: pd.DataFrame, cpi: Optional[pd.Series], index_close: Optio
         b = ic.reindex(L["exit_date"], method="ffill").to_numpy()
         L["xu100_ret_pct"] = (b / a - 1) * 100
         L["xu_excess_pct"] = L["nominal_ret_pct"] - L["xu100_ret_pct"]
+    if bench:
+        from benchmarks import window_returns
+        rows = [window_returns(bench.get("bm"), cpi, bench.get("crate"), a, b) for a, b in zip(L["entry_date"], L["exit_date"])]
+        for k in ("usd", "gold", "deposit", "hurdle"):
+            L[f"{k}_ret_pct"] = [r[k] for r in rows]
+        L["beat_all"] = np.where(np.isfinite(L["hurdle_ret_pct"]), (L["nominal_ret_pct"] > L["hurdle_ret_pct"]).astype(float), np.nan)
     return L
 
 
@@ -47,6 +54,13 @@ def lot_metrics(L: pd.DataFrame) -> Dict:
         out.update({"hit_beat_cpi_pct": round(float((rr > 0).mean() * 100), 1),
                     "avg_real_pct": round(float(rr.mean()), 2), "median_real_pct": round(float(rr.median()), 2),
                     "n_real": int(len(rr))})
+    for k, name in (("usd", "usd"), ("gold", "gold"), ("deposit", "deposit")):
+        col = f"{k}_ret_pct"
+        if col in L and L[col].notna().any():
+            m = L[col].notna()
+            out[f"hit_beat_{name}_pct"] = round(float((L.loc[m, "nominal_ret_pct"] > L.loc[m, col]).mean() * 100), 1)
+    if "beat_all" in L and L["beat_all"].notna().any():
+        out["hit_beat_all_pct"] = round(float(L["beat_all"].dropna().mean() * 100), 1)
     if "xu_excess_pct" in L and L["xu_excess_pct"].notna().any():
         x = L["xu_excess_pct"].dropna()
         out.update({"hit_beat_xu100_pct": round(float((x > 0).mean() * 100), 1),
@@ -54,7 +68,7 @@ def lot_metrics(L: pd.DataFrame) -> Dict:
     return out
 
 
-def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series]) -> Dict:
+def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series], bench: Optional[Dict] = None) -> Dict:
     if nav_df is None or len(nav_df) < 2:
         return {"days": 0}
     d = nav_df.copy()
@@ -102,4 +116,25 @@ def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series]) -> Dict:
                 out["rolling12m_windows"] = n
                 out["rolling12m_beat_cpi_pct"] = round(wins / n * 100, 1)
                 out["rolling12m_beat_xu100_pct"] = round(beats_xu / n * 100, 1)
+    if bench:
+        from benchmarks import window_returns
+        a0, a1 = d["tarih"].iloc[0], d["tarih"].iloc[-1]
+        tot = window_returns(bench.get("bm"), cpi, bench.get("crate"), a0, a1, approx_cpi=True)
+        out["benchmarks_total_pct"] = {k: (round(float(v), 2) if np.isfinite(v) else None) for k, v in tot.items()}
+        m = d.set_index("tarih")["nav"].resample("ME").last().dropna()
+        if len(m) >= 13:
+            wins = {k: 0 for k in ("cpi", "usd", "gold", "deposit", "hurdle")}
+            n = 0
+            for i in range(12, len(m)):
+                a, b = m.index[i - 12], m.index[i]
+                w = window_returns(bench.get("bm"), cpi, bench.get("crate"), a, b)
+                if not np.isfinite(w["hurdle"]):
+                    continue
+                n += 1
+                r = (m.iloc[i] / m.iloc[i - 12] - 1) * 100
+                for k in wins:
+                    wins[k] += int(np.isfinite(w[k]) and r > w[k])
+            if n:
+                out["rolling12m_beat"] = {("all" if k == "hurdle" else k): round(v / n * 100, 1) for k, v in wins.items()}
+                out["rolling12m_beat_all_pct"] = round(wins["hurdle"] / n * 100, 1)
     return out

@@ -1,5 +1,7 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.4 — Çok ölçütlü çıta:** Bir hissenin 12 ayda yalnızca TÜFE'yi değil, **hepsini** geçmesi beklenir: TÜFE, dolar (USDTRY değişimi + %3 ABD enflasyonu), gram altın (TL) ve TL mevduat/para piyasası. Bunlardan en yükseği "çıta" olur; aday, çıtayı en az %3 farkla geçmeyi beklemelidir. BIST100 ikincil ölçüt olarak raporlanır. Arayüz ve Telegram mesajları sadeleştirildi.
+
 **Amaç:** 12 ay içinde **TÜFE'yi yenmesi** beklenen BIST hisselerinden oluşan, ayda bir gözden geçirilen düşük devirli bir portföy. İkincil ölçüt: XU100'e göre fazla getiri.
 **Tamamen ücretsiz:** TradingView public scanner, Yahoo Finance (yfinance), İş Yatırım mali tablo uç noktası, TCMB EVDS (ücretsiz anahtar, isteğe bağlı) ve FRED (anahtarsız) TÜFE verisi. Her şey GitHub Actions'ta çalışır.
 

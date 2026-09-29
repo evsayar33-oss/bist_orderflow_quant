@@ -11,13 +11,17 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.3.0"
+ENGINE_VERSION = "3.4.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
 HORIZON_MONTHS = 12                 # holding / label horizon
 BENCHMARK_PRIMARY = "CPI"           # win = real (CPI-deflated) return > 0
 BENCHMARK_SECONDARY = "XU100"       # reported: excess return vs index
+# V3.4 multi-benchmark hurdle: a pick must be expected to beat ALL of these (12m).
+HURDLE_COMPONENTS = ["cpi", "usd", "gold", "deposit"]
+US_INFLATION_PCT = 3.0              # "dolar enflasyonu": USD must keep its real value
+MIN_EDGE_OVER_HURDLE_PCT = 3.0      # expected 12m return must exceed the hurdle by this much
 
 # ---------------------------------------------------------------- paths
 DATA_DIR = os.environ.get("BOQ_DATA_DIR", "data")

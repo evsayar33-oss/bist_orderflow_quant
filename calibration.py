@@ -35,18 +35,22 @@ def _clustered(d: pd.DataFrame) -> Dict:
     per = d.groupby("tarih")["excess"].mean()
     m, se, t, n = newey_west(per, C.LABEL_HORIZON - 1)
     hit = d["real_ret"].dropna() if "real_ret" in d else pd.Series(dtype=float)
+    ba = pd.to_numeric(d["beat_all"], errors="coerce").dropna() if "beat_all" in d else pd.Series(dtype=float)
     return {"mean": float(m), "se": float(se) if np.isfinite(se) else 99.0, "n_dates": int(n), "n": int(len(d)),
             "p_beat_cpi": round(float((hit > 0).mean()), 4) if len(hit) else None,
-            "n_real": int(len(hit))}
+            "n_real": int(len(hit)),
+            "p_beat_all": round(float(ba.mean()), 4) if len(ba) else None, "n_all": int(len(ba))}
 
 
 def bucket_table(d: pd.DataFrame) -> List[Dict]:
     out = []
     for lo, hi in BUCKETS:
         sub = d[(d["composite_pct"] >= lo) & (d["composite_pct"] < hi)]
-        st = _clustered(sub) if len(sub) else {"mean": 0.0, "se": 99.0, "n_dates": 0, "n": 0, "p_beat_cpi": None, "n_real": 0}
+        st = _clustered(sub) if len(sub) else {"mean": 0.0, "se": 99.0, "n_dates": 0, "n": 0, "p_beat_cpi": None,
+                                                "n_real": 0, "p_beat_all": None, "n_all": 0}
         out.append({"lo": lo, "hi": hi, "mean_excess": st["mean"], "se": st["se"], "n_dates": st["n_dates"],
-                    "n": st["n"], "p_beat_cpi": st["p_beat_cpi"], "n_real": st["n_real"]})
+                    "n": st["n"], "p_beat_cpi": st["p_beat_cpi"], "n_real": st["n_real"],
+                    "p_beat_all": st["p_beat_all"], "n_all": st["n_all"]})
     return out
 
 
@@ -105,16 +109,16 @@ def calibrate(state: Dict, dataset: Optional[pd.DataFrame], research: Optional[D
         pr = pb.get((lo, hi))
         post = _combine({"mean": lb["mean_excess"], "se": lb["se"], "n_dates": lb["n_dates"]} if lb else None,
                         {"mean": pr["mean_excess"], "se": pr["se"], "n_dates": pr["n_dates"]} if pr else None)
-        pbeat = None
-        num = den = 0.0
-        for src in (lb, pr):
-            if src and src.get("p_beat_cpi") is not None and src.get("n_real", 0) > 0:
-                num += src["p_beat_cpi"] * src["n_real"]
-                den += src["n_real"]
-        if den:
-            pbeat = round(num / den, 4)
+        probs = {}
+        for key, nkey in (("p_beat_cpi", "n_real"), ("p_beat_all", "n_all")):
+            num = den = 0.0
+            for src in (lb, pr):
+                if src and src.get(key) is not None and src.get(nkey, 0) > 0:
+                    num += src[key] * src[nkey]
+                    den += src[nkey]
+            probs[key] = round(num / den, 4) if den else None
         table.append({"lo": lo, "hi": hi, "mean_excess": round(post["mean"], 3), "se": round(post["se"], 3),
-                      "p_beat_cpi": pbeat, "live_n_dates": lb["n_dates"] if lb else 0})
+                      **probs, "live_n_dates": lb["n_dates"] if lb else 0})
     best, best_lcb, rep, evidence = C.DEFAULT_PCT_CUTOFF, -np.inf, {}, False
     for c in C.PCT_CUTOFF_CANDIDATES:
         post = _combine(live_c.get(str(c)), prior.get("cutoffs", {}).get(str(c)))

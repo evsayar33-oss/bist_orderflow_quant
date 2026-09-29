@@ -32,6 +32,8 @@ import config as C  # noqa: E402
 import inflation as INF  # noqa: E402
 import market_data as MD  # noqa: E402
 import regime_model as RM  # noqa: E402
+import benchmarks as BM  # noqa: E402
+import telegram_report as TG  # noqa: E402
 from autonomy_guard import evaluate_guard  # noqa: E402
 from backtest_validator import enrich_lots, lot_metrics, nav_metrics  # noqa: E402
 from calibration import calibrate  # noqa: E402
@@ -46,7 +48,8 @@ from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_r
 
 FUND_COLS = ["ticker", "market_cap", "sector", "roe", "pe", "pb", "ps", "net_income", "revenue",
              "rev_growth", "op_margin", "debt_to_equity", "div_yield"]
-LABEL_COLS = ["fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_pct"]
+LABEL_COLS = ["fwd_1m", "fwd_3m", "fwd_ret", "real_ret", "xu_excess", "cpi_12m_pct",
+              "hurdle_ret", "b_usd", "b_gold", "b_deposit", "beat_all"]
 
 
 def send_telegram(message: str) -> bool:
@@ -68,7 +71,7 @@ def _fingerprint(df: pd.DataFrame) -> str:
     return f"{np.round(top['close'].to_numpy(float), 4).sum():.4f}|{np.round(top['volume'].to_numpy(float), 0).sum():.0f}"
 
 
-def resolve_labels(snaps: pd.DataFrame, wide, cpi, index_close) -> pd.DataFrame:
+def resolve_labels(snaps: pd.DataFrame, wide, cpi, index_close, bm=None, crate=None) -> pd.DataFrame:
     """Fill 1m/3m/12m labels of past monthly snapshots once the windows have elapsed."""
     if snaps.empty:
         return snaps
@@ -78,7 +81,7 @@ def resolve_labels(snaps: pd.DataFrame, wide, cpi, index_close) -> pd.DataFrame:
             s[c] = np.nan
     need = s[s["fwd_ret"].isna() | s["fwd_3m"].isna() | s["fwd_1m"].isna()]["tarih"].unique()
     if len(need) and wide is not None:
-        lab = forward_labels(wide, list(need), cpi, index_close)
+        lab = forward_labels(wide, list(need), cpi, index_close, bm, crate)
         if not lab.empty:
             lab = lab.rename(columns={c: f"{c}__new" for c in LABEL_COLS})
             s = s.merge(lab, on=["tarih", "ticker"], how="left")
@@ -91,6 +94,16 @@ def resolve_labels(snaps: pd.DataFrame, wide, cpi, index_close) -> pd.DataFrame:
         cr = INF.cpi_ratio_vec(cpi, s.loc[m, "tarih"], s.loc[m, "tarih"] + pd.DateOffset(months=12))
         s.loc[m, "real_ret"] = ((1 + s.loc[m, "fwd_ret"] / 100.0) / cr - 1.0) * 100.0
         s.loc[m, "cpi_12m_pct"] = (cr - 1.0) * 100.0
+    # multi-benchmark hurdle can also resolve later (CPI lag)
+    m2 = s["fwd_ret"].notna() & s["hurdle_ret"].isna()
+    if m2.any():
+        for d in s.loc[m2, "tarih"].unique():
+            w = BM.window_returns(bm, cpi, crate, d, pd.Timestamp(d) + pd.DateOffset(months=12))
+            if np.isfinite(w["hurdle"]):
+                mm = m2 & (s["tarih"] == d)
+                s.loc[mm, "hurdle_ret"] = w["hurdle"]
+                s.loc[mm, "b_usd"], s.loc[mm, "b_gold"], s.loc[mm, "b_deposit"] = w["usd"], w["gold"], w["deposit"]
+                s.loc[mm, "beat_all"] = (s.loc[mm, "fwd_ret"] > w["hurdle"]).astype(float)
     return s
 
 
@@ -107,7 +120,8 @@ def ic_stats(dataset: pd.DataFrame, target: str) -> dict:
     return {"n_dates": n, "ic_mean": round(m, 4), "t_nw": round(t, 2), "ic_recent": round(float(s.tail(6).mean()), 4)}
 
 
-def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=None):
+def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=None,
+                   bm=None, crate=None):
     """`as_of` = last COMPLETED session (used by intraday refresh runs: no partial bars)."""
     pf = state["portfolio"]
     intraday = as_of is not None
@@ -129,7 +143,7 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     if len(hist) < C.MIN_CROSS_SECTION:
         return {"status": "HISTORY_UNAVAILABLE", "n_hist": len(hist)}, []
     wide = wide_from_history(hist)
-    snaps = resolve_labels(snaps, wide, cpi, index_close)
+    snaps = resolve_labels(snaps, wide, cpi, index_close, bm, crate)
 
     dataset = snaps.dropna(subset=["fwd_ret"]) if not snaps.empty and "fwd_ret" in snaps else pd.DataFrame()
     run_learning(state, dataset, research)
@@ -153,7 +167,8 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
 
     sel = set(summ.get("holds", [])) | set(summ.get("buys", []))
     cols = ["ticker", "sector", "close_adj", "med_value_traded", "vol_ann_pct", "beta", "composite", "composite_pct",
-            "exp_real_12m", "p_beat_cpi", "regime_label", "model_version", "fund_break"] + \
+            "exp_real_12m", "exp_nominal_12m", "hurdle_12m", "exp_over_hurdle", "p_beat_cpi", "p_beat_all",
+            "regime_label", "model_version", "fund_break"] + \
         [f"f_{k}" for k in C.FACTORS] + [f"z_{k}" for k in C.FACTORS]
     rec = frame[[c for c in cols if c in frame.columns]].copy()
     rec["tarih"] = today
@@ -166,44 +181,9 @@ def monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, gu
     return {"status": "OK", **info, **summ, "exposure": round(exposure, 3)}, top.to_dict("records")
 
 
-def format_monthly(today, state, rev, top) -> str:
-    reg, g, m, cal_, inf = (state.get(k, {}) for k in ("regime", "autonomy_guard", "model", "calibration", "inflation"))
-    perf = state.get("performance", {})
-    L = [f"🏛️ <b>BIST REEL GETİRİ MOTORU V3 — AYLIK GÖZDEN GEÇİRME</b> | {today:%d.%m.%Y}",
-         f"🎯 Hedef: 12 ayda TÜFE'yi yenmek (ikincil: XU100)",
-         f"📉 TÜFE yıllık %{inf.get('yoy_pct')} | beklenen 12A %{inf.get('expected_12m_pct')} ({inf.get('source')})"
-         + (" ⚠️ VEKİL (USDTRY) — EVDS_API_KEY ekleyin" if inf.get("status") == "PROXY" else "")
-         + (" ⛔ TÜFE YOK: yeni alım yapılmadı" if inf.get("expected_12m_pct") is None else ""),
-         f"🧭 Rejim: <b>{reg.get('label')}</b> | P(risk-off) %{float(reg.get('p_risk_off') or 0) * 100:.0f} | "
-         f"piyasa 12A beklenti %{rev.get('market_12m', {}).get('mkt_12m_pct')}",
-         f"🛡️ Guard: {g.get('mode')} | maruziyet %{float(rev.get('exposure', 0)) * 100:.0f}",
-         f"🧠 Model: {escape(str(m.get('champion_version')))} | {escape(str(m.get('status')))}",
-         f"🎚️ Kalibrasyon: {cal_.get('status')} | alım eşiği p{cal_.get('pct_cutoff')} / tutma p{C.HOLD_PCT:.0f}"]
-    if rev.get("sells"):
-        L.append("🔻 <b>SAT (yarın açılış):</b> " + ", ".join(rev["sells"]))
-    if rev.get("holds"):
-        L.append("✅ <b>TUT:</b> " + ", ".join(rev["holds"]))
-    if top:
-        L.append("💎 <b>AL (yarın açılış):</b>")
-        tw = rev.get("target_weights", {})
-        for r in top:
-            pb = r.get("p_beat_cpi")
-            L.append(f"• <b>{escape(str(r['ticker']))}</b> | skor p{r['composite_pct']:.0f} | beklenen reel 12A "
-                     f"%{r['exp_real_12m']:+.1f}" + (f" | TÜFE'yi yenme olasılığı %{pb * 100:.0f}" if pb == pb and pb is not None else "")
-                     + f" | ağırlık %{tw.get(r['ticker'], 0) * 100:.1f}")
-    elif not rev.get("blocked"):
-        L.append("ℹ️ Bu ay yeni alım kriterlerini (beklenen reel getiri, likidite, sektör limiti) geçen hisse yok.")
-    L.append(f"💵 Hedef nakit: %{float(rev.get('cash_target', 0)) * 100:.0f}")
-    if perf.get("nav", {}).get("days"):
-        n = perf["nav"]
-        L.append(f"📊 Portföy: toplam %{n.get('total_return_pct')} | reel %{n.get('real_total_pct')} | "
-                 f"XU100 %{n.get('xu100_total_pct')} | maks. düşüş %{n.get('max_drawdown_pct')}")
-    return "\n".join(L)
-
-
 def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,
         cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series, cash_fn=INF.load_cash_rate,
-        refresh: bool = False) -> dict:
+        bench_fn=BM.download_benchmarks, refresh: bool = False) -> dict:
     real_run = today is None
     today = pd.Timestamp(today) if today is not None else cal.today_tr()
     refresh = bool(refresh)
@@ -233,7 +213,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     if snap.empty or not quality.get("ok"):
         state["last_run"] = {"date": str(today.date()), "status": f"DATA_BLOCKED:{quality.get('reason')}"}
         save_state(state)
-        send_telegram(f"🛑 BIST V3: veri kalitesi yetersiz ({escape(str(quality.get('reason')))}); bugün işlem yapılmadı.")
+        send_telegram(TG.blocked_report(today, str(quality.get("reason"))))
         return {"status": "DATA_BLOCKED"}
     fp = _fingerprint(snap)
     if refresh:
@@ -278,6 +258,14 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     crate, cr_meta = cash_fn()
     cash_y = INF.cash_yield_at(crate, today)
     state["cash_rate"] = {**cr_meta, "net_yield_pct": round(cash_y, 2)}
+    # benchmarks (USD, gold, BIST100) and the forward-looking multi-benchmark hurdle
+    try:
+        bm = bench_fn()
+    except Exception as exc:
+        print(f"⚠️ Kıyas serileri alınamadı ({exc}); USDTRY rejim serisinden kullanılıyor, altın yok.")
+        bm = BM.assemble(rser["fx"], None, rser["idx"]) if rser is not None else None
+    state["hurdles"] = BM.expected_hurdles(bm, cpi_stats, cash_y if len(crate) else None, as_of=as_of or today)
+    bench = {"bm": bm, "crate": crate}
     events, lots = [], []
     wts = pf_weights(pf)
     nav_df = load_nav()
@@ -302,11 +290,12 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
     review_month = (as_of or today).strftime("%Y-%m")
     if pf.get("last_rebalance_month") != review_month:
-        review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=as_of)
+        review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn, as_of=as_of,
+                                     bm=bm, crate=crate)
         state["last_rebalance"] = {"date": str((as_of or today).date()), "mode": "REFRESH" if refresh else "EOD", **{k: v for k, v in review.items() if k not in ("weights",)}}
 
-    lots_all = enrich_lots(load_trade_log(), cpi, index_close)
-    state["performance"] = {"nav": nav_metrics(nav_df, cpi), "lots": lot_metrics(lots_all),
+    lots_all = enrich_lots(load_trade_log(), cpi, index_close, bench)
+    state["performance"] = {"nav": nav_metrics(nav_df, cpi, bench), "lots": lot_metrics(lots_all),
                             "open_positions": {t: {"w": round(wts.get(t, 0), 4), "ret_pct": round((p["level"] - 1) * 100, 2),
                                                    "since": p["entry_date"]} for t, p in pf["positions"].items()}}
     state.pop("_no_inflation", None)
@@ -315,17 +304,15 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     save_state(state)
 
     if review and review.get("status") == "OK":
-        send_telegram(format_monthly(today, state, review, top))
+        send_telegram(TG.monthly_report(as_of or today, state, review, top))
     elif review:
-        send_telegram(f"⚠️ BIST V3 aylık gözden geçirme tamamlanamadı: {escape(str(review.get('status')))}. Yarın tekrar denenecek.")
+        send_telegram(f"⚠️ <b>BIST Reel Getiri</b>\nAylık gözden geçirme tamamlanamadı ({escape(str(review.get('status')))}). Bir sonraki çalışmada tekrar denenecek.")
         pf["last_rebalance_month"] = None
         save_state(state)
     elif events:
-        lines = [f"🔔 <b>BIST V3 portföy olayları</b> | {today:%d.%m.%Y}"]
-        for e in events[:15]:
-            extra = f" %{e['ret']:+.1f}" if "ret" in e else ""
-            lines.append(f"• {escape(str(e['ticker']))} — {e['type']}{extra}")
-        send_telegram("\n".join(lines))
+        nv = pd.to_numeric(nav_df["nav"], errors="coerce").dropna() if nav_df is not None and "nav" in nav_df else pd.Series(dtype=float)
+        day_ret = float((nv.iloc[-1] / nv.iloc[-2] - 1) * 100) if len(nv) >= 2 else None
+        send_telegram(TG.events_report(today, events, state, day_ret))
     print(f"✅ {today.date()} [{'YENİLEME' if refresh else 'EOD'}] | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
     return {"status": "OK", "state": state, "events": events, "review": review}
 

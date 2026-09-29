@@ -106,6 +106,8 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) 
             pf["positions"][t] = {"value": amt * (1 - cost), "cost_basis": amt, "entry_date": ds,
                                   "entry_px": float(b_open[t]), "level": 1.0, "peak": 1.0, "missing": 0,
                                   "entry_pct": o.get("entry_pct"), "entry_exp_real": o.get("entry_exp_real"),
+                                  "entry_exp_nominal": o.get("entry_exp_nominal"), "entry_hurdle": o.get("entry_hurdle"),
+                                  "entry_p_beat_all": o.get("entry_p_beat_all"),
                                   "bought_today": True}
             events.append({"ticker": t, "type": "BUY", "w": round(o["target_w"], 4)})
     pf["pending"] = remaining

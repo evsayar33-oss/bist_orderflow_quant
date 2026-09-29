@@ -28,6 +28,7 @@ import fundamentals_hist as FH
 import inflation as INF
 import market_data as MD
 import regime_model as RM
+import benchmarks as BM
 from backtest_validator import enrich_lots, lot_metrics, nav_metrics
 from calibration import add_excess, bucket_table, calibrate, cutoff_stats, market_stats
 from factors import build_frame, composite, price_factors_at, wide_from_history
@@ -85,7 +86,8 @@ def cpi_stats_at(cpi: pd.Series, date, proxy: bool = False) -> Dict:
 
 def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         data: Optional[Dict] = None, regime_df: Optional[pd.DataFrame] = None,
-        cpi: Optional[pd.Series] = None, pit: Optional[pd.DataFrame] = None) -> Dict:
+        cpi: Optional[pd.Series] = None, pit: Optional[pd.DataFrame] = None,
+        bm: Optional[pd.DataFrame] = None, crate: Optional[pd.Series] = None) -> Dict:
     state = load_state()
     sector_map = state.get("sector_map", {})
     data = data if data is not None else MD.download_history(UNIVERSE, start, end, min_rows=300)
@@ -103,7 +105,16 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         cpi, cpi_meta = INF.load_cpi_or_proxy(fx=rdf["fx"] if rdf is not None else None)
         if cpi_meta.get("status") == "PROXY":
             print("⚠️ Resmî TÜFE alınamadı; USDTRY vekili kullanılıyor (EVDS_API_KEY ekleyin).")
-    crate, cr_meta = INF.load_cash_rate()
+    cr_meta = {"source": "given"}
+    if crate is None:
+        crate, cr_meta = INF.load_cash_rate()
+    if bm is None:
+        try:
+            bm = BM.download_benchmarks(start=str(int(start[:4]) - 1) + "-01-01", end=end)
+        except Exception as exc:
+            print(f"⚠️ Kıyas serileri alınamadı ({exc}); USDTRY rejim serisinden, altın yok.")
+            bm = BM.assemble(rdf["fx"], None, rdf["idx"]) if rdf is not None else None
+    bench = {"bm": bm, "crate": crate}
     fund_cov = 0.0
     if pit is None:
         try:
@@ -134,7 +145,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     if len(dates) < MIN_TRAIN_MONTHS + 14:
         raise RuntimeError(f"Walk-forward için yetersiz ay: {len(dates)}")
     Z = pd.concat(zrows, ignore_index=True)
-    lab = forward_labels(wide, dates, cpi, index_close)
+    lab = forward_labels(wide, dates, cpi, index_close, bm, crate)
     ds = Z.merge(lab, on=["tarih", "ticker"], how="inner")
     hand = get_prior(None)
 
@@ -187,7 +198,8 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
             pf_, fi, cs = inputs[day]
             st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
                   "calibration": cal_state["calibration"], "regime": reg,
-                  "_no_inflation": cs.get("expected_12m_pct") is None}
+                  "_no_inflation": cs.get("expected_12m_pct") is None,
+                  "hurdles": BM.expected_hurdles(bm, cs, INF.cash_yield_at(crate, day) if len(crate) else None, as_of=day)}
             frame, info = score_universe(pf_, fi, st, cs, sector_map)
             if frame.empty:
                 continue
@@ -201,7 +213,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": sum(pf_weights(pf).values()), "xu100": xu})
 
     nav_df = pd.DataFrame(nav_rows)
-    lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close)
+    lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close, bench)
     # open positions at the end are marked (not realised) -> reported separately
     open_now = {t: round((p["level"] - 1) * 100, 2) for t, p in pf["positions"].items()}
 
@@ -225,11 +237,17 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                                  "cpi_pct": round(float((c - 1) * 100), 2) if np.isfinite(c) else None,
                                  "real_pct": round(float(((1 + nom / 100) / c - 1) * 100), 2) if np.isfinite(c) else None,
                                  "xu100_pct": round(float(xr), 2) if np.isfinite(xr) else None}
+            w = BM.window_returns(bm, cpi, crate, g.index[0], g.index[-1])
+            per_year[int(yr)].update({"usd_pct": None if not np.isfinite(w["usd"]) else round(float(w["usd"]), 2),
+                                      "gold_pct": None if not np.isfinite(w["gold"]) else round(float(w["gold"]), 2),
+                                      "deposit_pct": None if not np.isfinite(w["deposit"]) else round(float(w["deposit"]), 2),
+                                      "beat_all": None if not np.isfinite(w["hurdle"]) else bool(nom > w["hurdle"])})
 
     prior = build_research_prior(ds, X, oos_l)
     report = {
         "generated_at": datetime.utcnow().isoformat() + "Z", "engine_version": C.ENGINE_VERSION,
-        "objective": {"horizon_months": C.HORIZON_MONTHS, "primary": "beat CPI (real return > 0)",
+        "objective": {"horizon_months": C.HORIZON_MONTHS,
+                      "primary": "beat ALL of " + ", ".join(C.HURDLE_COMPONENTS) + f" (USD incl. {C.US_INFLATION_PCT}% US inflation)",
                       "secondary": "excess vs XU100"},
         "period": f"{str(pd.Timestamp(dates[first_test_i]).date())}..{str(pd.Timestamp(idx[-1]).date())}",
         "universe_downloaded": len(data), "rebalance_months": len(dates),
@@ -240,7 +258,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                   "min_expected_real_pct": C.MIN_EXPECTED_REAL_PCT,
                   "drawdown_flag_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "drawdown_flag_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT,
                   "hard_stop_entry_pct": C.HARD_STOP_FROM_ENTRY_PCT, "exposure_by_mode": C.EXPOSURE_BY_MODE},
-        "portfolio": nav_metrics(nav_df, cpi),
+        "portfolio": nav_metrics(nav_df, cpi, bench),
         "closed_lots": lot_metrics(lots_df),
         "open_positions_end": open_now,
         "oos_composite_ic_12m": {"mean": round(float(m), 4), "t_nw": round(float(t), 2), "n_months": int(n)},

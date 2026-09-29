@@ -49,8 +49,23 @@ def synthetic_world(n=80, start="2019-01-02", end="2026-06-30", seed=5):
     months = pd.date_range("2016-01-01", "2026-12-01", freq="MS")
     cpi = pd.Series(100 * np.exp(np.cumsum(np.full(len(months), 0.02) + rng.normal(0, 0.004, len(months)))), index=months)
     sectors = [f"S{j % 7}" for j in range(n)]
+    gold_usd = pd.Series(1300 * np.exp(np.cumsum(rng.normal(0.0003, 0.009, T))), index=days)
+    crate = pd.Series(np.full(len(months), 25.0), index=months)
     return {"days": days, "hist": hist, "idx": idx, "fx": fx, "cpi": cpi, "q": q, "tick": tick,
-            "sectors": sectors, "rng": rng}
+            "sectors": sectors, "rng": rng, "gold_usd": gold_usd, "crate": crate}
+
+
+def bench_of(W):
+    import benchmarks as BMk
+    return BMk.assemble(W["fx"], W["gold_usd"], W["idx"])
+
+
+def _run(W, **kw):
+    """main.run with every external source replaced by synthetic data."""
+    import main as M
+    kw.setdefault("bench_fn", lambda: bench_of(W))
+    kw.setdefault("cash_fn", lambda: (W["crate"], {"source": "synthetic"}))
+    return M.run(**kw)
 
 
 def snapshot_for(W, d, split=None):
@@ -150,20 +165,20 @@ def inflation_gate_check(W) -> dict:
 
     def no_regime():
         raise RuntimeError("offline")
-    r1 = M.run(today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
+    r1 = _run(W, today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
                cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
     st1 = SM.load_state()
     blocked = r1["review"] is not None and not st1["portfolio"]["pending"] and \
         st1["last_rebalance"].get("expected_inflation_12m") is None
     cur["d"] = days[1]
     last = pd.Timestamp(days[1]) - pd.DateOffset(months=1)
-    r2 = M.run(today=days[1], fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
+    r2 = _run(W, today=days[1], fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
                cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
     st2 = SM.load_state()
     redone = r2["review"] is not None and r2["review"].get("status") == "OK" and \
         st2["last_rebalance"].get("expected_inflation_12m") is not None
     # proxy path: CPI unavailable but FX series present
-    r3 = M.run(today=pd.Timestamp(cal.add_sessions(days[1], 1)), fetch=lambda st: (snapshot_for(W, cal.add_sessions(days[1], 1)), {}),
+    r3 = _run(W, today=pd.Timestamp(cal.add_sessions(days[1], 1)), fetch=lambda st: (snapshot_for(W, cal.add_sessions(days[1], 1)), {}),
                hist_fn=hist_fn, regime_fn=lambda: reg_df, cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
     st3 = SM.load_state()
     proxy = st3["inflation"].get("status") == "PROXY" and st3["inflation"].get("expected_12m_pct") is not None
@@ -172,11 +187,11 @@ def inflation_gate_check(W) -> dict:
             os.remove(f)
     # intraday REFRESH: ungated review (no CPI) is redone during the session without trading
     cur["d"] = days[0]
-    M.run(today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
+    _run(W, today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
           cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
     n_nav = len(SM.load_nav())
     cur["d"] = days[1]
-    rr = M.run(today=days[1], refresh=True, fetch=fetch, hist_fn=hist_fn,
+    rr = _run(W, today=days[1], refresh=True, fetch=fetch, hist_fn=hist_fn,
                regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
                cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
     str_ = SM.load_state()
@@ -188,6 +203,16 @@ def inflation_gate_check(W) -> dict:
             os.remove(f)
     return {"no_cpi_blocks_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
             "intraday_refresh": bool(refresh_ok)}
+
+
+def _tg_ok(st) -> bool:
+    import telegram_report as TG
+    rev = {"target_weights": {"AAA": 0.1}, "sells": ["BBB"], "sell_reasons": {"BBB": "RANK_EXIT"}, "holds": ["CCC"]}
+    msg = TG.monthly_report(pd.Timestamp("2026-10-01"), st, rev, [{"ticker": "AAA", "exp_nominal_12m": 55.2, "p_beat_all": 0.61}])
+    ev = TG.events_report(pd.Timestamp("2026-10-02"), [{"ticker": "AAA", "type": "BUY", "w": 0.1},
+                                                       {"ticker": "BBB", "type": "SELL_RANK_EXIT", "ret": 12.3}], st, 0.8)
+    print("\n--- TELEGRAM (aylık) ---\n" + msg + "\n--- TELEGRAM (olay) ---\n" + ev + "\n---")
+    return "Çıta" in msg or "çıta" in msg
 
 
 def run_self_test() -> bool:
@@ -218,12 +243,11 @@ def run_self_test() -> bool:
     statuses, reviews = [], 0
     for d in live_days:
         cur["d"] = d
-        r = M.run(today=d, fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn,
-                  cash_fn=lambda: (pd.Series([30.0], index=[pd.Timestamp("2015-01-01")]), {"source": "synthetic"}))
+        r = _run(W, today=d, fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn)
         statuses.append(r["status"])
         reviews += int(bool(r.get("review")))
     # stale detection: re-run same data on next calendar session
-    r2 = M.run(today=cal.add_sessions(live_days[-1], 1), fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn)
+    r2 = _run(W, today=cal.add_sessions(live_days[-1], 1), fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn)
 
     from state_manager import load_monthly_snapshots, load_nav, load_state, load_trade_log
     st, snaps, nav, tl = load_state(), load_monthly_snapshots(), load_nav(), load_trade_log()
@@ -232,7 +256,8 @@ def run_self_test() -> bool:
     # small walk-forward backtest on the same synthetic history (no fundamentals history)
     import backtest_optimizer as B
     sub = {t: g[g.index <= pd.Timestamp("2026-05-29")] for t, g in list(W["hist"].items())[:70]}
-    bt = B.run("2019-01-01", None, save=False, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame())
+    bt = B.run("2019-01-01", None, save=False, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame(),
+               bm=bench_of(W), crate=W["crate"])
     rep = bt["report"]
 
     checks = {
@@ -246,6 +271,10 @@ def run_self_test() -> bool:
         "guard_self_test": AG.run_self_test()["passed"],
         "real_return_reported": st["performance"]["nav"].get("real_total_pct") is not None,
         "backtest_ran": rep["portfolio"].get("days", 0) > 200,
+        "hurdles_computed": (st.get("hurdles") or {}).get("hurdle") is not None and (st.get("hurdles") or {}).get("gold") is not None,
+        "beat_all_labels": "beat_all" in snaps and snaps["beat_all"].notna().sum() > 0,
+        "multi_bench_report": "rolling12m_beat" in rep["portfolio"] and "beat_all" in next(iter(rep["per_year"].values())),
+        "telegram_monthly_ok": _tg_ok(st),
         **{f"unit_{k}": bool(v) for k, v in u.items()},
         **{f"gate_{k}": v for k, v in gate.items()},
     }

@@ -60,19 +60,28 @@ def score_universe(price_f: pd.DataFrame, fund_inputs: Optional[pd.DataFrame], s
     mk = market_expectation(cal, reg.get("label"), reg.get("exp_mkt_12m_pct"))
     infl = cpi_stats.get("expected_12m_pct")
     frame["exp_real_12m"] = np.nan
+    frame["exp_nominal_12m"] = np.nan
     if infl is not None and mk["mkt_12m_pct"] is not None:
         if mk.get("basis") == "real":
             # E[real] = E[universe real | regime] + E[excess | score] - costs
-            frame["exp_real_12m"] = mk["mkt_12m_pct"] + frame["exp_excess_12m"] - C.COST_ROUND_TRIP_PCT
+            real = mk["mkt_12m_pct"] + frame["exp_excess_12m"]
+            frame["exp_nominal_12m"] = ((1 + real / 100.0) * (1 + infl / 100.0) - 1.0) * 100.0 - C.COST_ROUND_TRIP_PCT
         else:
-            nom = mk["mkt_12m_pct"] + frame["exp_excess_12m"]
-            frame["exp_real_12m"] = ((1 + nom / 100.0) / (1 + infl / 100.0) - 1.0) * 100.0 - C.COST_ROUND_TRIP_PCT
+            frame["exp_nominal_12m"] = mk["mkt_12m_pct"] + frame["exp_excess_12m"] - C.COST_ROUND_TRIP_PCT
+        frame["exp_real_12m"] = ((1 + frame["exp_nominal_12m"] / 100.0) / (1 + infl / 100.0) - 1.0) * 100.0
+    # multi-benchmark hurdle (CPI, USD, gold, deposit): expected margin over the highest one
+    hz = state.get("hurdles", {}) or {}
+    hurdle = hz.get("hurdle")
+    frame["hurdle_12m"] = hurdle if hurdle is not None else np.nan
+    frame["exp_over_hurdle"] = frame["exp_nominal_12m"] - hurdle if hurdle is not None else np.nan
+    frame["p_beat_all"] = bucket_lookup(frame["composite_pct"], table, "p_beat_all") if calibrated else np.nan
     frame["fund_break"] = fund_break(frame)
     frame["regime_label"] = reg.get("label", "UNKNOWN")
     info = {"weights": {k: round(v, 4) for k, v in w.items()}, "model_version": version,
             "coverage": {k: round(v, 3) for k, v in cov.items()}, "calibrated": calibrated,
             "market_12m": mk, "expected_inflation_12m": infl, "n_scored": int(len(frame)),
-            "gate": "real_return" if calibrated and infl is not None else ("rank_only_uncalibrated" if infl is not None else "blocked_no_inflation")}
+            "hurdles": hz,
+            "gate": ("multi_hurdle" if hurdle is not None else "real_return") if calibrated and infl is not None else ("rank_only_uncalibrated" if infl is not None else "blocked_no_inflation")}
     return frame, info
 
 
@@ -82,6 +91,9 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
     cal = state.get("calibration", {})
     cutoff = float(cal.get("pct_cutoff", C.DEFAULT_PCT_CUTOFF))
     f = frame.set_index("ticker")
+    for c in ("exp_over_hurdle", "exp_real_12m", "exp_nominal_12m", "p_beat_all", "hurdle_12m"):
+        if c not in f.columns:
+            f[c] = np.nan
     cur = list(pf["positions"].keys())
     orders, holds, sells = [], [], []
     if block:
@@ -118,6 +130,9 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
     no_inflation = bool(state.get("_no_inflation", False))
     if no_inflation:
         elig &= False          # inflation unknown -> cannot judge "beats CPI" -> no new buys
+    elif calibrated and f["exp_over_hurdle"].notna().any():
+        # must be expected to beat CPI, USD (+US inflation), gold and TL deposit by a margin
+        elig &= f["exp_over_hurdle"] >= C.MIN_EDGE_OVER_HURDLE_PCT
     elif calibrated and has_real:
         elig &= f["exp_real_12m"] >= C.MIN_EXPECTED_REAL_PCT
     # else: CPI known but no calibration yet (early backtest years) -> rank-only selection
@@ -125,7 +140,8 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         chg = today_change.reindex(f.index)
         elig &= ~(chg >= C.LIMIT_MOVE_PCT)
     cand = f[elig].copy()
-    sort_col = "exp_real_12m" if cand["exp_real_12m"].notna().any() else "composite"
+    sort_col = "exp_over_hurdle" if cand["exp_over_hurdle"].notna().any() else (
+        "exp_real_12m" if cand["exp_real_12m"].notna().any() else "composite")
     cand = cand.sort_values([sort_col, "composite"], ascending=False)
     buys = []
     for t, r in cand.iterrows():
@@ -166,12 +182,15 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         r = f.loc[t]
         orders.append({"ticker": t, "action": "BUY", "reason": "NEW_ENTRY", "target_w": round(tw.get(t, 0.0), 5),
                        "entry_pct": round(float(r["composite_pct"]), 2),
-                       "entry_exp_real": None if pd.isna(r["exp_real_12m"]) else round(float(r["exp_real_12m"]), 2)})
+                       "entry_exp_real": None if pd.isna(r["exp_real_12m"]) else round(float(r["exp_real_12m"]), 2),
+                       "entry_exp_nominal": None if pd.isna(r["exp_nominal_12m"]) else round(float(r["exp_nominal_12m"]), 2),
+                       "entry_hurdle": None if pd.isna(r["hurdle_12m"]) else round(float(r["hurdle_12m"]), 2),
+                       "entry_p_beat_all": None if pd.isna(r["p_beat_all"]) else round(float(r["p_beat_all"]), 3)})
     for t in holds:
         if t in tw and abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
             # only trim overweights when exposure is reduced; never add to a position in a blocked state
             orders.append({"ticker": t, "action": "REBAL", "reason": "WEIGHT_DRIFT", "target_w": round(tw[t], 5)})
-    summary = {"cutoff": cutoff, "n_target": n_target, "no_inflation_block": no_inflation, "holds": holds, "sells": [s for s, _ in sells],
+    summary = {"cutoff": cutoff, "n_target": n_target, "no_inflation_block": no_inflation, "holds": holds, "sells": [s for s, _ in sells], "sell_reasons": {t: w for t, w in sells},
                "buys": buys, "target_weights": {k: round(v, 4) for k, v in tw.items()},
                "cash_target": round(1.0 - sum(tw.values()), 4)}
     return orders, summary
