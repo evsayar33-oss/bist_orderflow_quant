@@ -1,5 +1,5 @@
 {
-  "version": "3.3.0",
+  "version": "3.5.0",
   "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3",
   "objective": {
     "horizon_months": 12,
@@ -310,11 +310,11 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0044,
-      "NEUTRAL": 0.9956,
+      "RISK_OFF": 0.004,
+      "NEUTRAL": 0.996,
       "RISK_ON": 0.0
     },
-    "p_risk_off": 0.0044,
+    "p_risk_off": 0.004,
     "degraded": false,
     "params": {
       "K": 3,
@@ -991,7 +991,11 @@
     "EUYO": "Finance",
     "ACSEL": "Process Industries",
     "TLMAN": "Transportation",
-    "CONSE": "Utilities"
+    "CONSE": "Utilities",
+    "KONTR": "Utilities",
+    "OZGYO": "Finance",
+    "GOZDE": "Finance",
+    "GENTS": "Producer Manufacturing"
   },
   "performance": {
     "nav": {
@@ -1072,8 +1076,8 @@
     "status": "OK",
     "fingerprint": "6596.9000|6510474889",
     "mode": "REFRESH",
-    "monthly_review": true,
-    "utc": "2026-09-29T09:24:31.715612Z"
+    "monthly_review": false,
+    "utc": "2026-09-29T10:34:09.755888Z"
   },
   "data_quality": {
     "ok": true,
@@ -1106,5 +1110,13 @@
     "source": "evds",
     "last_month": "2026-09-01",
     "net_yield_pct": 29.75
+  },
+  "hurdles": {
+    "cpi": 29.69,
+    "usd": 22.69,
+    "gold": 22.69,
+    "deposit": 29.75,
+    "hurdle": 29.75,
+    "binding": "deposit"
   }
 }
