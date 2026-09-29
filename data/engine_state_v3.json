@@ -1,5 +1,5 @@
 {
-  "version": "3.6.0",
+  "version": "3.6.1",
   "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3",
   "objective": {
     "horizon_months": 12,
@@ -11,92 +11,10 @@
     "positions": {},
     "pending": [
       {
-        "ticker": "GLRYH",
+        "ticker": "ALTIN",
         "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.05634,
-        "entry_pct": 100.0,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "ISFIN",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.12825,
-        "entry_pct": 99.76,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "MNDRS",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.0795,
-        "entry_pct": 99.51,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "VAKFN",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.1001,
-        "entry_pct": 97.57,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "NTHOL",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.07302,
-        "entry_pct": 97.08,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "GOLTS",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.10953,
-        "entry_pct": 96.59,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "INDES",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.06893,
-        "entry_pct": 96.35,
-        "entry_exp_real": 37.08
-      },
-      {
-        "ticker": "KCHOL",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.08396,
-        "entry_pct": 94.16,
-        "entry_exp_real": 29.01
-      },
-      {
-        "ticker": "BESLR",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.07125,
-        "entry_pct": 92.94,
-        "entry_exp_real": 29.01
-      },
-      {
-        "ticker": "PCILT",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.0544,
-        "entry_pct": 88.81,
-        "entry_exp_real": 26.14
-      },
-      {
-        "ticker": "AGHOL",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.07373,
-        "entry_pct": 87.83,
-        "entry_exp_real": 26.14
+        "reason": "ALLOCATION",
+        "target_w": 0.89941
       }
     ],
     "last_rebalance_month": "2026-09",
@@ -141,56 +59,56 @@
       "real_growth": -0.14398
     },
     "regime_weights": {
-      "NEUTRAL": {
-        "mom_12_1": -0.01457,
-        "high_52w": 0.0607,
-        "trend_consistency": -0.05582,
-        "low_vol": 0.06197,
-        "low_beta": -0.03529,
-        "dd_resilience": 0.11428,
-        "liquidity": -0.12002,
-        "roe": -0.01632,
-        "earnings_yield": -0.00823,
-        "book_yield": 0.13652,
-        "sales_yield": 0.08276,
-        "op_margin": 0.06504,
-        "low_leverage": -0.10109,
-        "div_yield": 0.0,
-        "real_growth": -0.12739
-      },
       "RISK_ON": {
-        "mom_12_1": 0.04088,
-        "high_52w": 0.08055,
-        "trend_consistency": 0.03423,
-        "low_vol": -0.09146,
-        "low_beta": 0.00917,
-        "dd_resilience": 0.02118,
-        "liquidity": -0.25266,
-        "roe": -0.08617,
-        "earnings_yield": -0.01406,
-        "book_yield": 0.11987,
-        "sales_yield": 0.08403,
-        "op_margin": 0.04342,
-        "low_leverage": -0.01946,
+        "mom_12_1": 0.04666,
+        "high_52w": 0.0864,
+        "trend_consistency": 0.03542,
+        "low_vol": -0.09125,
+        "low_beta": 0.00645,
+        "dd_resilience": 0.01346,
+        "liquidity": -0.25326,
+        "roe": -0.08187,
+        "earnings_yield": -0.00341,
+        "book_yield": 0.12076,
+        "sales_yield": 0.07896,
+        "op_margin": 0.04842,
+        "low_leverage": -0.03419,
         "div_yield": 0.0,
-        "real_growth": -0.10286
+        "real_growth": -0.0995
       },
       "RISK_OFF": {
-        "mom_12_1": -0.06019,
-        "high_52w": 0.08938,
-        "trend_consistency": -0.00638,
-        "low_vol": 0.04846,
-        "low_beta": -0.03762,
-        "dd_resilience": 0.14103,
-        "liquidity": -0.20532,
-        "roe": -0.02734,
-        "earnings_yield": -0.02887,
-        "book_yield": 0.12287,
-        "sales_yield": 0.09585,
-        "op_margin": -0.00932,
-        "low_leverage": 0.03321,
+        "mom_12_1": -0.0505,
+        "high_52w": 0.09463,
+        "trend_consistency": -0.01163,
+        "low_vol": 0.05158,
+        "low_beta": -0.04263,
+        "dd_resilience": 0.14116,
+        "liquidity": -0.20799,
+        "roe": -0.02641,
+        "earnings_yield": -0.00496,
+        "book_yield": 0.11302,
+        "sales_yield": 0.10555,
+        "op_margin": 0.00972,
+        "low_leverage": 0.03302,
         "div_yield": 0.0,
-        "real_growth": -0.09416
+        "real_growth": -0.10719
+      },
+      "NEUTRAL": {
+        "mom_12_1": -0.02551,
+        "high_52w": 0.06645,
+        "trend_consistency": -0.04988,
+        "low_vol": 0.05118,
+        "low_beta": -0.05132,
+        "dd_resilience": 0.1183,
+        "liquidity": -0.12431,
+        "roe": 0.00234,
+        "earnings_yield": 0.00402,
+        "book_yield": 0.12167,
+        "sales_yield": 0.09034,
+        "op_margin": 0.0852,
+        "low_leverage": -0.09306,
+        "div_yield": 0.0,
+        "real_growth": -0.11641
       }
     },
     "prior_source": "research:2026-09-29",
@@ -209,99 +127,105 @@
     "previous_version": "prior-research-2026-09-28"
   },
   "calibration": {
-    "pct_cutoff": 85.0,
+    "pct_cutoff": 90.0,
     "bucket_table": [
       {
         "lo": 0.0,
         "hi": 50.0,
-        "mean_excess": -1.536,
-        "se": 3.245,
-        "p_beat_cpi": 0.4889,
+        "mean_excess": -1.294,
+        "se": 3.09,
+        "p_beat_cpi": 0.4905,
+        "p_beat_all": 0.1601,
         "live_n_dates": 0
       },
       {
         "lo": 50.0,
         "hi": 70.0,
-        "mean_excess": -2.607,
-        "se": 5.264,
-        "p_beat_cpi": 0.4919,
+        "mean_excess": -1.934,
+        "se": 4.915,
+        "p_beat_cpi": 0.4967,
+        "p_beat_all": 0.1457,
         "live_n_dates": 0
       },
       {
         "lo": 70.0,
         "hi": 80.0,
-        "mean_excess": 1.4,
-        "se": 5.082,
-        "p_beat_cpi": 0.5076,
+        "mean_excess": -1.254,
+        "se": 3.802,
+        "p_beat_cpi": 0.5041,
+        "p_beat_all": 0.1375,
         "live_n_dates": 0
       },
       {
         "lo": 80.0,
         "hi": 90.0,
-        "mean_excess": 2.091,
-        "se": 4.039,
-        "p_beat_cpi": 0.5305,
+        "mean_excess": -1.909,
+        "se": 5.398,
+        "p_beat_cpi": 0.5162,
+        "p_beat_all": 0.1572,
         "live_n_dates": 0
       },
       {
         "lo": 90.0,
         "hi": 95.0,
-        "mean_excess": 4.958,
-        "se": 7.209,
-        "p_beat_cpi": 0.5775,
+        "mean_excess": 9.762,
+        "se": 9.329,
+        "p_beat_cpi": 0.618,
+        "p_beat_all": 0.184,
         "live_n_dates": 0
       },
       {
         "lo": 95.0,
         "hi": 100.01,
-        "mean_excess": 13.031,
-        "se": 11.766,
-        "p_beat_cpi": 0.604,
+        "mean_excess": 15.508,
+        "se": 5.491,
+        "p_beat_cpi": 0.596,
+        "p_beat_all": 0.1848,
         "live_n_dates": 0
       }
     ],
     "status": "CALIBRATED",
     "cutoffs": {
       "75.0": {
-        "mean_excess": 3.965,
-        "se": 4.512,
-        "lcb": -1.817
+        "mean_excess": 5.474,
+        "se": 3.883,
+        "lcb": 0.497
       },
       "80.0": {
-        "mean_excess": 5.66,
-        "se": 5.236,
-        "lcb": -1.051
+        "mean_excess": 5.631,
+        "se": 4.039,
+        "lcb": 0.454
       },
       "85.0": {
-        "mean_excess": 7.581,
-        "se": 6.404,
-        "lcb": -0.626
+        "mean_excess": 9.778,
+        "se": 5.457,
+        "lcb": 2.783
       },
       "90.0": {
-        "mean_excess": 9.272,
-        "se": 8.851,
-        "lcb": -2.071
+        "mean_excess": 12.731,
+        "se": 6.327,
+        "lcb": 4.623
       }
     },
     "market": {
-      "NEUTRAL": {
-        "mean": 24.547,
-        "se": 14.847,
-        "basis": "real"
-      },
       "RISK_ON": {
-        "mean": 17.824,
-        "se": 10.312,
+        "mean": 18.016,
+        "se": 10.282,
         "basis": "real"
       },
       "all": {
-        "mean": 18.961,
-        "se": 15.561,
+        "mean": 19.162,
+        "se": 15.635,
+        "basis": "real"
+      },
+      "NEUTRAL": {
+        "mean": 24.577,
+        "se": 14.817,
         "basis": "real"
       },
       "RISK_OFF": {
-        "mean": 14.328,
-        "se": 22.29,
+        "mean": 14.707,
+        "se": 22.61,
         "basis": "real"
       }
     },
@@ -310,11 +234,11 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.002,
-      "NEUTRAL": 0.998,
+      "RISK_OFF": 0.0026,
+      "NEUTRAL": 0.9974,
       "RISK_ON": 0.0
     },
-    "p_risk_off": 0.002,
+    "p_risk_off": 0.0026,
     "degraded": false,
     "params": {
       "K": 3,
@@ -1010,6 +934,8 @@
   "last_rebalance": {
     "date": "2026-09-28",
     "mode": "REFRESH",
+    "engine_version": "3.6.1",
+    "hurdle_mode": "sum",
     "status": "OK",
     "model_version": "prior-research-2026-09-29+NEUTRAL",
     "coverage": {
@@ -1020,56 +946,49 @@
       "low_beta": 1.0,
       "dd_resilience": 1.0,
       "liquidity": 1.0,
-      "roe": 0.971,
-      "earnings_yield": 0.976,
+      "roe": 0.973,
+      "earnings_yield": 0.978,
       "book_yield": 0.99,
-      "sales_yield": 0.976,
-      "op_margin": 0.968,
+      "sales_yield": 0.978,
+      "op_margin": 0.971,
       "low_leverage": 0.99,
       "div_yield": 1.0,
-      "real_growth": 0.961
+      "real_growth": 0.964
     },
     "calibrated": true,
     "market_12m": {
-      "mkt_12m_pct": 24.547,
+      "mkt_12m_pct": 24.577,
       "source": "calibrated_regime",
       "basis": "real"
     },
     "expected_inflation_12m": 29.69,
     "n_scored": 411,
-    "gate": "real_return",
+    "hurdles": {
+      "cpi": 29.69,
+      "usd": 22.69,
+      "gold": 22.69,
+      "deposit": 29.75,
+      "hurdle": 107.82,
+      "floor": 29.75,
+      "binding": "deposit",
+      "mode": "sum",
+      "edge": 3.0
+    },
+    "gate": "multi_hurdle",
     "cutoff": 85.0,
-    "n_target": 12,
+    "n_target": 0,
     "no_inflation_block": false,
     "holds": [],
     "sells": [],
-    "buys": [
-      "GLRYH",
-      "ISFIN",
-      "MNDRS",
-      "VAKFN",
-      "NTHOL",
-      "GOLTS",
-      "INDES",
-      "KCHOL",
-      "BESLR",
-      "PCILT",
-      "AGHOL"
-    ],
+    "sell_reasons": {},
+    "buys": [],
     "target_weights": {
-      "GLRYH": 0.0563,
-      "ISFIN": 0.1282,
-      "MNDRS": 0.0795,
-      "VAKFN": 0.1001,
-      "NTHOL": 0.073,
-      "GOLTS": 0.1095,
-      "INDES": 0.0689,
-      "KCHOL": 0.084,
-      "BESLR": 0.0713,
-      "PCILT": 0.0544,
-      "AGHOL": 0.0737
+      "ALTIN": 0.8994
     },
-    "cash_target": 0.101,
+    "cash_target": 0.1006,
+    "strategy": "n8_b85_iv_rank_dual",
+    "equity_frac": 0.0,
+    "gold_w": 0.899,
     "exposure": 0.899
   },
   "last_run": {
@@ -1077,15 +996,15 @@
     "status": "OK",
     "fingerprint": "6596.9000|6510474889",
     "mode": "REFRESH",
-    "monthly_review": false,
-    "utc": "2026-09-29T11:58:21.855395Z"
+    "monthly_review": true,
+    "utc": "2026-09-29T12:35:34.159688Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.4,
+    "score": 92.5,
     "rows": 450,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1262,
+    "recommended_missing_rate": 0.1249,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1122,5 +1041,16 @@
     "binding": "deposit",
     "mode": "sum",
     "edge": 3.0
+  },
+  "active_strategy": {
+    "name": "n8_b85_iv_rank_dual",
+    "n_positions": 8,
+    "buy_pct": 85.0,
+    "hold_pct": 60.0,
+    "weighting": "inv_vol",
+    "gate": "rank",
+    "overlay": "dual",
+    "equity_frac": 0.0,
+    "gold_w": 1.0
   }
 }
