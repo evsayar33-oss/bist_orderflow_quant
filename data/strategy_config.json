@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-09-29T10:24:52.115556Z",
+  "strategy": {
+    "name": "default",
+    "n_positions": 12,
+    "buy_pct": null,
+    "hold_pct": 60.0,
+    "weighting": "inv_vol",
+    "gate": "hurdle",
+    "overlay": "none"
+  },
+  "score": -27.6,
+  "why": "walk-forward strategy lab: best 0.5*P25+0.5*median of rolling 12m excess over the hurdle",
+  "meta_oos": {
+    "cagr_pct": 38.8,
+    "real_cagr_pct": 5.61,
+    "xu100_cagr_pct": 32.95,
+    "max_drawdown_pct": -28.76,
+    "rolling12m_beat_all_pct": 27.9
+  }
+}
