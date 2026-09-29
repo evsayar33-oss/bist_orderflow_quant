@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.0.0"
+ENGINE_VERSION = "3.2.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -97,11 +97,24 @@ MIN_EXPECTED_REAL_PCT = 3.0        # expected 12m real return (after costs) requ
 MAX_POSITION_W = 0.15
 MAX_PER_SECTOR = 3
 REBALANCE_BAND = 0.05              # only trade existing holdings if weight drift > 5pp
-CATASTROPHE_FROM_PEAK_PCT = 35.0   # sell if close falls 35% below highest close since entry
-CATASTROPHE_FROM_ENTRY_PCT = 30.0  # or 30% below entry
+# Drawdown handling (V3.2, evidence from the real-CPI backtest: an unconditional -35% stop
+# caused 25 of 46 exits and locked in losses in a ~40%-vol market):
+CATASTROPHE_FROM_PEAK_PCT = 35.0   # drawdown FLAG: 35% below highest close since entry ...
+CATASTROPHE_FROM_ENTRY_PCT = 30.0  # ... or 30% below entry -> sold at the monthly review ONLY if the
+                                   #     thesis also failed (score below the BUY cut-off)
+HARD_STOP_FROM_ENTRY_PCT = 50.0    # unconditional sell at the next open
+# Exposure: a beat-CPI investor is fully invested; the guard/regime only trim, never halve it
+EXPOSURE_BY_MODE = {"NORMAL": 1.0, "WATCH": 0.9, "RECOVERY": 0.75, "SAFE": 0.0}
+REGIME_EXPOSURE_FLOOR = 0.8
 COST_ROUND_TRIP_PCT = 0.50
 COST_ONE_WAY = COST_ROUND_TRIP_PCT / 200.0
-CASH_YIELD_ANNUAL_PCT = 0.0        # conservative: idle cash earns nothing in the model
+CASH_YIELD_ANNUAL_PCT = 0.0        # fallback when the TL money-market rate cannot be loaded
+# Idle cash is assumed to sit in a TL money-market fund: TCMB weighted average funding
+# cost (EVDS TP.APIFON4) minus a haircut, after withholding tax.
+CASH_RATE_SERIES = os.environ.get("EVDS_CASH_SERIES", "TP.APIFON4")
+CASH_HAIRCUT_PP = 2.0
+CASH_TAX = 0.15
+POLICY_RATE_CACHE_FILE = os.path.join(os.environ.get("BOQ_DATA_DIR", "data"), "cash_rate_tr.csv")
 
 # ---------------------------------------------------------------- regime model
 REGIME_TICKER_INDEX = "XU100.IS"

@@ -242,3 +242,59 @@ def inflation_stats(cpi: pd.Series, proxy: bool = False) -> Dict:
     exp = max(0.5 * yoy + 0.5 * ann6, 0.0) + (PROXY_SAFETY_PP if proxy else 0.0)
     return {"last_month": str(last.date()), "yoy_pct": round(float(yoy), 2),
             "ann6m_pct": round(float(ann6), 2), "expected_12m_pct": round(float(exp), 2), "is_proxy": proxy}
+
+
+# ------------------------------------------------------------------ TL money-market proxy for idle cash
+def load_cash_rate(allow_network: bool = True) -> Tuple[pd.Series, Dict]:
+    """Monthly TCMB weighted average funding cost (%, EVDS) -> idle-cash yield proxy.
+    Cached in data/cash_rate_tr.csv. Missing -> empty (engine then assumes 0%)."""
+    s, meta = None, {"series": C.CASH_RATE_SERIES}
+    key = os.environ.get("EVDS_API_KEY")
+    if allow_network and key:
+        field = C.CASH_RATE_SERIES.replace(".", "_")
+        for base in EVDS_BASES:
+            try:
+                r = requests.get(base + EVDS_QUERY.format(code=C.CASH_RATE_SERIES), headers={"key": key}, timeout=40)
+                r.raise_for_status()
+                idx, val = [], []
+                for it in r.json().get("items", []):
+                    t, v = str(it.get("Tarih", "")), it.get(field)
+                    if t and v not in (None, ""):
+                        y, m = t.split("-")[:2]
+                        idx.append(pd.Timestamp(int(y), int(m), 1))
+                        val.append(float(v))
+                if idx:
+                    s = pd.Series(val, index=idx).sort_index()
+                    s = s[~s.index.duplicated(keep="last")]
+                    meta["source"] = "evds"
+                    break
+            except Exception as exc:
+                meta["error"] = str(exc)[:120]
+    if s is not None and len(s):
+        try:
+            os.makedirs(C.DATA_DIR, exist_ok=True)
+            pd.DataFrame({"tarih": s.index.strftime("%Y-%m-%d"), "rate": s.values}).to_csv(C.POLICY_RATE_CACHE_FILE, index=False)
+        except Exception:
+            pass
+    elif os.path.exists(C.POLICY_RATE_CACHE_FILE):
+        try:
+            df = pd.read_csv(C.POLICY_RATE_CACHE_FILE)
+            s = pd.Series(df["rate"].to_numpy(float), index=pd.to_datetime(df["tarih"]))
+            meta["source"] = "cache"
+        except Exception:
+            s = None
+    if s is None or not len(s):
+        meta["source"] = "none"
+        return pd.Series(dtype=float), meta
+    meta["last_month"] = str(s.index[-1].date())
+    return s, meta
+
+
+def cash_yield_at(rate: pd.Series, date) -> float:
+    """Net annual % yield of idle cash at `date` (month known at that time)."""
+    if rate is None or not len(rate):
+        return float(C.CASH_YIELD_ANNUAL_PCT)
+    r = rate[rate.index <= _month(date)]
+    if not len(r):
+        return float(C.CASH_YIELD_ANNUAL_PCT)
+    return float(max(0.0, (float(r.iloc[-1]) - C.CASH_HAIRCUT_PP)) * (1.0 - C.CASH_TAX))

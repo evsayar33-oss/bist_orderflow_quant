@@ -191,11 +191,16 @@ def breadth_fallback(snapshot: pd.DataFrame) -> Dict:
 
 
 def update_regime(state: Dict, snapshot: Optional[pd.DataFrame] = None, today=None,
-                  series: Optional[pd.DataFrame] = None) -> Dict:
+                  series: Optional[pd.DataFrame] = None, allow_download: bool = True) -> Dict:
     reg = state.setdefault("regime", {})
     today = pd.Timestamp(today or pd.Timestamp.now()).normalize()
     try:
-        df = series if series is not None and len(series) >= 300 else download_regime_series()
+        if series is not None and len(series) >= 300:
+            df = series
+        elif allow_download:
+            df = download_regime_series()
+        else:
+            raise RuntimeError("regime series unavailable")
         X = make_features(df)
         params = reg.get("params")
         last_fit = pd.Timestamp(reg["last_fit"]) if reg.get("last_fit") else None

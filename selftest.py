@@ -16,6 +16,7 @@ import tempfile
 
 if "BOQ_DATA_DIR" not in os.environ:
     os.environ["BOQ_DATA_DIR"] = tempfile.mkdtemp(prefix="boq3_selftest_")
+os.environ.pop("EVDS_API_KEY", None)      # the self-test must never touch real data sources
 
 import numpy as np
 import pandas as pd
@@ -81,18 +82,36 @@ def unit_checks() -> dict:
     import fundamentals_hist as FH
     from portfolio import apply_day, new_portfolio
     res = {}
-    # catastrophe stop
+    # drawdown: -32% -> FLAG only (no sell); -51% from entry -> hard stop sell at next open
     pf = new_portfolio("2025-01-02")
     pf["pending"] = [{"ticker": "X", "action": "BUY", "reason": "T", "target_w": 0.1}]
     b = pd.DataFrame({"open": [10.0], "close": [10.0], "chg_pct": [0.0]}, index=["X"])
     apply_day(pf, b, "2025-01-02")
-    for i, px in enumerate([9.0, 8.0, 7.2, 6.8]):
-        prev = [10.0, 9.0, 8.0, 7.2][i]
+    path = [10.0, 9.0, 8.0, 7.2, 6.8]
+    for i in range(1, len(path)):
+        px, prev = path[i], path[i - 1]
         apply_day(pf, pd.DataFrame({"open": [px], "close": [px], "chg_pct": [(px / prev - 1) * 100]}, index=["X"]),
-                  f"2025-01-0{3 + i}")
-    res["catastrophe_queued"] = any(o["reason"] == "CATASTROPHE_STOP" for o in pf["pending"])
-    ev, lots = apply_day(pf, pd.DataFrame({"open": [6.7], "close": [6.9], "chg_pct": [1.0]}, index=["X"]), "2025-01-09")
-    res["catastrophe_executed"] = bool(lots) and lots[0]["reason"] == "CATASTROPHE_STOP"
+                  f"2025-01-0{2 + i}")
+    res["drawdown_flag_not_sold"] = bool(pf["positions"]["X"].get("dd_flag")) and not pf["pending"]
+    apply_day(pf, pd.DataFrame({"open": [4.9], "close": [4.9], "chg_pct": [(4.9 / 6.8 - 1) * 100]}, index=["X"]), "2025-01-08")
+    res["hard_stop_queued"] = any(o["reason"] == "CATASTROPHE_STOP" for o in pf["pending"])
+    ev, lots = apply_day(pf, pd.DataFrame({"open": [4.8], "close": [4.9], "chg_pct": [0.0]}, index=["X"]), "2025-01-09")
+    res["hard_stop_executed"] = bool(lots) and lots[0]["reason"] == "CATASTROPHE_STOP"
+    # flagged position with intact thesis is KEPT at the review; with weak thesis it is SOLD
+    from meta_engine import plan_rebalance
+    pf3 = new_portfolio("2025-01-02")
+    pf3["cash"] = 0.8
+    pf3["positions"] = {"A": {"value": 0.1, "cost_basis": 0.15, "entry_date": "2025-01-02", "level": 0.6, "peak": 1.0, "dd_flag": True},
+                        "B": {"value": 0.1, "cost_basis": 0.15, "entry_date": "2025-01-02", "level": 0.6, "peak": 1.0, "dd_flag": True}}
+    fr = pd.DataFrame({"ticker": ["A", "B", "C"], "composite_pct": [95.0, 70.0, 50.0], "composite": [2, 1, 0],
+                       "med_value_traded": [1e9] * 3, "fund_break": [False] * 3, "exp_real_12m": [10.0] * 3,
+                       "vol_ann_pct": [40.0] * 3, "sector": ["S1", "S2", "S3"]})
+    orders, summ = plan_rebalance(pf3, fr, {"calibration": {"pct_cutoff": 85.0, "status": "CALIBRATED"}}, 1.0)
+    res["dd_thesis_intact_kept"] = "A" in summ["holds"]
+    res["dd_thesis_failed_sold"] = any(o["ticker"] == "B" and o["reason"] == "DRAWDOWN_CONFIRMED" for o in orders)
+    # cash yield: funding rate 40% -> (40-2)*0.85 = 32.3% net
+    import inflation as I2
+    res["cash_yield"] = abs(I2.cash_yield_at(pd.Series([40.0], index=[pd.Timestamp("2025-01-01")]), "2025-03-10") - 32.3) < 1e-9
     # bonus issue neutrality: raw price halves, adjusted change +1% -> value +1%
     pf2 = new_portfolio("2025-01-02")
     pf2["pending"] = [{"ticker": "Y", "action": "BUY", "reason": "T", "target_w": 0.5}]
@@ -141,7 +160,8 @@ def inflation_gate_check(W) -> dict:
     r2 = M.run(today=days[1], fetch=fetch, hist_fn=hist_fn, regime_fn=lambda: reg_df[reg_df.index <= cur["d"]],
                cpi_fn=lambda: (W["cpi"][W["cpi"].index <= pd.Timestamp(last.year, last.month, 1)], {"status": "OK", "source": "synthetic"}))
     st2 = SM.load_state()
-    redone = r2["review"] is not None and any(o["action"] == "BUY" for o in st2["portfolio"]["pending"])
+    redone = r2["review"] is not None and r2["review"].get("status") == "OK" and \
+        st2["last_rebalance"].get("expected_inflation_12m") is not None
     # proxy path: CPI unavailable but FX series present
     r3 = M.run(today=pd.Timestamp(cal.add_sessions(days[1], 1)), fetch=lambda st: (snapshot_for(W, cal.add_sessions(days[1], 1)), {}),
                hist_fn=hist_fn, regime_fn=lambda: reg_df, cpi_fn=lambda: (pd.Series(dtype=float), {"status": "UNAVAILABLE"}))
@@ -181,7 +201,8 @@ def run_self_test() -> bool:
     statuses, reviews = [], 0
     for d in live_days:
         cur["d"] = d
-        r = M.run(today=d, fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn)
+        r = M.run(today=d, fetch=fetch, hist_fn=hist_fn, cpi_fn=cpi_fn, regime_fn=regime_fn,
+                  cash_fn=lambda: (pd.Series([30.0], index=[pd.Timestamp("2015-01-01")]), {"source": "synthetic"}))
         statuses.append(r["status"])
         reviews += int(bool(r.get("review")))
     # stale detection: re-run same data on next calendar session

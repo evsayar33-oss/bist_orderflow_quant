@@ -59,16 +59,20 @@ def score_universe(price_f: pd.DataFrame, fund_inputs: Optional[pd.DataFrame], s
     frame["p_beat_cpi"] = bucket_lookup(frame["composite_pct"], table, "p_beat_cpi") if calibrated else np.nan
     mk = market_expectation(cal, reg.get("label"), reg.get("exp_mkt_12m_pct"))
     infl = cpi_stats.get("expected_12m_pct")
-    if mk["mkt_12m_pct"] is not None and infl is not None:
-        nom = mk["mkt_12m_pct"] + frame["exp_excess_12m"]
-        frame["exp_real_12m"] = ((1 + nom / 100.0) / (1 + infl / 100.0) - 1.0) * 100.0 - C.COST_ROUND_TRIP_PCT
-    else:
-        frame["exp_real_12m"] = np.nan
+    frame["exp_real_12m"] = np.nan
+    if infl is not None and mk["mkt_12m_pct"] is not None:
+        if mk.get("basis") == "real":
+            # E[real] = E[universe real | regime] + E[excess | score] - costs
+            frame["exp_real_12m"] = mk["mkt_12m_pct"] + frame["exp_excess_12m"] - C.COST_ROUND_TRIP_PCT
+        else:
+            nom = mk["mkt_12m_pct"] + frame["exp_excess_12m"]
+            frame["exp_real_12m"] = ((1 + nom / 100.0) / (1 + infl / 100.0) - 1.0) * 100.0 - C.COST_ROUND_TRIP_PCT
     frame["fund_break"] = fund_break(frame)
     frame["regime_label"] = reg.get("label", "UNKNOWN")
     info = {"weights": {k: round(v, 4) for k, v in w.items()}, "model_version": version,
             "coverage": {k: round(v, 3) for k, v in cov.items()}, "calibrated": calibrated,
-            "market_12m": mk, "expected_inflation_12m": infl, "n_scored": int(len(frame))}
+            "market_12m": mk, "expected_inflation_12m": infl, "n_scored": int(len(frame)),
+            "gate": "real_return" if calibrated and infl is not None else ("rank_only_uncalibrated" if infl is not None else "blocked_no_inflation")}
     return frame, info
 
 
@@ -87,13 +91,18 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
             holds.append(t)                     # no data this month: do not trade blind
             continue
         r = f.loc[t]
+        flagged = bool(pf["positions"][t].get("dd_flag", False))
         if bool(r.get("fund_break", False)):
             sells.append((t, "FUND_BREAK"))
         elif float(r["composite_pct"]) < C.HOLD_PCT:
             sells.append((t, "RANK_EXIT"))
+        elif flagged and float(r["composite_pct"]) < cutoff:
+            sells.append((t, "DRAWDOWN_CONFIRMED"))   # deep drawdown AND the thesis has weakened
         else:
+            if flagged:
+                pf["positions"][t]["dd_flag"] = False  # thesis intact: keep holding through the drawdown
             holds.append(t)
-    n_target = int(round(C.TARGET_POSITIONS * max(0.0, min(1.0, exposure))))
+    n_target = C.TARGET_POSITIONS if exposure > 0 else 0
     sector_count: Dict[str, int] = {}
     for t in holds:
         s = str(f.loc[t, "sector"]) if t in f.index and pd.notna(f.loc[t].get("sector")) else "NA"
@@ -104,11 +113,14 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         & ~f["fund_break"].astype(bool)
         & ~f.index.isin(cur)
     )
-    no_inflation = not f["exp_real_12m"].notna().any()
+    calibrated = cal.get("status") == "CALIBRATED"
+    has_real = f["exp_real_12m"].notna().any()
+    no_inflation = bool(state.get("_no_inflation", False))
     if no_inflation:
-        elig &= False          # no inflation estimate -> no real-return gate -> no new buys
-    else:
+        elig &= False          # inflation unknown -> cannot judge "beats CPI" -> no new buys
+    elif calibrated and has_real:
         elig &= f["exp_real_12m"] >= C.MIN_EXPECTED_REAL_PCT
+    # else: CPI known but no calibration yet (early backtest years) -> rank-only selection
     if today_change is not None:
         chg = today_change.reindex(f.index)
         elig &= ~(chg >= C.LIMIT_MOVE_PCT)
@@ -166,7 +178,12 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
 
 
 def exposure_from(guard: Dict, regime: Dict) -> float:
+    """Long-horizon exposure: fully invested by default; guard mode and regime only trim."""
+    mode = str(guard.get("mode", "NORMAL")).upper()
+    if guard.get("block_new_entries"):
+        return 0.0
+    base = C.EXPOSURE_BY_MODE.get(mode, 0.9)
     p_off = regime.get("p_risk_off")
     p_off = 0.5 if p_off is None else float(p_off)
-    regime_mult = float(np.clip(1.0 - 0.5 * p_off, 0.5, 1.0))   # long horizon: damped reaction
-    return float(guard.get("exposure_multiplier", 1.0)) * regime_mult
+    regime_mult = float(np.clip(1.0 - 0.25 * p_off, C.REGIME_EXPOSURE_FLOOR, 1.0))
+    return float(base * regime_mult)

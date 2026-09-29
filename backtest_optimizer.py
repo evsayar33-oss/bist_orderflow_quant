@@ -103,6 +103,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         cpi, cpi_meta = INF.load_cpi_or_proxy(fx=rdf["fx"] if rdf is not None else None)
         if cpi_meta.get("status") == "PROXY":
             print("⚠️ Resmî TÜFE alınamadı; USDTRY vekili kullanılıyor (EVDS_API_KEY ekleyin).")
+    crate, cr_meta = INF.load_cash_rate()
     fund_cov = 0.0
     if pit is None:
         try:
@@ -162,10 +163,11 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     O, Cl = wide["open"], wide["close"]
     chg = Cl.pct_change(fill_method=None) * 100.0
     reb_set = set(fold_of_date.keys())
+    expo_log = []
     cal_state = {"calibration": {}}
     for day in sim_days:
         bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
-        ev, lots = apply_day(pf, bars, day)
+        ev, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day))
         lots_all.extend(lots)
         if day in reb_set:
             k, w, params = fold_of_date[day]
@@ -182,17 +184,19 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
             if known:
                 kd = pd.concat(known, ignore_index=True).merge(lab, on=["tarih", "ticker"], how="inner")
                 calibrate(cal_state, kd, None)
-            st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
-                  "calibration": cal_state["calibration"], "regime": reg}
             pf_, fi, cs = inputs[day]
+            st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
+                  "calibration": cal_state["calibration"], "regime": reg,
+                  "_no_inflation": cs.get("expected_12m_pct") is None}
             frame, info = score_universe(pf_, fi, st, cs, sector_map)
             if frame.empty:
                 continue
             oos_rows.append(frame[["tarih", "ticker", "composite", "composite_pct", "regime_label"]].assign(tarih=day))
-            expo = exposure_from({"exposure_multiplier": 1.0}, reg)
+            expo = exposure_from({"mode": "NORMAL"}, reg)
             orders, summ = plan_rebalance(pf, frame, st, expo, today_change=bars["chg_pct"])
             keep = [o for o in pf["pending"] if o.get("reason") == "CATASTROPHE_STOP"]
             pf["pending"] = keep + [o for o in orders if o["ticker"] not in {x["ticker"] for x in keep}]
+            expo_log.append(expo)
         xu = float(index_close.asof(day)) if index_close is not None else np.nan
         nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": sum(pf_weights(pf).values()), "xu100": xu})
 
@@ -229,12 +233,13 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                       "secondary": "excess vs XU100"},
         "period": f"{str(pd.Timestamp(dates[first_test_i]).date())}..{str(pd.Timestamp(idx[-1]).date())}",
         "universe_downloaded": len(data), "rebalance_months": len(dates),
-        "cpi_source": cpi_meta, "fundamentals_coverage": round(fund_cov, 3),
+        "cpi_source": cpi_meta, "cash_rate_source": cr_meta, "fundamentals_coverage": round(fund_cov, 3),
         "data_source": "Yahoo Finance adjusted OHLCV + Is Yatirim statements + CPI (EVDS/FRED)",
         "synthetic_data_used": False, "cost_round_trip_pct": C.COST_ROUND_TRIP_PCT,
         "rules": {"target_positions": C.TARGET_POSITIONS, "buy_pct": C.BUY_PCT, "hold_pct": C.HOLD_PCT,
                   "min_expected_real_pct": C.MIN_EXPECTED_REAL_PCT,
-                  "catastrophe_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "catastrophe_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT},
+                  "drawdown_flag_peak_pct": C.CATASTROPHE_FROM_PEAK_PCT, "drawdown_flag_entry_pct": C.CATASTROPHE_FROM_ENTRY_PCT,
+                  "hard_stop_entry_pct": C.HARD_STOP_FROM_ENTRY_PCT, "exposure_by_mode": C.EXPOSURE_BY_MODE},
         "portfolio": nav_metrics(nav_df, cpi),
         "closed_lots": lot_metrics(lots_df),
         "open_positions_end": open_now,
@@ -244,7 +249,8 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         "factor_ic_full_sample_12m": prior.get("ic_mean"),
         "factor_t_full_sample_12m": prior.get("ic_t_nw"),
         "limitations": ["survivorship: universe = today's liquid names",
-                        "dividends are in adjusted prices (reinvested), idle cash earns 0",
+                        "dividends are in adjusted prices (reinvested); idle cash earns TCMB funding rate - 2pp, after 15% tax"
+                        if len(crate) else "dividends are in adjusted prices (reinvested); idle cash earns 0 (rate series unavailable)",
                         f"fundamentals coverage {round(fund_cov, 2)} (Is Yatirim best effort)",
                         "autonomy guard neutral in backtest"],
     }

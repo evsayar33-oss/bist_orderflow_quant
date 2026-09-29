@@ -169,8 +169,13 @@ with t1:
                             "Giriş": p["entry_date"], "Giriş skoru": p.get("entry_pct"),
                             "Beklenen reel 12A %": p.get("entry_exp_real")} for t, p in pos.items()])
         st.dataframe(df.sort_values("Ağırlık %", ascending=False), hide_index=True, use_container_width=True)
-        st.caption(f"Nakit: %{pf.get('cash', 0) / navv * 100:.1f} | Felaket stopu: zirveden -%{C.CATASTROPHE_FROM_PEAK_PCT:.0f} "
-                   f"veya girişten -%{C.CATASTROPHE_FROM_ENTRY_PCT:.0f}")
+        cr = state.get("cash_rate", {}) or {}
+        st.caption(f"Nakit: %{pf.get('cash', 0) / navv * 100:.1f} (net getiri varsayımı yıllık %{cr.get('net_yield_pct', 0)}) | "
+                   f"Düşüş bayrağı: zirveden -%{C.CATASTROPHE_FROM_PEAK_PCT:.0f} / girişten -%{C.CATASTROPHE_FROM_ENTRY_PCT:.0f} "
+                   f"(aylık gözden geçirmede tez de bozulduysa satılır) | Kesin stop: girişten -%{C.HARD_STOP_FROM_ENTRY_PCT:.0f}")
+        flagged = [t for t, p in pos.items() if p.get("dd_flag")]
+        if flagged:
+            st.warning("⚠️ Düşüş bayraklı pozisyonlar (aylık gözden geçirmede tez kontrol edilecek): " + ", ".join(flagged))
     else:
         st.info("Henüz pozisyon yok. Aylık gözden geçirmenin emirleri bir sonraki seansın açılışında gerçekleşir.")
     if pf.get("pending"):
@@ -213,7 +218,8 @@ with t4:
         st.bar_chart(pd.Series(weights).sort_values())
     st.json({"status": m.get("status"), "ic_live_12m": m.get("ic_live_12m"), "ic_live_3m": m.get("ic_live_3m"),
              "calibration_status": cal.get("status"), "bucket_table": cal.get("bucket_table"),
-             "market": cal.get("market"), "regime": reg.get("probs"), "inflation": inf})
+             "market": cal.get("market"), "regime": reg.get("probs"), "inflation": inf,
+             "cash_rate": state.get("cash_rate"), "last_rebalance_gate": (state.get("last_rebalance") or {}).get("gate")})
 
 with t5:
     if not report:

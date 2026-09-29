@@ -197,7 +197,7 @@ def format_monthly(today, state, rev, top) -> str:
 
 
 def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.download_history,
-        cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series) -> dict:
+        cpi_fn=INF.load_cpi, regime_fn=RM.download_regime_series, cash_fn=INF.load_cash_rate) -> dict:
     real_run = today is None
     today = pd.Timestamp(today) if today is not None else cal.today_tr()
     if real_run and not force:
@@ -236,7 +236,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     except Exception as exc:
         rser = None
         print(f"⚠️ Rejim serisi alınamadı: {exc}")
-    RM.update_regime(state, snap, today, series=rser)
+    RM.update_regime(state, snap, today, series=rser, allow_download=False)
 
     # inflation
     cpi, cmeta = cpi_fn()
@@ -260,7 +260,10 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         pf["last_rebalance_month"] = None
         print(f"ℹ️ Enflasyon kapısı olmadan verilmiş {before - len(pf['pending'])} emir iptal edildi; aylık gözden geçirme yenileniyor.")
     bars = snap.set_index("ticker")[["open", "close", "change_pct"]].rename(columns={"change_pct": "chg_pct"})
-    events, lots = apply_day(pf, bars, today)
+    crate, cr_meta = cash_fn()
+    cash_y = INF.cash_yield_at(crate, today)
+    state["cash_rate"] = {**cr_meta, "net_yield_pct": round(cash_y, 2)}
+    events, lots = apply_day(pf, bars, today, cash_yield_pct=cash_y)
     if lots:
         append_rows(C.TRADE_LOG_FILE, lots)
     xu = float(index_close.iloc[-1]) if index_close is not None and len(index_close) else np.nan
@@ -274,6 +277,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
                            live_ic=state.get("model", {}).get("ic_live_3m"), nav_df=nav_df)
 
     review, top = None, []
+    state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
     if pf.get("last_rebalance_month") != today.strftime("%Y-%m"):
         review, top = monthly_review(state, research, snap, today, index_close, cpi, cpi_stats, guard, hist_fn)
         state["last_rebalance"] = {"date": str(today.date()), **{k: v for k, v in review.items() if k not in ("weights",)}}
@@ -282,6 +286,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     state["performance"] = {"nav": nav_metrics(nav_df, cpi), "lots": lot_metrics(lots_all),
                             "open_positions": {t: {"w": round(wts.get(t, 0), 4), "ret_pct": round((p["level"] - 1) * 100, 2),
                                                    "since": p["entry_date"]} for t, p in pf["positions"].items()}}
+    state.pop("_no_inflation", None)
     state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp,
                          "monthly_review": bool(review), "utc": datetime.utcnow().isoformat() + "Z"}
     save_state(state)

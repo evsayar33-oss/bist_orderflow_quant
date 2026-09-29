@@ -42,7 +42,7 @@ def _queue(pf: Dict, ticker: str, action: str, reason: str, target_w: float = 0.
                           **(meta or {})})
 
 
-def apply_day(pf: Dict, bars: pd.DataFrame, date) -> Tuple[List[Dict], List[Dict]]:
+def apply_day(pf: Dict, bars: pd.DataFrame, date, cash_yield_pct: float = None) -> Tuple[List[Dict], List[Dict]]:
     """bars: index=ticker, columns open, close, chg_pct (adjusted close-to-close %)."""
     date = pd.Timestamp(date).normalize()
     ds = str(date.date())
@@ -121,16 +121,21 @@ def apply_day(pf: Dict, bars: pd.DataFrame, date) -> Tuple[List[Dict], List[Dict
             p["last_close"] = float(b_close[t])
             dd_peak = (p["level"] / p["peak"] - 1) * 100
             dd_entry = (p["level"] - 1) * 100
-            if dd_peak <= -C.CATASTROPHE_FROM_PEAK_PCT or dd_entry <= -C.CATASTROPHE_FROM_ENTRY_PCT:
+            if dd_entry <= -C.HARD_STOP_FROM_ENTRY_PCT:
                 _queue(pf, t, "SELL", "CATASTROPHE_STOP")
-                events.append({"ticker": t, "type": "CATASTROPHE_STOP_QUEUED", "dd_peak": round(dd_peak, 2)})
+                events.append({"ticker": t, "type": "HARD_STOP_QUEUED", "dd_entry": round(dd_entry, 2)})
+            elif (dd_peak <= -C.CATASTROPHE_FROM_PEAK_PCT or dd_entry <= -C.CATASTROPHE_FROM_ENTRY_PCT) \
+                    and not p.get("dd_flag"):
+                p["dd_flag"] = True      # reviewed at the next monthly review (sold only if thesis failed)
+                events.append({"ticker": t, "type": "DRAWDOWN_FLAG", "dd_peak": round(dd_peak, 2)})
         else:
             p["missing"] = int(p.get("missing", 0)) + 1
             p.pop("bought_today", None)
             if p["missing"] == 15:
                 events.append({"ticker": t, "type": "NO_DATA_15_SESSIONS"})
-    if C.CASH_YIELD_ANNUAL_PCT:
-        pf["cash"] *= (1 + C.CASH_YIELD_ANNUAL_PCT / 100.0) ** (1 / 252)
+    y = C.CASH_YIELD_ANNUAL_PCT if cash_yield_pct is None else cash_yield_pct
+    if y and pf["cash"] > 0:
+        pf["cash"] *= (1 + y / 100.0) ** (1 / 252)
     pf["nav"] = nav(pf)
     pf["last_date"] = ds
     return events, lots

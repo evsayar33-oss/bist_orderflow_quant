@@ -59,15 +59,22 @@ def cutoff_stats(d: pd.DataFrame) -> Dict[str, Dict]:
 
 
 def market_stats(d: pd.DataFrame) -> Dict:
-    """Universe-mean 12m nominal return per date, overall and per regime label."""
-    per = d.groupby("tarih").agg(mkt=("fwd_ret", "mean"), reg=("regime_label", "first")) if "regime_label" in d \
-        else d.groupby("tarih").agg(mkt=("fwd_ret", "mean"))
+    """Universe-mean 12m return per date, overall and per regime label. Uses REAL returns when
+    available (inflation eras then cancel out); otherwise nominal. `basis` records which."""
+    use_real = "real_ret" in d and d.dropna(subset=["real_ret"])["tarih"].nunique() >= 12
+    col = "real_ret" if use_real else "fwd_ret"
+    dd = d.dropna(subset=[col])
+    agg = {"mkt": (col, "mean")}
+    if "regime_label" in dd:
+        agg["reg"] = ("regime_label", "first")
+    per = dd.groupby("tarih").agg(**agg)
+    basis = "real" if use_real else "nominal"
     m, se, _, n = newey_west(per["mkt"], C.LABEL_HORIZON - 1)
-    out = {"all": {"mean": float(m), "se": float(se) if np.isfinite(se) else 99.0, "n_dates": int(n)}}
+    out = {"all": {"mean": float(m), "se": float(se) if np.isfinite(se) else 99.0, "n_dates": int(n), "basis": basis}}
     if "reg" in per:
         for r, g in per.dropna(subset=["reg"]).groupby("reg"):
             mm, ss, _, nn = newey_west(g["mkt"], C.LABEL_HORIZON - 1)
-            out[str(r)] = {"mean": float(mm), "se": float(ss) if np.isfinite(ss) else 99.0, "n_dates": int(nn)}
+            out[str(r)] = {"mean": float(mm), "se": float(ss) if np.isfinite(ss) else 99.0, "n_dates": int(nn), "basis": basis}
     return out
 
 
@@ -120,9 +127,15 @@ def calibrate(state: Dict, dataset: Optional[pd.DataFrame], research: Optional[D
     mk = {}
     pm = prior.get("market", {}) or {}
     for key in set(pm) | set(live_m):
-        mk[key] = _combine(live_m.get(key), pm.get(key))
+        lv, pv = live_m.get(key), pm.get(key)
+        if lv and pv and lv.get("basis", "nominal") != pv.get("basis", "nominal"):
+            pv = None                                   # never mix real and nominal
+        comb = _combine(lv, pv)
+        comb["basis"] = (lv or pv or {}).get("basis", "nominal")
+        mk[key] = comb
     cal.update({"pct_cutoff": float(best if evidence else C.DEFAULT_PCT_CUTOFF), "bucket_table": table,
-                "cutoffs": rep, "market": {k: {"mean": round(v["mean"], 3), "se": round(v["se"], 3)} for k, v in mk.items()},
+                "cutoffs": rep, "market": {k: {"mean": round(v["mean"], 3), "se": round(v["se"], 3), "basis": v.get("basis", "nominal")}
+                           for k, v in mk.items()},
                 "status": "CALIBRATED" if evidence else "DEFAULT_CUTOFF",
                 "source": "live+research" if live_c and prior else "live" if live_c else "research" if prior else "default"})
     return state
@@ -139,11 +152,11 @@ def bucket_lookup(pct, table: List[Dict], key: str) -> np.ndarray:
 
 
 def market_expectation(cal: Dict, regime_label: Optional[str], hmm_12m_pct: Optional[float]) -> Dict:
-    """Expected 12m nominal universe return: calibrated by regime when available."""
+    """Expected 12m universe return: calibrated by regime when available (real or nominal basis)."""
     mk = cal.get("market", {}) or {}
     for key, src in ((regime_label, "calibrated_regime"), ("all", "calibrated_all")):
         if key and key in mk and mk[key]["se"] < 50:
-            return {"mkt_12m_pct": float(mk[key]["mean"]), "source": src}
+            return {"mkt_12m_pct": float(mk[key]["mean"]), "source": src, "basis": mk[key].get("basis", "nominal")}
     if hmm_12m_pct is not None:
-        return {"mkt_12m_pct": float(hmm_12m_pct), "source": "hmm"}
-    return {"mkt_12m_pct": None, "source": "none"}
+        return {"mkt_12m_pct": float(hmm_12m_pct), "source": "hmm", "basis": "nominal"}
+    return {"mkt_12m_pct": None, "source": "none", "basis": None}

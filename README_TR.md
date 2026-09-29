@@ -6,7 +6,9 @@
 ## Nasıl çalışır
 **Her gün 18:25 (kapanış sonrası)**
 * Önceki kararın emirleri bugünün açılışında uygulanır, portföy kapanış fiyatına göre değerlenir (düzeltilmiş günlük değişimle; bedelsiz bölünmeler sahte zarar üretmez).
-* **Felaket stopu:** Pozisyon, girişten sonraki en yüksek kapanıştan %35 ya da giriş fiyatından %30 düşerse ertesi açılışta satılır. Kısa vadeli ATR stopu **yoktur**.
+* **Düşüş kontrolü (V3.2):** Zirveden %35 ya da girişten %30 düşüşte pozisyon **bayraklanır**; aylık gözden geçirmede skor da alım eşiğinin altına inmişse (tez bozulmuşsa) satılır, tez sağlamsa tutulur. Girişten %50 düşüşte koşulsuz satış. Kısa vadeli ATR stopu **yoktur**.
+* **Nakit:** Boştaki nakit TL para piyasası fonunda varsayılır: TCMB ağırlıklı ortalama fonlama maliyeti (EVDS `TP.APIFON4`) − 2 puan, %15 stopaj sonrası.
+* **Maruziyet:** Varsayılan tam yatırım; guard (WATCH %90, RECOVERY %75) ve rejim yalnızca kırpar (en az %80).
 * Portföy değeri (NAV), XU100 ve TÜFE kaydı tutulur. Telegram'a yalnızca bir olay olduğunda mesaj gider.
 
 **Her ayın ilk seansı (aylık gözden geçirme)**
