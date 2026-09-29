@@ -87,6 +87,17 @@ def discover_fields(state: Dict, force: bool = False) -> Dict[str, str]:
     return found
 
 
+def list_all_tickers(limit: int = 1000) -> List[str]:
+    """Every BIST stock TradingView lists today (no liquidity filter), most traded first."""
+    rows = _scan(["name", "Value.Traded"], limit)
+    out = []
+    for it in rows:
+        d = it.get("d", [])
+        if d and isinstance(d[0], str) and d[0].isalnum():
+            out.append(d[0].upper())
+    return list(dict.fromkeys(out))
+
+
 def fetch_snapshot(state: Dict, limit: int = C.SCAN_LIMIT) -> Tuple[pd.DataFrame, Dict]:
     meta = {"source": "tradingview"}
     try:

@@ -165,7 +165,9 @@ else:
 tab1, tab2, tab3 = st.tabs(["Portföy", "Hisse Ara", "Performans"])
 
 # ------------------------------------------------------------------ PORTFÖY
-OVERLAY = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse / altın / mevduat rotasyonu"}
+OVERLAY = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse / altın / mevduat rotasyonu",
+           "blend": "altın güçlüyse yarısı altın", "core25": "kalıcı %25 altın"}
+WEIGHT = {"equal": "eşit ağırlık", "conviction": "skora göre ağırlık", "inv_vol": "risk dengeli ağırlık"}
 with tab1:
     stg = next((v for v in (state.get("active_strategy"), state.get("strategy")) if isinstance(v, dict) and v), {})
     if not stg:
@@ -183,9 +185,10 @@ with tab1:
         elif eqf is not None and eqf <= 0:
             alloc = '<div class="note" style="margin-top:6px">🏦 Şu an hisse yerine <b>mevduat / para piyasası</b>.</div>'
         elif eqf is not None and eqf < 1:
-            alloc = f'<div class="note" style="margin-top:6px">🟡 Trend zayıf: hisse payı {pct(eqf * 100, nd=0)}.</div>'
+            alloc = (f'<div class="note" style="margin-top:6px">🪙 Hisse %{eqf * 100:.0f} · altın %{gw * 100:.0f} (gram altın / ALTINS1).</div>' if gw
+                     else f'<div class="note" style="margin-top:6px">🟡 Hisse payı {pct(eqf * 100, nd=0)}, kalanı mevduatta.</div>')
         st.markdown(f'<div class="card"><div class="lbl">Strateji</div><div class="note">'
-                    f'<b>{stg.get("n_positions")} hisse</b> · {"eşit ağırlık" if stg.get("weighting") == "equal" else "risk dengeli ağırlık"} · '
+                    f'<b>{stg.get("n_positions")} hisse</b> · {WEIGHT.get(stg.get("weighting"), "risk dengeli ağırlık")} · '
                     f'{OVERLAY.get(stg.get("overlay"), stg.get("overlay"))}</div>{alloc}</div>', unsafe_allow_html=True)
     pos = pf.get("positions", {}) or {}
     navv = pf.get("nav", 1.0) or 1.0
@@ -327,8 +330,12 @@ with tab3:
                  f'(BIST100 {pct(p.get("xu100_cagr_pct"))}) · maks. düşüş {pct(p.get("max_drawdown_pct"))}']
         if rb:
             lines.append("12 aylık dönemlerde geçme oranı: " +
-                         " · ".join(f'{BENCH.get(k, ("Toplam hedef" if summ else "Hepsi") if k == "all" else k)} <b>{pct(v, nd=0)}</b>'
+                         " · ".join(f'{BENCH.get(k, {"all": "Toplam hedef" if summ else "Hepsi", "each": "Hepsi tek tek"}.get(k, k))} <b>{pct(v, nd=0)}</b>'
                                     for k, v in rb.items()))
+            if summ and p.get("rolling12m_median_gap_pp") is not None:
+                lines.append(f'Tipik 12 ayda toplam hedefe uzaklık: <b>{pct(p.get("rolling12m_median_gap_pp"), True)}</b> puan')
+        if report.get("universe_downloaded"):
+            lines.append(f'Test evreni: <b>{report.get("universe_downloaded")}</b> hisse · her ay o tarihteki likidite eşiğiyle')
         elif p.get("rolling12m_beat_cpi_pct") is not None:
             lines.append(f'12 aylık dönemlerin <b>{pct(p.get("rolling12m_beat_cpi_pct"), nd=0)}</b>’inde TÜFE’yi geçti.')
         st.markdown('<div class="card"><div class="lbl">Geçmiş test (gerçek veri, dışarıda bırakılmış dönemler)</div>'
@@ -342,7 +349,7 @@ with tab3:
                       "varsayılan kurallardan iyi çıktığı için canlıya alındı." if adopted else
                       "Kural seçimi geçmişte varsayılan kuralları geçemediği için canlıda varsayılan kurallar kullanılıyor.")
                    + f'<br>Canlı kural: <b>{sel.get("n_positions")} hisse</b> · '
-                   f'{"eşit ağırlık" if sel.get("weighting") == "equal" else "risk dengeli"} · '
+                   f'{WEIGHT.get(sel.get("weighting"), "risk dengeli")} · '
                    f'{OVERLAY.get(sel.get("overlay"), sel.get("overlay"))} · alım eşiği {sel.get("buy_pct") or "kalibre"}')
             if lab.get("meta_beat_hurdle_pct") is not None:
                 txt += (f'<br>12 aylık dönemlerin <b>{pct(lab.get("meta_beat_hurdle_pct"), nd=0)}</b>’inde '
@@ -356,7 +363,8 @@ with tab3:
                 tbl.append({"Yıl": str(y), "Portföy": pct(v.get("nominal_pct"), True), "TÜFE": pct(v.get("cpi_pct")),
                             "Dolar": pct(v.get("usd_pct")), "Altın": pct(v.get("gold_pct")), "Mevduat": pct(v.get("deposit_pct")),
                             "BIST100": pct(v.get("xu100_pct"), True),
-                            **({"Hedef (toplam)": pct(v.get("hurdle_pct"))} if summ else {}),
+                            **({"Hedef (toplam)": pct(v.get("hurdle_pct")),
+                                "Tek tek": {True: "✅", False: "❌"}.get(v.get("beat_each"), "—")} if summ else {}),
                             ("Hedefi geçti" if summ else "Hepsini geçti"): {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 

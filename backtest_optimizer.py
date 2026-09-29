@@ -52,6 +52,32 @@ UNIVERSE = [
 MIN_TRAIN_MONTHS = 36
 
 
+def backtest_universe() -> List[str]:
+    """V3.7: every BIST stock TradingView lists today (+ the classic large caps as a safety net).
+    Survivorship remains (delisted names are missing) but the universe is no longer 103 large caps:
+    mid and small caps — where most of BIST's big winners come from — are tested too.
+    Point-in-time liquidity is enforced month by month (CPI-scaled floor, see liq_floor_at)."""
+    try:
+        live = MD.list_all_tickers(C.BACKTEST_UNIVERSE_MAX)
+    except Exception as exc:
+        print(f"⚠️ Tam hisse listesi alınamadı ({exc}); sabit 106 hisselik liste kullanılıyor.")
+        live = []
+    uni = list(dict.fromkeys(live + UNIVERSE))[: max(C.BACKTEST_UNIVERSE_MAX, len(UNIVERSE))]
+    print(f"🌐 Backtest evreni: {len(uni)} hisse (TradingView listesi {len(live)})")
+    return uni
+
+
+def liq_floor_at(cpi: Optional[pd.Series], day) -> float:
+    """Minimum median daily value traded in THAT month's lira: today's floor deflated by CPI.
+    (A fixed 20M TL floor would wrongly exclude almost every mid cap in 2013-2019.)"""
+    if cpi is None or cpi.empty:
+        return C.MIN_MEDIAN_VALUE_TRADED_TL
+    r = INF.cpi_ratio(cpi, day, cpi.index[-1])
+    if not np.isfinite(r) or r <= 0:
+        return C.MIN_MEDIAN_VALUE_TRADED_TL
+    return float(C.MIN_MEDIAN_VALUE_TRADED_TL / max(r, 1.0))
+
+
 def fund_inputs_at(pit: pd.DataFrame, date, price_f: pd.DataFrame, latest_paid: Dict[str, float]) -> pd.DataFrame:
     if pit is None or pit.empty or price_f.empty:
         return pd.DataFrame(columns=["ticker"])
@@ -91,7 +117,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         variants: Optional[List[Dict]] = None) -> Dict:
     state = load_state()
     sector_map = state.get("sector_map", {})
-    data = data if data is not None else MD.download_history(UNIVERSE, start, end, min_rows=300)
+    data = data if data is not None else MD.download_history(backtest_universe(), start, end, min_rows=300)
     if len(data) < C.MIN_CROSS_SECTION:
         raise RuntimeError(f"Gerçek veri yetersiz: {len(data)} hisse")
     rdf = None
@@ -192,7 +218,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         pf_, fi, cs = inputs[day]
         st = {"model": {"champion_weights": w, "champion_version": f"wf{k}", "regime_weights": {}},
               "calibration": dict(cal_state["calibration"]), "regime": reg,
-              "_no_inflation": cs.get("expected_12m_pct") is None,
+              "_no_inflation": cs.get("expected_12m_pct") is None, "liq_floor_tl": liq_floor_at(cpi, day),
               "hurdles": BM.expected_hurdles(bm, cs, INF.cash_yield_at(crate, day) if len(crate) else None, as_of=day)}
         frame, info = score_universe(pf_, fi, st, cs, sector_map)
         if frame.empty:
@@ -244,6 +270,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                                       "gold_pct": None if not np.isfinite(w["gold"]) else round(float(w["gold"]), 2),
                                       "deposit_pct": None if not np.isfinite(w["deposit"]) else round(float(w["deposit"]), 2),
                                       "hurdle_pct": None if not np.isfinite(w["hurdle"]) else round(float(w["hurdle"]), 2),
+                                      "beat_each": None if not np.isfinite(w.get("floor", np.nan)) else bool(nom > w["floor"]),
                                       "beat_all": None if not np.isfinite(w["hurdle"]) else bool(nom > w["hurdle"])})
 
     prior = build_research_prior(ds, X, oos_l)

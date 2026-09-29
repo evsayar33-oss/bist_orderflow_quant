@@ -5,15 +5,17 @@ Why: the stock ranking itself is good (12m OOS IC ~0.09, t~2.6), but how many na
 which weights, how strict the entry gate and whether to rotate into gold / deposit
 decide whether the portfolio beats the hurdle (CPI, USD+US inflation, gold, deposit).
 
-Grid (72 variants):
-  n_positions  : 5 / 8 / 12            (concentration)
-  buy/hold     : 90/70  or  85/60      (entry strictness + hysteresis)
-  weighting    : inverse-vol / equal
-  gate         : expected-return-vs-hurdle  or  rank-only (top scores fill the book)
+Grid (V3.7, 192 variants):
+  n_positions  : 3 / 5 / 8 / 12              (concentration — a SUM target needs conviction)
+  buy/hold     : 95/75, 90/70, 85/60          (entry strictness + hysteresis)
+  weighting    : inverse-vol / conviction (score-weighted, sqrt-vol aware)
+  gate         : expected-return-vs-floor  or  rank-only (top scores fill the book)
   overlay      : none
-                 trend : BIST100 12m < deposit 12m  -> half the equity book to deposit
-                 dual  : dual momentum — hold stocks if BIST100 12m beats gold 12m and deposit,
-                         gold if gold is best, deposit if both lose to deposit
+                 dual   : dual momentum — stocks if BIST100 12m beats gold and deposit,
+                          gold if gold is best, deposit if both lose to deposit
+                 blend  : 50% gold when gold 12m > BIST100 12m (partial, not all-or-nothing);
+                          50% deposit when both lose to deposit
+                 core25 : a permanent 25% gold sleeve (TL-depreciation hedge), 75% stocks
 
 Objective (the user's goal, measured on rolling 12-month windows):
   excess = portfolio 12m return - hurdle 12m return (max of CPI, USD+3%, gold, deposit)
@@ -45,9 +47,11 @@ MIN_WINDOWS = 24
 
 def variant_grid() -> List[Dict]:
     out = []
-    for n, (b, h), w, g, o in itertools.product([5, 8, 12], [(90.0, 70.0), (85.0, 60.0)], ["inv_vol", "equal"],
-                                                ["hurdle", "rank"], ["none", "trend", "dual"]):
-        out.append({"name": f"n{n}_b{int(b)}_{'iv' if w == 'inv_vol' else 'eq'}_{g}_{o}", "n_positions": n,
+    short = {"inv_vol": "iv", "equal": "eq", "conviction": "cv"}
+    for n, (b, h), w, g, o in itertools.product([3, 5, 8, 12], [(95.0, 75.0), (90.0, 70.0), (85.0, 60.0)],
+                                                ["inv_vol", "conviction"], ["hurdle", "rank"],
+                                                ["none", "dual", "blend", "core25"]):
+        out.append({"name": f"n{n}_b{int(b)}_{short[w]}_{g}_{o}", "n_positions": n,
                     "buy_pct": b, "hold_pct": h, "weighting": w, "gate": g, "overlay": o})
     return out
 
@@ -59,15 +63,21 @@ def overlay_alloc(kind: str, day, bm: Optional[pd.DataFrame], crate: Optional[pd
     a = pd.Timestamp(day) - pd.Timedelta(days=365)
     w = BM.window_returns(bm, None, crate, a, day)
     eq, gold, dep = w.get("xu100"), w.get("gold"), w.get("deposit")
+    if kind == "core25":
+        return (0.75, 0.25) if np.isfinite(gold) else (1.0, 0.0)
     if not np.isfinite(eq) or not np.isfinite(dep):
         return 1.0, 0.0
     if kind == "trend":
         return (1.0 if eq > dep else 0.5), 0.0
+    g = gold if np.isfinite(gold) else -np.inf
     if kind == "dual":
-        g = gold if np.isfinite(gold) else -np.inf
         if max(eq, g) < dep:
             return 0.0, 0.0
         return (1.0, 0.0) if eq >= g else (0.0, 1.0)
+    if kind == "blend":
+        if max(eq, g) < dep:
+            return 0.5, 0.0
+        return (0.5, 0.5) if g > eq else (1.0, 0.0)
     return 1.0, 0.0
 
 

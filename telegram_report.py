@@ -11,7 +11,9 @@ AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağu
 REASON_TR = {"RANK_EXIT": "skor düştü", "FUND_BREAK": "temel bozulma", "DRAWDOWN_CONFIRMED": "düşüş + zayıflayan tez",
              "CATASTROPHE_STOP": "kesin stop (−%50)", "NEW_ENTRY": "yeni giriş",
              "ROTATION": "varlık rotasyonu", "ALLOCATION": "varlık dağılımı"}
-OVERLAY_TR = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse/altın/mevduat rotasyonu"}
+OVERLAY_TR = {"none": "hep hisse", "trend": "trend filtresi", "dual": "hisse/altın/mevduat rotasyonu",
+              "blend": "altın güçlüyse yarısı altın", "core25": "kalıcı %25 altın"}
+WEIGHT_TR = {"equal": "eşit ağırlık", "conviction": "skora göre ağırlık", "inv_vol": "risk dengeli ağırlık"}
 
 
 def live_strategy(state: Dict) -> Dict:
@@ -27,7 +29,7 @@ def strategy_line(state: Dict) -> Optional[str]:
     s = live_strategy(state)
     if not s:
         return None
-    w = "eşit ağırlık" if s.get("weighting") == "equal" else "risk dengeli ağırlık"
+    w = WEIGHT_TR.get(s.get("weighting"), "risk dengeli ağırlık")
     return f"⚙️ Strateji: {s.get('n_positions')} hisse · {w} · {OVERLAY_TR.get(s.get('overlay'), s.get('overlay'))}"
 
 
@@ -44,7 +46,9 @@ def allocation_line(state: Dict) -> Optional[str]:
         return "🪙 <b>Rotasyon: hisseler yerine ALTIN</b> (gram altın / ALTINS1) — altın 12 ayda hisse ve mevduattan güçlü"
     if eq <= 0:
         return "🏦 <b>Rotasyon: hisseler yerine MEVDUAT / para piyasası</b> — hisse ve altın mevduatı geçemiyor"
-    return f"🟡 Trend zayıf: hisse payı %{eq * 100:.0f}, kalanı mevduatta"
+    if gw > 0:
+        return f"🪙 Hisse %{eq * 100:.0f} · <b>altın %{gw * 100:.0f}</b> (gram altın / ALTINS1)"
+    return f"🟡 Hisse payı %{eq * 100:.0f}, kalanı mevduatta"
 REGIME_TR = {"RISK_ON": "Olumlu 🟢", "NEUTRAL": "Nötr ⚪", "RISK_OFF": "Riskli 🔴", "UNKNOWN": "Belirsiz"}
 GUARD_TR = {"NORMAL": "Normal", "WATCH": "Temkinli", "RECOVERY": "Toparlanıyor", "SAFE": "Güvenli mod — alım yok"}
 BENCH_TR = {"cpi": "TÜFE", "usd": "Dolar", "gold": "Altın", "deposit": "Mevduat", "xu100": "BIST100"}

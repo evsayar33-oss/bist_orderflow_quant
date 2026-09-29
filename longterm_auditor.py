@@ -19,7 +19,7 @@ def audit() -> str:
     if rb:
         allk = "Toplam hedef" if getattr(C, "HURDLE_MODE", "max") == "sum" else "Hepsi"
         L.append("🎯 12 aylık dönemlerde geçme: " + " · ".join(
-            f"{TG.BENCH_TR.get(k, allk if k == 'all' else k)} {TG.pct(v, nd=0)}" for k, v in rb.items()))
+            f"{TG.BENCH_TR.get(k, {'all': allk, 'each': 'Hepsi tek tek'}.get(k, k))} {TG.pct(v, nd=0)}" for k, v in rb.items()))
     if lots.get("closed_lots"):
         L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · hedefi geçen {TG.pct(lots.get('hit_beat_all_pct'), nd=0)}"
                  f" · ort. {lots.get('avg_months_held')} ay")

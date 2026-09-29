@@ -123,8 +123,8 @@ def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series], bench: Optional[
         out["benchmarks_total_pct"] = {k: (round(float(v), 2) if np.isfinite(v) else None) for k, v in tot.items()}
         m = d.set_index("tarih")["nav"].resample("ME").last().dropna()
         if len(m) >= 13:
-            wins = {k: 0 for k in ("cpi", "usd", "gold", "deposit", "hurdle")}
-            n = 0
+            wins = {k: 0 for k in ("cpi", "usd", "gold", "deposit", "floor", "hurdle")}
+            n, gaps = 0, []
             for i in range(12, len(m)):
                 a, b = m.index[i - 12], m.index[i]
                 w = window_returns(bench.get("bm"), cpi, bench.get("crate"), a, b)
@@ -132,9 +132,12 @@ def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series], bench: Optional[
                     continue
                 n += 1
                 r = (m.iloc[i] / m.iloc[i - 12] - 1) * 100
+                gaps.append(r - w["hurdle"])
                 for k in wins:
-                    wins[k] += int(np.isfinite(w[k]) and r > w[k])
+                    wins[k] += int(np.isfinite(w.get(k, np.nan)) and r > w[k])
             if n:
-                out["rolling12m_beat"] = {("all" if k == "hurdle" else k): round(v / n * 100, 1) for k, v in wins.items()}
+                out["rolling12m_beat"] = {({"hurdle": "all", "floor": "each"}.get(k, k)): round(v / n * 100, 1)
+                                          for k, v in wins.items()}
+                out["rolling12m_median_gap_pp"] = round(float(np.median(gaps)), 1)
                 out["rolling12m_beat_all_pct"] = round(wins["hurdle"] / n * 100, 1)
     return out

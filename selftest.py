@@ -248,6 +248,24 @@ def _tg_ok(st) -> bool:
     return any(w in msg for w in ("Çıta", "çıta", "hedef"))
 
 
+def _overlay_ok() -> bool:
+    import strategy_lab as LAB
+    idx = pd.bdate_range("2020-01-01", "2022-01-01")
+    up = pd.DataFrame({"usdtry": np.linspace(10, 11, len(idx)), "gold_try": np.linspace(100, 200, len(idx)),
+                       "xu100": np.linspace(1, 1.2, len(idx))}, index=idx)
+    cr = pd.Series(10.0, index=pd.date_range("2019-01-01", "2022-01-01", freq="MS"))
+    d = idx[-1]
+    return (LAB.overlay_alloc("blend", d, up, cr) == (0.5, 0.5) and LAB.overlay_alloc("core25", d, up, cr) == (0.75, 0.25)
+            and LAB.overlay_alloc("dual", d, up, cr) == (0.0, 1.0) and len(LAB.variant_grid()) == 192)
+
+
+def _liq_ok() -> bool:
+    import backtest_optimizer as B
+    cpi = pd.Series([100.0, 200.0, 400.0], index=pd.to_datetime(["2015-01-01", "2020-01-01", "2025-01-01"]))
+    f15, f25 = B.liq_floor_at(cpi, "2015-01-15"), B.liq_floor_at(cpi, "2025-01-15")
+    return abs(f15 - C.MIN_MEDIAN_VALUE_TRADED_TL / 4) < 1 and abs(f25 - C.MIN_MEDIAN_VALUE_TRADED_TL) < 1
+
+
 def _sum_hurdle_ok() -> bool:
     import benchmarks as BM
     if getattr(C, "HURDLE_MODE", "max") != "sum":
@@ -306,7 +324,8 @@ def run_self_test() -> bool:
     import backtest_optimizer as B
     sub = {t: g[g.index <= pd.Timestamp("2026-05-29")] for t, g in list(W["hist"].items())[:70]}
     import strategy_lab as LAB
-    small = [v for v in LAB.variant_grid() if v["name"] in ("n5_b90_eq_rank_dual", "n8_b85_iv_hurdle_trend", "n12_b85_eq_rank_none")]
+    small = [v for v in LAB.variant_grid() if v["name"] in ("n5_b90_cv_rank_dual", "n3_b95_cv_hurdle_blend", "n8_b85_iv_rank_core25")]
+    assert len(small) == 3, "strategy lab variant names changed"
     bt = B.run("2019-01-01", None, save=True, data=sub, regime_df=reg_df, cpi=W["cpi"], pit=pd.DataFrame(),
                bm=bench_of(W), crate=W["crate"], variants=small)
     rep = bt["report"]
@@ -329,6 +348,8 @@ def run_self_test() -> bool:
         "gold_sleeve_unit": _gold_ok(),
         "telegram_monthly_ok": _tg_ok(st),
         "hurdle_is_sum": _sum_hurdle_ok(),
+        "overlays_unit": _overlay_ok(),
+        "liq_floor_scaled": _liq_ok(),
         "live_strategy_dict": isinstance(st.get("active_strategy"), dict),
         **{f"unit_{k}": bool(v) for k, v in u.items()},
         **{f"gate_{k}": v for k, v in gate.items()},

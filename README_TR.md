@@ -1,5 +1,17 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.7 — Tüm borsa + toplam hedefin peşinde:**
+* **Canlı tarama:** 450 hisselik tavan kaldırıldı. Günde 1 milyon TL'nin üzerinde işlem gören her BIST hissesi puanlanır.
+* **Geçmiş test:** Artık 103 büyük hisseyle değil, TradingView'un listelediği **tüm BIST hisseleriyle** yapılır. Likidite eşiği her ay o tarihin parasıyla uygulanır: bugünkü 20 milyon TL, TÜFE ile geriye indirgenir. Örneğin 2015'te yaklaşık 2 milyon TL'ye karşılık gelir. Böylece orta ve küçük hisseler de test edilir.
+* **Strateji laboratuvarı 192 kural dener:**
+  * 3, 5, 8 ya da 12 hisse,
+  * alım eşiği 95, 90 ya da 85,
+  * risk dengeli ya da **skora göre** ağırlık,
+  * altın seçenekleri: **"altın güçlüyse yarısı altın"** ve **"kalıcı %25 altın"**.
+* Laboratuvarın puanı **toplam hedefe** göredir: TÜFE + dolar + altın + mevduat + %3.
+* **Raporda** "Hepsi tek tek" geçme oranı ve "tipik 12 ayda toplam hedefe uzaklık" da gösterilir.
+* Backtest süresi uzadı: 1–3 saat sürebilir (süre sınırı 340 dakika).
+
 **V3.6 — Toplam hedef + panel düzeltmesi:**
 * **Hedef:** Hedef artık tek tek ölçütler değil, **toplamları + %3**: TÜFE + dolar (+%3 ABD enflasyonu) + gram altın + mevduat. Örneğin %29,7 + %22,7 + %22,7 + %29,8 + %3 = **%107,9**.
 * Bu hedef dört yerde kullanılır:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.6.1"
+ENGINE_VERSION = "3.7.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -42,7 +42,8 @@ STRATEGY_CONFIG_FILE = os.path.join(DATA_DIR, "strategy_config.json")   # writte
 MAX_MONTHLY_SNAPSHOTS = 180         # 15 years of monthly cross-sections
 
 # ---------------------------------------------------------------- universe
-SCAN_LIMIT = 450
+SCAN_LIMIT = 1000                  # V3.7: no practical cap (BIST ~600 stocks)
+BACKTEST_UNIVERSE_MAX = 800        # V3.7: backtest on all BIST stocks (TradingView list), not 103 large caps
 MIN_CROSS_SECTION = 30
 MIN_MEDIAN_VALUE_TRADED_TL = 20_000_000.0   # 3-month median daily value traded
 MIN_HISTORY_SESSIONS = 260                  # price factors need ~1 year of bars

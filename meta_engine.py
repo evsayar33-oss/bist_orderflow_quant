@@ -144,7 +144,7 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         sector_count[s] = sector_count.get(s, 0) + 1
     elig = (
         (f["composite_pct"] >= cutoff)
-        & (pd.to_numeric(f["med_value_traded"], errors="coerce") >= C.MIN_MEDIAN_VALUE_TRADED_TL)
+        & (pd.to_numeric(f["med_value_traded"], errors="coerce") >= float(state.get("liq_floor_tl") or C.MIN_MEDIAN_VALUE_TRADED_TL))
         & ~f["fund_break"].astype(bool)
         & ~f.index.isin(cur)
     )
@@ -190,6 +190,17 @@ def plan_rebalance(pf: Dict, frame: pd.DataFrame, state: Dict, exposure: float,
         med = float(vol.median()) if vol.notna().any() else 40.0
         if P.get("weighting") == "equal":
             inv = {t: 1.0 for t in final}
+        elif P.get("weighting") == "conviction":
+            # stronger score -> bigger weight (rank above the hold line), still vol-aware
+            cp = pd.to_numeric(f["composite_pct"], errors="coerce")
+
+            def _conv(t):
+                c = cp.get(t, np.nan)
+                c = float(c) if pd.notna(c) else hold_pct
+                v = vol.get(t, np.nan)
+                v = float(v) if pd.notna(v) else med
+                return (max(c - hold_pct, 0.0) + 5.0) / max(v, 5.0) ** 0.5
+            inv = {t: _conv(t) for t in final}
         else:
             inv = {t: 1.0 / max(float(vol.get(t, med)) if pd.notna(vol.get(t, np.nan)) else med, 5.0) for t in final}
         # the book is sized for n_pos names: fewer qualifying names -> the rest stays in cash
