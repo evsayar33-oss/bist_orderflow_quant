@@ -7,79 +7,99 @@
     "secondary": "XU100"
   },
   "portfolio": {
-    "cash": 1.0020691165309894,
-    "positions": {},
-    "pending": [
-      {
-        "ticker": "MNDRS",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
+    "cash": 0.00100260385244515,
+    "positions": {
+      "MNDRS": {
+        "value": 0.19209011440562201,
+        "cost_basis": 0.2004138233061979,
+        "entry_date": "2026-09-30",
+        "entry_px": 9.2,
+        "level": 0.9608695652173913,
+        "peak": 1.0,
+        "missing": 0,
         "entry_pct": 99.61,
+        "entry_exp_real": 128.52,
+        "entry_exp_nominal": 196.37,
+        "entry_hurdle": 107.8,
+        "entry_p_beat_all": 0.195,
         "entry_conf": 0.6872,
-        "entry_exp_real": 128.52,
-        "entry_exp_nominal": 196.37,
-        "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.195
+        "stop_level": null,
+        "last_close": 8.84
       },
-      {
-        "ticker": "ISFIN",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
+      "ISFIN": {
+        "value": 0.1992483893243111,
+        "cost_basis": 0.2003136163945448,
+        "entry_date": "2026-09-30",
+        "entry_px": 17.7,
+        "level": 0.9971751412429378,
+        "peak": 1.0,
+        "missing": 0,
         "entry_pct": 98.62,
+        "entry_exp_real": 128.52,
+        "entry_exp_nominal": 196.37,
+        "entry_hurdle": 107.8,
+        "entry_p_beat_all": 0.195,
         "entry_conf": 0.6661,
-        "entry_exp_real": 128.52,
-        "entry_exp_nominal": 196.37,
-        "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.195
+        "stop_level": null,
+        "last_close": 17.65
       },
-      {
-        "ticker": "GOLTS",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
+      "GOLTS": {
+        "value": 0.1952315627212258,
+        "cost_basis": 0.20021345958634754,
+        "entry_date": "2026-09-30",
+        "entry_px": 256.25,
+        "level": 0.9775609756097561,
+        "peak": 1.0,
+        "missing": 0,
         "entry_pct": 96.84,
+        "entry_exp_real": 128.52,
+        "entry_exp_nominal": 196.37,
+        "entry_hurdle": 107.8,
+        "entry_p_beat_all": 0.195,
         "entry_conf": 0.679,
-        "entry_exp_real": 128.52,
-        "entry_exp_nominal": 196.37,
-        "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.195
+        "stop_level": null,
+        "last_close": 250.5
       },
-      {
-        "ticker": "BESLR",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
+      "BESLR": {
+        "value": 0.19579880700037963,
+        "cost_basis": 0.20011335285655438,
+        "entry_date": "2026-09-30",
+        "entry_px": 10.99,
+        "level": 0.9808917197452228,
+        "peak": 1.0,
+        "missing": 0,
         "entry_pct": 96.25,
-        "entry_conf": 0.6703,
         "entry_exp_real": 128.52,
         "entry_exp_nominal": 196.37,
         "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.195
+        "entry_p_beat_all": 0.195,
+        "entry_conf": 0.6703,
+        "stop_level": null,
+        "last_close": 10.78
       },
-      {
-        "ticker": "KAYSE",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
+      "KAYSE": {
+        "value": 0.1936833299316983,
+        "cost_basis": 0.20001329618012612,
+        "entry_date": "2026-09-30",
+        "entry_px": 3.08,
+        "level": 0.9707792207792209,
+        "peak": 1.0,
+        "missing": 0,
         "entry_pct": 94.67,
-        "entry_conf": 0.6518,
         "entry_exp_real": 63.77,
         "entry_exp_nominal": 112.4,
         "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.194
+        "entry_p_beat_all": 0.194,
+        "entry_conf": 0.6518,
+        "stop_level": null,
+        "last_close": 2.99
       }
-    ],
+    },
+    "pending": [],
     "last_rebalance_month": "2026-09",
     "start_date": "2026-09-28",
-    "nav": 1.0020691165309894,
-    "last_date": "2026-09-29",
+    "nav": 0.9770548072356819,
+    "last_date": "2026-09-30",
     "cohorts": [
       {
         "month": "2026-09",
@@ -319,12 +339,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.3386,
-      "NEUTRAL": 0.6613,
-      "RISK_ON": 0.0001
+      "RISK_OFF": 0.3638,
+      "NEUTRAL": 0.6178,
+      "RISK_ON": 0.0184
     },
-    "p_risk_off": 0.3386,
-    "degraded": false,
+    "p_risk_off": 0.3638,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -413,8 +433,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.34,
-    "exp_mkt_12m_pct": 24.0,
+    "exp_mkt_5d_pct": 0.343,
+    "exp_mkt_12m_pct": 24.03,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -429,7 +449,7 @@
     ],
     "as_of": "2026-09-30",
     "persistence": 0.9196,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.0503,
@@ -451,37 +471,37 @@
     "mode": "NORMAL",
     "watch_streak": 0,
     "severe_streak": 0,
-    "healthy_streak": 3,
+    "healthy_streak": 0,
     "feature_baseline": {
       "change_pct": {
-        "median": -4.383430917697054,
-        "q25": -6.808040330703369,
-        "q75": -1.876849999670446,
-        "mad": 2.4943340416705166,
-        "n": 585
+        "median": -4.27532972651359,
+        "q25": -6.675031184812422,
+        "q75": -1.8126267593707792,
+        "mad": 2.457534264633306,
+        "n": 590
       },
       "log_value_traded": {
-        "median": 17.697262988290422,
-        "q25": 16.925614314766484,
-        "q75": 18.858886513106388,
-        "mad": 0.9098720856300152,
-        "n": 585
+        "median": 17.673385506377368,
+        "q25": 16.888040904719585,
+        "q75": 18.8413614090592,
+        "mad": 0.9219710564366407,
+        "n": 590
       }
     },
     "reason": "HEALTHY",
     "last_transition": "2026-09-29T16:09:36.038190+00:00",
-    "last_evaluation": "2026-09-29T19:28:03.402804+00:00",
+    "last_evaluation": "2026-09-30T20:14:13.528982+00:00",
     "self_test": {
       "passed": true,
       "cases": 16,
       "passed_cases": 16,
-      "timestamp": "2026-09-29T19:28:03.401276+00:00"
+      "timestamp": "2026-09-30T20:14:13.526922+00:00"
     },
-    "drift_score": 0.2284,
+    "drift_score": 0.1889,
     "performance_drift": 0.0,
     "performance_detail": {},
     "ops_score": 94.22,
-    "regime_stress": 0.0012,
+    "regime_stress": 0.5,
     "exposure_multiplier": 1.0,
     "pct_cutoff_add": 0.0,
     "block_new_entries": false
@@ -1111,24 +1131,34 @@
     "OZRDN": "Process Industries",
     "AKYHO": "Commercial Services",
     "RALYH": "Industrial Services",
-    "GATEG": "Commercial Services"
+    "GATEG": "Commercial Services",
+    "DSTKF": "Finance",
+    "TERA": "Finance",
+    "ISVEA": "Consumer Durables",
+    "OYAYO": "Finance",
+    "ISBIR": "Process Industries",
+    "MZHLD": "Producer Manufacturing",
+    "EDATA": "Commercial Services",
+    "PEKGY": "Finance",
+    "QNBTR": "Finance",
+    "MTRYO": "Miscellaneous"
   },
   "performance": {
     "nav": {
       "start": "2026-09-28",
-      "end": "2026-09-29",
-      "days": 2,
-      "total_return_pct": 0.21,
-      "cagr_pct": 112.74,
-      "max_drawdown_pct": 0.0,
-      "ann_vol_pct": 1.64,
-      "avg_exposure_pct": 0.0,
+      "end": "2026-09-30",
+      "days": 3,
+      "total_return_pct": -2.29,
+      "cagr_pct": -98.56,
+      "max_drawdown_pct": -2.5,
+      "ann_vol_pct": 19.5,
+      "avg_exposure_pct": 33.3,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.06,
-        "gold": 0.32,
-        "deposit": 0.07,
-        "xu100": -2.4,
+        "usd": 0.1,
+        "gold": 0.48,
+        "deposit": 0.14,
+        "xu100": -5.13,
         "floor": null,
         "hurdle": null
       }
@@ -1136,7 +1166,33 @@
     "lots": {
       "closed_lots": 0
     },
-    "open_positions": {}
+    "open_positions": {
+      "MNDRS": {
+        "w": 0.1966,
+        "ret_pct": -3.91,
+        "since": "2026-09-30"
+      },
+      "ISFIN": {
+        "w": 0.2039,
+        "ret_pct": -0.28,
+        "since": "2026-09-30"
+      },
+      "GOLTS": {
+        "w": 0.1998,
+        "ret_pct": -2.24,
+        "since": "2026-09-30"
+      },
+      "BESLR": {
+        "w": 0.2004,
+        "ret_pct": -1.91,
+        "since": "2026-09-30"
+      },
+      "KAYSE": {
+        "w": 0.1982,
+        "ret_pct": -2.92,
+        "since": "2026-09-30"
+      }
+    }
   },
   "last_rebalance": {
     "date": "2026-09-29",
@@ -1243,17 +1299,17 @@
   "last_run": {
     "date": "2026-09-30",
     "status": "OK",
-    "fingerprint": "6513.6700|6218064907",
-    "mode": "REFRESH",
-    "monthly_review": true,
-    "utc": "2026-09-30T09:58:43.226681Z"
+    "fingerprint": "6721.4800|8117172799",
+    "mode": "EOD",
+    "monthly_review": false,
+    "utc": "2026-09-30T20:14:13.538973Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.4,
-    "rows": 547,
+    "score": 92.3,
+    "rows": 590,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1269,
+    "recommended_missing_rate": 0.1292,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1271,7 +1327,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 547
+      "rows": 590
     }
   },
   "cash_rate": {
@@ -1282,10 +1338,10 @@
   },
   "hurdles": {
     "cpi": 29.69,
-    "usd": 22.68,
-    "gold": 22.68,
+    "usd": 22.66,
+    "gold": 22.66,
     "deposit": 29.75,
-    "hurdle": 107.8,
+    "hurdle": 107.76,
     "floor": 29.75,
     "binding": "deposit",
     "mode": "sum",
@@ -1349,7 +1405,7 @@
       }
     ]
   },
-  "last_eod_date": "2026-09-29",
+  "last_eod_date": "2026-09-30",
   "health": {
     "date": "2026-09-30",
     "overall": "OK",
@@ -1358,8 +1414,8 @@
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 547 hisse döndürdü",
-        "value": 547
+        "msg": "TradingView 590 hisse döndürdü",
+        "value": 590
       },
       {
         "key": "cpi",
@@ -1379,8 +1435,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-09-29 (1 iş günü önce)",
-        "value": 1
+        "msg": "son kapanış işlemi 2026-09-30 (0 iş günü önce)",
+        "value": 0
       },
       {
         "key": "review",
@@ -1428,13 +1484,13 @@
         "key": "live",
         "name": "Canlı sonuç vs test",
         "status": "OK",
-        "msg": "canlı geçmiş kısa (0.0 ay); 1 aydan sonra ölçülür",
+        "msg": "canlı geçmiş kısa (0.1 ay); 1 aydan sonra ölçülür",
         "value": null
       }
     ],
     "live_vs_test": {
-      "months": 0.0,
-      "live_ret_pct": 0.21,
+      "months": 0.1,
+      "live_ret_pct": -2.29,
       "live_xu100_pct": -2.4,
       "status": "WAIT"
     },
