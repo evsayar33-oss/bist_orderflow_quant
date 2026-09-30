@@ -1,5 +1,5 @@
 {
-  "version": "3.9.0",
+  "version": "3.10.0",
   "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3",
   "objective": {
     "horizon_months": 12,
@@ -16,8 +16,8 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.2,
         "stop_pct": null,
-        "entry_pct": 99.63,
-        "entry_conf": 0.6871,
+        "entry_pct": 99.61,
+        "entry_conf": 0.6872,
         "entry_exp_real": 128.52,
         "entry_exp_nominal": 196.37,
         "entry_hurdle": 107.8,
@@ -29,21 +29,8 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.2,
         "stop_pct": null,
-        "entry_pct": 99.45,
-        "entry_conf": 0.6715,
-        "entry_exp_real": 128.52,
-        "entry_exp_nominal": 196.37,
-        "entry_hurdle": 107.8,
-        "entry_p_beat_all": 0.195
-      },
-      {
-        "ticker": "GLRYH",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.2,
-        "stop_pct": null,
-        "entry_pct": 99.08,
-        "entry_conf": 0.6497,
+        "entry_pct": 98.62,
+        "entry_conf": 0.6661,
         "entry_exp_real": 128.52,
         "entry_exp_nominal": 196.37,
         "entry_hurdle": 107.8,
@@ -55,8 +42,8 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.2,
         "stop_pct": null,
-        "entry_pct": 98.53,
-        "entry_conf": 0.689,
+        "entry_pct": 96.84,
+        "entry_conf": 0.679,
         "entry_exp_real": 128.52,
         "entry_exp_nominal": 196.37,
         "entry_hurdle": 107.8,
@@ -68,12 +55,25 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.2,
         "stop_pct": null,
-        "entry_pct": 98.34,
-        "entry_conf": 0.6827,
+        "entry_pct": 96.25,
+        "entry_conf": 0.6703,
         "entry_exp_real": 128.52,
         "entry_exp_nominal": 196.37,
         "entry_hurdle": 107.8,
         "entry_p_beat_all": 0.195
+      },
+      {
+        "ticker": "KAYSE",
+        "action": "BUY",
+        "reason": "NEW_ENTRY",
+        "target_w": 0.2,
+        "stop_pct": null,
+        "entry_pct": 94.67,
+        "entry_conf": 0.6518,
+        "entry_exp_real": 63.77,
+        "entry_exp_nominal": 112.4,
+        "entry_hurdle": 107.8,
+        "entry_p_beat_all": 0.194
       }
     ],
     "last_rebalance_month": "2026-09",
@@ -86,23 +86,23 @@
         "tickers": [
           "MNDRS",
           "ISFIN",
-          "GLRYH",
           "GOLTS",
-          "BESLR"
+          "BESLR",
+          "KAYSE"
         ],
         "confidence": {
-          "MNDRS": 0.6871,
-          "ISFIN": 0.6715,
-          "GLRYH": 0.6497,
-          "GOLTS": 0.689,
-          "BESLR": 0.6827
+          "MNDRS": 0.6872,
+          "ISFIN": 0.6661,
+          "GOLTS": 0.679,
+          "BESLR": 0.6703,
+          "KAYSE": 0.6518
         },
         "w": {
           "MNDRS": 0.2,
           "ISFIN": 0.2,
-          "GLRYH": 0.2,
           "GOLTS": 0.2,
-          "BESLR": 0.2
+          "BESLR": 0.2,
+          "KAYSE": 0.2
         }
       }
     ]
@@ -144,56 +144,56 @@
       "real_growth": -0.14398
     },
     "regime_weights": {
-      "RISK_OFF": {
-        "mom_12_1": -0.0656,
-        "high_52w": 0.0031,
-        "trend_consistency": 0.00453,
-        "low_vol": 0.11093,
-        "low_beta": -0.03503,
-        "dd_resilience": 0.10864,
-        "liquidity": -0.24565,
-        "roe": -0.00056,
-        "earnings_yield": 0.03888,
-        "book_yield": 0.12953,
-        "sales_yield": 0.11351,
-        "op_margin": -0.04166,
-        "low_leverage": 0.05372,
-        "div_yield": 0.0,
-        "real_growth": -0.04864
-      },
       "RISK_ON": {
-        "mom_12_1": -0.07208,
+        "mom_12_1": -0.07207,
         "high_52w": 0.04027,
-        "trend_consistency": 0.03724,
-        "low_vol": 0.07229,
-        "low_beta": -0.01715,
-        "dd_resilience": 0.09578,
+        "trend_consistency": 0.03726,
+        "low_vol": 0.0723,
+        "low_beta": -0.01714,
+        "dd_resilience": 0.09575,
         "liquidity": -0.28087,
-        "roe": 0.02608,
-        "earnings_yield": 0.04146,
+        "roe": 0.0261,
+        "earnings_yield": 0.04143,
         "book_yield": 0.14157,
-        "sales_yield": 0.12076,
-        "op_margin": -0.01237,
-        "low_leverage": -0.0005,
+        "sales_yield": 0.12077,
+        "op_margin": -0.01238,
+        "low_leverage": -0.00049,
         "div_yield": 0.0,
         "real_growth": -0.04159
       },
       "NEUTRAL": {
-        "mom_12_1": -0.07705,
-        "high_52w": 0.03105,
-        "trend_consistency": 0.01467,
-        "low_vol": 0.09453,
-        "low_beta": -0.04262,
-        "dd_resilience": 0.11579,
-        "liquidity": -0.18341,
-        "roe": 0.01868,
+        "mom_12_1": -0.07701,
+        "high_52w": 0.03104,
+        "trend_consistency": 0.01461,
+        "low_vol": 0.09454,
+        "low_beta": -0.04261,
+        "dd_resilience": 0.11581,
+        "liquidity": -0.18343,
+        "roe": 0.01867,
         "earnings_yield": 0.07227,
-        "book_yield": 0.12358,
-        "sales_yield": 0.10305,
-        "op_margin": 0.02368,
+        "book_yield": 0.1236,
+        "sales_yield": 0.10307,
+        "op_margin": 0.0237,
         "low_leverage": -0.03118,
         "div_yield": 0.0,
-        "real_growth": -0.06845
+        "real_growth": -0.06846
+      },
+      "RISK_OFF": {
+        "mom_12_1": -0.06559,
+        "high_52w": 0.00312,
+        "trend_consistency": 0.00453,
+        "low_vol": 0.11095,
+        "low_beta": -0.03503,
+        "dd_resilience": 0.10863,
+        "liquidity": -0.24566,
+        "roe": -0.00058,
+        "earnings_yield": 0.03888,
+        "book_yield": 0.12952,
+        "sales_yield": 0.11352,
+        "op_margin": -0.04166,
+        "low_leverage": 0.05371,
+        "div_yield": 0.0,
+        "real_growth": -0.04862
       }
     },
     "prior_source": "research:2026-09-29",
@@ -202,7 +202,7 @@
     "promotions": 0,
     "rollbacks": 0,
     "promotion_date": "2026-09-29",
-    "last_fit": "2026-09-29",
+    "last_fit": "2026-09-30",
     "ic_live_12m": {
       "n_dates": 0
     },
@@ -226,18 +226,18 @@
       {
         "lo": 50.0,
         "hi": 70.0,
-        "mean_excess": -1.947,
-        "se": 6.147,
-        "p_beat_cpi": 0.5027,
+        "mean_excess": -1.965,
+        "se": 6.145,
+        "p_beat_cpi": 0.5026,
         "p_beat_all": 0.1887,
         "live_n_dates": 0
       },
       {
         "lo": 70.0,
         "hi": 80.0,
-        "mean_excess": -4.226,
-        "se": 7.86,
-        "p_beat_cpi": 0.5282,
+        "mean_excess": -4.19,
+        "se": 7.87,
+        "p_beat_cpi": 0.5284,
         "p_beat_all": 0.2022,
         "live_n_dates": 0
       },
@@ -298,6 +298,11 @@
         "se": 21.792,
         "basis": "real"
       },
+      "NEUTRAL": {
+        "mean": 60.104,
+        "se": 32.968,
+        "basis": "real"
+      },
       "RISK_OFF": {
         "mean": 30.027,
         "se": 17.583,
@@ -307,11 +312,6 @@
         "mean": 41.919,
         "se": 27.575,
         "basis": "real"
-      },
-      "NEUTRAL": {
-        "mean": 60.104,
-        "se": 32.968,
-        "basis": "real"
       }
     },
     "source": "research"
@@ -319,11 +319,11 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0013,
-      "NEUTRAL": 0.9987,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.3386,
+      "NEUTRAL": 0.6613,
+      "RISK_ON": 0.0001
     },
-    "p_risk_off": 0.0013,
+    "p_risk_off": 0.3386,
     "degraded": false,
     "params": {
       "K": 3,
@@ -413,8 +413,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.355,
-    "exp_mkt_12m_pct": 23.94,
+    "exp_mkt_5d_pct": 0.34,
+    "exp_mkt_12m_pct": 24.0,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -427,7 +427,7 @@
       "NEUTRAL",
       "NEUTRAL"
     ],
-    "as_of": "2026-09-29",
+    "as_of": "2026-09-30",
     "persistence": 0.9196,
     "source": "hmm_yfinance",
     "state_stats": {
@@ -1106,7 +1106,12 @@
     "BASCM": "Non-Energy Minerals",
     "KENT": "Consumer Non-Durables",
     "YYAPI": "Industrial Services",
-    "HEDEF": "Finance"
+    "HEDEF": "Finance",
+    "SEKUR": "Process Industries",
+    "OZRDN": "Process Industries",
+    "AKYHO": "Commercial Services",
+    "RALYH": "Industrial Services",
+    "GATEG": "Commercial Services"
   },
   "performance": {
     "nav": {
@@ -1121,7 +1126,7 @@
       "benchmarks_total_pct": {
         "cpi": null,
         "usd": 0.06,
-        "gold": -2.73,
+        "gold": 0.32,
         "deposit": 0.07,
         "xu100": -2.4,
         "floor": null,
@@ -1135,8 +1140,8 @@
   },
   "last_rebalance": {
     "date": "2026-09-29",
-    "mode": "EOD",
-    "engine_version": "3.9.0",
+    "mode": "REFRESH",
+    "engine_version": "3.10.0",
     "hurdle_mode": "sum",
     "status": "OK",
     "model_version": "prior-research-2026-09-29+NEUTRAL",
@@ -1148,14 +1153,14 @@
       "low_beta": 1.0,
       "dd_resilience": 1.0,
       "liquidity": 1.0,
-      "roe": 0.967,
-      "earnings_yield": 0.972,
-      "book_yield": 0.985,
-      "sales_yield": 0.972,
-      "op_margin": 0.965,
-      "low_leverage": 0.985,
+      "roe": 0.968,
+      "earnings_yield": 0.974,
+      "book_yield": 0.986,
+      "sales_yield": 0.974,
+      "op_margin": 0.968,
+      "low_leverage": 0.986,
       "div_yield": 1.0,
-      "real_growth": 0.958
+      "real_growth": 0.961
     },
     "calibrated": true,
     "market_12m": {
@@ -1164,7 +1169,7 @@
       "basis": "real"
     },
     "expected_inflation_12m": 29.69,
-    "n_scored": 543,
+    "n_scored": 507,
     "hurdles": {
       "cpi": 29.69,
       "usd": 22.68,
@@ -1183,37 +1188,37 @@
     "picks": [
       "MNDRS",
       "ISFIN",
-      "GLRYH",
       "GOLTS",
-      "BESLR"
+      "BESLR",
+      "KAYSE"
     ],
     "confidence": {
-      "MNDRS": 0.6871,
-      "ISFIN": 0.6715,
-      "GLRYH": 0.6497,
-      "GOLTS": 0.689,
-      "BESLR": 0.6827
+      "MNDRS": 0.6872,
+      "ISFIN": 0.6661,
+      "GOLTS": 0.679,
+      "BESLR": 0.6703,
+      "KAYSE": 0.6518
     },
     "confidence_grade": {
       "MNDRS": "Yüksek",
       "ISFIN": "Yüksek",
-      "GLRYH": "Yüksek",
       "GOLTS": "Yüksek",
-      "BESLR": "Yüksek"
+      "BESLR": "Yüksek",
+      "KAYSE": "Yüksek"
     },
     "suggested_split": {
-      "MNDRS": 0.2126,
-      "ISFIN": 0.1949,
-      "GLRYH": 0.1701,
-      "GOLTS": 0.2148,
-      "BESLR": 0.2076
+      "MNDRS": 0.2191,
+      "ISFIN": 0.1944,
+      "GOLTS": 0.2095,
+      "BESLR": 0.1993,
+      "KAYSE": 0.1777
     },
     "buys": [
       "MNDRS",
       "ISFIN",
-      "GLRYH",
       "GOLTS",
-      "BESLR"
+      "BESLR",
+      "KAYSE"
     ],
     "sells": [],
     "sell_reasons": {},
@@ -1221,34 +1226,34 @@
     "target_weights": {
       "MNDRS": 0.2,
       "ISFIN": 0.2,
-      "GLRYH": 0.2,
       "GOLTS": 0.2,
-      "BESLR": 0.2
+      "BESLR": 0.2,
+      "KAYSE": 0.2
     },
     "exit_month": {
       "MNDRS": "2027-03",
       "ISFIN": "2027-03",
-      "GLRYH": "2027-03",
       "GOLTS": "2027-03",
-      "BESLR": "2027-03"
+      "BESLR": "2027-03",
+      "KAYSE": "2027-03"
     },
     "n_cohorts": 1,
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-09-29",
+    "date": "2026-09-30",
     "status": "OK",
     "fingerprint": "6513.6700|6218064907",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": true,
-    "utc": "2026-09-29T19:29:02.034948Z"
+    "utc": "2026-09-30T09:58:43.226681Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.3,
-    "rows": 585,
+    "score": 92.4,
+    "rows": 547,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1282,
+    "recommended_missing_rate": 0.1269,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1266,7 +1271,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 585
+      "rows": 547
     }
   },
   "cash_rate": {
@@ -1299,62 +1304,62 @@
     "picks": [
       {
         "ticker": "MNDRS",
-        "confidence": 0.6871,
+        "confidence": 0.6872,
         "grade": "Yüksek",
-        "split": 0.2126,
+        "split": 0.2191,
         "score_pct": 99.6,
         "sector": "Consumer Non-Durables",
         "exp_nominal_12m": 196.4
       },
       {
         "ticker": "ISFIN",
-        "confidence": 0.6715,
+        "confidence": 0.6661,
         "grade": "Yüksek",
-        "split": 0.1949,
-        "score_pct": 99.4,
-        "sector": "Finance",
-        "exp_nominal_12m": 196.4
-      },
-      {
-        "ticker": "GLRYH",
-        "confidence": 0.6497,
-        "grade": "Yüksek",
-        "split": 0.1701,
-        "score_pct": 99.1,
+        "split": 0.1944,
+        "score_pct": 98.6,
         "sector": "Finance",
         "exp_nominal_12m": 196.4
       },
       {
         "ticker": "GOLTS",
-        "confidence": 0.689,
+        "confidence": 0.679,
         "grade": "Yüksek",
-        "split": 0.2148,
-        "score_pct": 98.5,
+        "split": 0.2095,
+        "score_pct": 96.8,
         "sector": "Non-Energy Minerals",
         "exp_nominal_12m": 196.4
       },
       {
         "ticker": "BESLR",
-        "confidence": 0.6827,
+        "confidence": 0.6703,
         "grade": "Yüksek",
-        "split": 0.2076,
-        "score_pct": 98.3,
+        "split": 0.1993,
+        "score_pct": 96.3,
         "sector": "Consumer Non-Durables",
         "exp_nominal_12m": 196.4
+      },
+      {
+        "ticker": "KAYSE",
+        "confidence": 0.6518,
+        "grade": "Yüksek",
+        "split": 0.1777,
+        "score_pct": 94.7,
+        "sector": "Health Technology",
+        "exp_nominal_12m": 112.4
       }
     ]
   },
   "last_eod_date": "2026-09-29",
   "health": {
-    "date": "2026-09-29",
+    "date": "2026-09-30",
     "overall": "OK",
     "checks": [
       {
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 585 hisse döndürdü",
-        "value": 585
+        "msg": "TradingView 547 hisse döndürdü",
+        "value": 547
       },
       {
         "key": "cpi",
@@ -1368,14 +1373,14 @@
         "name": "Veri: bilanço verileri",
         "status": "OK",
         "msg": "hisselerin %98'inde bilanço verisi var",
-        "value": 0.9755
+        "value": 0.977125
       },
       {
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-09-29 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-09-29 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1416,8 +1421,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 0 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 0
+        "msg": "model 1 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 1
       },
       {
         "key": "live",
@@ -1436,31 +1441,31 @@
     "win_rates": {
       "closed_lots": {
         "live": 0,
-        "test": 115
+        "test": 143
       },
       "hit_nominal_pct": {
         "live": null,
-        "test": 73.0
+        "test": 65.7
       },
       "hit_beat_xu100_pct": {
         "live": null,
-        "test": 52.2
+        "test": 45.5
       },
       "hit_beat_cpi_pct": {
         "live": null,
-        "test": 52.2
+        "test": 47.2
       },
       "hit_beat_all_pct": {
         "live": null,
-        "test": 16.8
+        "test": 20.4
       },
       "avg_nominal_pct": {
         "live": null,
-        "test": 59.18
+        "test": 53.87
       },
       "avg_months_held": {
         "live": null,
-        "test": 11.6
+        "test": 10.3
       }
     },
     "red": [],
