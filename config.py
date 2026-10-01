@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.11.0"
+ENGINE_VERSION = "3.12.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -177,31 +177,11 @@ VALUE_TRAP_MODE = "filter"        # ON (V3.10): skip cheap stocks still in the b
 # real-data test: return ~unchanged across thresholds (63-67%/yr), beat-BIST100 80% -> 85-91%, sum target 17% -> 18-23%
 VALUE_TRAP_CUT = 1 / 3            # "filter": skip names whose 'turn' percentile is below this
 
-# ---- V3.11 Hedef Avcısı: separate 5x sleeve (sell at the target multiple) -------------------------
-# Research (real BIST panel 2013-2026; every setting compared with RANDOM picks under the SAME exit rules):
-#   score = small market cap + high book yield + high earnings yield (equal-weight percentiles)
-#   %51.4/yr (random %31.0) · first half %31.2 / second half %74.6 · closed with a loss %14.8 (random ~%30)
-#   lost more than half %3.3 · avg win +%165 / avg loss -%46 · reached 5x %20 · max drawdown -%43
-#   2017-2026: sleeve %61.7/yr vs main engine %66.1/yr (main closes %34 of lots at a loss).
-#   Nominal-price features rejected (look-ahead through bonus issues).
-TH_ENABLED = True
-TH_SLOTS = 8                      # max open names in the sleeve
-TH_TARGET = 5.0                   # sell at 5x the entry price
-TH_TRAIL = (2.0, 0.35)            # after 2x, sell if it falls 35% from its peak
-TH_MAX_MONTHS = 36                # sell after 36 months whatever the level (24 -> 36: better in both halves, fewer losers)
-TH_STOP = None                    # no hard stop: in research stops RAISED the share of losing trades
-TH_COMPONENTS = ["small", "book", "earn"]
-TH_MIN_VALUE_TRADED = None        # None = the main engine's liquidity floor
-TH_MCAP_MIN = None
-TH_MCAP_MAX = None
-TH_MIN_PRICE = None
-TH_UNIVERSE_LOG = os.path.join(DATA_DIR, "th_universe_log.csv.gz")   # survivorship-free monthly record
-TH_TRADES_FILE = os.path.join(DATA_DIR, "th_trades.csv")
-TH_BACKTEST_TRADES_FILE = os.path.join(DATA_DIR, "th_backtest_trades.csv")
-TH_BACKTEST_NAV_FILE = os.path.join(DATA_DIR, "th_backtest_nav.csv")
-# slow, evidence-based adaptation (champion / challenger) and stopping rules
-TH_CHALLENGERS = [{"TH_TRAIL": (3.0, 0.4)}, {"TH_TRAIL": (2.0, 0.25)}, {"TH_TRAIL": None},
-                  {"TH_MAX_MONTHS": 24}, {"TH_MAX_MONTHS": 48}, {"TH_SLOTS": 6}, {"TH_SLOTS": 10}]
-TH_CHALLENGER_MIN_EDGE_PP = 3.0          # must beat random picks by at least this much (yearly %)
-TH_CHALLENGER_CONFIRM = 3                # same winner in 3 consecutive monthly tests
-TH_MIN_MONTHS_BETWEEN_CHANGES = 12       # at most one rule change a year
+# ---- V3.12: don't realise a loss at cohort expiry ---------------------------------------------------
+# A name whose 6-month cohort expires while it is BELOW its entry price is kept for another cohort if its
+# score is still in the top 30% (composite percentile >= 70), up to 18 extra months.
+# Real-data walk-forward (same engine, only this rule changed):
+#   BIST 2017-26: lots closed with a gain 68% -> 91%, avg lot +56% -> +79%, CAGR 67.4% -> 66.9%, max DD -41.4% -> -40.4%
+#   US   2015-26: lots closed with a gain 51% -> 67%, avg lot +2.3% -> +8.2%, CAGR 9.1% -> 10.6%, max DD -57.6% -> -47.0%
+#   Neighbouring settings (score >= 60/70/80, 6/12/18 months) moved the same way.
+LOSER_EXTENSION = {"min_score_pct": 70, "max_extra_months": 18}

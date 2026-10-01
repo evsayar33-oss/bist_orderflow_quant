@@ -1,41 +1,15 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
-**V3.11 — Hedef Avcısı (5× hedefli ayrı sepet):**
-* **Ne:** Ana portföyden bağımsız, en fazla 8 hisselik ayrı bir sepet. Hisse 5 kata ulaşınca satılır; en uzun 36 ay tutulur.
-* **Seçim:** Her ay boş slotlar en küçük + defter değerine ve kâra göre en ucuz likit hisselerle doldurulur. Alım ertesi seansın açılışında.
-* **Satış:**
-  * 5× hedefe ulaşınca kâr al.
-  * 2 kat olduktan sonra zirvesinden %35 geri gelirse kârı kilitle.
-  * 36 ay dolunca sat.
-  * Zarar-kes (stop) yok: testte zararla kapanan işlem sayısını artırdı.
-* **Gerçek veri sonucu (2013–2026, aynı kurallarla rastgele seçimle karşılaştırmalı):**
-  * Yıllık %51,4; aynı kurallarla rastgele seçim %31,0. Geçmişin iki yarısında %31,2 ve %74,6.
-  * İşlemlerin %85'i kârla, %15'i zararla kapandı (rastgele seçimde zararla kapanan ~%30).
-  * Ortalama kazanç +%165, ortalama kayıp −%46; işlem başı ortalama +%134. Yarısından fazla kaybettiren %3,3.
-  * 5 kata ulaşan %20. En büyük düşüş −%43.
-  * 2017–2026'da ana sistem yıllık %66,1, Hedef Avcısı %61,7. Hedef Avcısı çok daha az işlemi zararla kapatıyor (%15'e karşı %34).
-* **Elenenler:** Düşük nominal fiyat (bedelsiz düzeltmesi yüzünden geleceği görüyordu), piyango profili, 10× hedef, sabit stoplar, piyasa çöküşünde alımı durdurmak, kazananların ortak özelliklerini seçime eklemek (testte tutmadı).
-* **Kendini denetleme:**
-  * Her ayın Walk Forward Backtest'i bu sepeti aynı kodla yeniden test eder ve 20 rastgele seçimle karşılaştırır.
-  * Her ay taranan tüm hisseler (sonradan borsadan çıkanlar dahil) `data/th_universe_log.csv.gz` dosyasına kaydedilir. 12 ay sonra gerçek, yanlılıksız isabet oranı görünür.
-* **Fiyatlar:** Her açık pozisyon için güncel fiyat, **🎯 hedef fiyat**, **🔒 kâr kilidi fiyatı** (altına kapanırsa sat) ve son gün gösterilir. Fiyatlar bugünkü fiyat cinsindendir; bölünme veya bedelsiz olsa da doğru kalır.
-* **Yavaş, kanıta dayalı kendini geliştirme:**
-  * Her ayın testi mevcut kuralın yanında birkaç yakın alternatifi de dener: kâr kilidi seviyesi, süre ve hisse sayısı. **Hedef kat (5× / 2×) değişmez.**
-  * Bir alternatif ancak şu dört şartın hepsini sağlarsa "aday" olur:
-    * geçmişin iki yarısında da daha iyi,
-    * rastgele seçimden en az 3 puan daha iyi,
-    * mevcut kuraldan daha büyük üstünlük,
-    * daha fazla zararlı işlem yok.
-  * Aynı aday **3 ay üst üste** doğrulanırsa ve son değişiklikten **12 ay** geçmişse uygulanır. Yılda en fazla bir değişiklik olur ve Telegram'da gerekçesiyle bildirilir.
-* **Durdurma (yeni alımlar durur, açık pozisyonların satış kuralları sürer):**
-  * Son test rastgele seçimden kötü çıkarsa yeni alımlar durur.
-  * 12 ay ve 8 işlemden sonra canlıda zararla kapanan oran testten 20 puan yüksekse ya da işlem başı ortalama eksiye dönerse yeni alımlar durur.
-  * Koşullar düzelince alımlar otomatik başlar; iki durumda da Telegram'dan haber gelir.
-* **Beklenmedik olay uyarıları:**
-  * Bir hisse girişten %50 düşerse uyarı gelir: şirkete özel kötü haber varsa sat, yoksa tut.
-  * Bir hisse 5 gün işlem görmezse uyarı gelir.
-  * Piyasa son 3 ayın zirvesinden %20 düşerse uyarı gelir. Bu durumda alımlar durdurulmaz, çünkü testte çöküş sonrası alımı durdurmak sonucu iki borsada da kötüleştirdi.
-* **Nerede:** Ayrı Telegram mesajı (🏹 Hedef Avcısı: AL/SAT sinyalleri, açık pozisyonlar) ve panelde **Hedef Avcısı** sekmesi. Sepete ne kadar para ayrılacağı senin kararın.
+**V3.12 — Zararı satmak yerine tutmak (kârla kapanan işlem oranı %68 → %91):**
+* **Kural:** 6 ayı dolan bir hisse giriş fiyatının altındaysa ve sistem puanı hâlâ ilk %30'daysa satılmaz; en fazla 18 ay daha tutulur. Bu sürede toparlanırsa normal 6 aylık kuralla satılır.
+* **Neden:** Zararla kapanan işlemlerin çoğu, puanı hâlâ yüksek olan ama 6 ay dolduğu için dipte satılan hisselerdi.
+* **Gerçek veri sonucu (2017–2026, aynı motor, yalnızca bu kural değişti):**
+  * Kârla kapanan işlem %68 → **%91**.
+  * İşlem başı ortalama +%56 → **+%79**.
+  * Yıllık getiri %67,4 → %66,9 (pratikte aynı).
+  * En büyük düşüş −%41,4 → −%40,4.
+* **Sağlamlık:** Puan eşiği %60, %70 ve %80; ek süre 6, 12 ve 18 ay denendi. Hepsinde kârla kapanma oranı yükseldi, getiri aynı kaldı.
+* **Telegram:** Aylık raporda "⏳ Süresi uzatıldı" satırında hangi hissenin neden tutulduğu yazar.
 
 **V3.10 — Değer tuzağı koruması (büyük kazananların ortak özelliklerinden):**
 * **Analiz:** 2020, 2022 ve diğer bütün yıllarda, 6 ayda en çok yükselen %5'lik hisselerin alındıkları andaki özellikleri incelendi. Ortak nokta şuydu: dipten dönmeye başlamış (son 3 ayda yükselen, 52 haftalık dibinden uzaklaşmış), küçük ve oynak hisseler. Ucuzluk büyük kazananların ortak özelliği değildi.
