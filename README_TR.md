@@ -1,5 +1,32 @@
 # BIST Reel Getiri Motoru V3 (uzun vadeli "al-unut")
 
+**V3.13 — İki ek gösterge (12 aday tek tek, sonra kombinasyonlar halinde test edildi):**
+* **Eklenenler:**
+  * **Sektör momentumu:** hissenin sektörünün son 12 aydaki ortalama gücü.
+  * **"Ucuz ve kârlı birlikte":** kâra göre ucuzluk sırası × özsermaye kârlılığı sırası.
+  * Bunlar mevcut 15 göstergeli skorun üzerine, seçim sıralamasına eklendi.
+* **Test (aynı motor, gerçek veri, 2017–2026):**
+
+| Ayar | Yıllık | İlk yarı / ikinci yarı | En büyük düşüş | Kârla kapanan |
+|---|---|---|---|---|
+| Önceki sistem | %66,9 | %55,6 / %79,3 | −%40,4 | %90,8 |
+| **Yeni (iki gösterge birlikte)** | **%81,1** | **%66,1 / %97,7** | −%44,2 | %89,5 |
+
+* **9 yılın toplamı (2017–2025):** 1 TL → 129 TL yerine **259 TL**. Yeni sistem 9 yılın 7'sinde daha iyi; 2018, 2021 ve 2025'te neredeyse aynı.
+* **Elenen 10 gösterge:** piyango hisselerinden kaçınma, küçüklük, düşük özgün oynaklık, kârlılık, kalıntı momentum, EBIT/EV, satış büyümesi, dipten dönüş, dibe yakınlık, 3 ay ters dönüş. Ya getiriyi düşürdüler ya da yalnızca bir dönemde işe yaradılar.
+* **Dürüstlük notu:**
+  * 20 deneme arasından en iyisi seçildiği için test sonucu biraz iyimser olabilir.
+  * Kontrol: Sadece ilk dönemin sonuçlarına bakarak seçim yapsaydık da aynı kombinasyon seçilirdi, ve ikinci dönemde de kazandı.
+  * En büyük düşüş yaklaşık 4 puan arttı.
+
+**V3.12.1 — Anlamlı performans tablosu:**
+* Yıllık tabloda artık şu sütunlar var: reel getiri (TÜFE üstü), "TÜFE'yi geçti mi", "o yılın en iyi alternatifi" (dolar, altın veya mevduattan hangisi en yüksekse) ve onu geçip geçmediği, "BIST100'ü geçti mi". Altında tüm tam yılların toplamı gösteriliyor: 1 birim portföy, BIST100, TÜFE ve en iyi alternatifte ne oldu.
+* Hedef artık TÜFE + dolar + altın + mevduatın toplamı değil, en yükseğidir. Dördünü aynı anda kazanmak mümkün olmadığı için toplam hedef her yıl ❌ gösteriyordu. Hisse seçimi bundan etkilenmez.
+* Zayıf yıllar analizi (gerçek veri):
+  * 2018 (kur krizi) ve 2024'te tüm likit BIST hisselerinin eşit ağırlıklı ortalaması TÜFE'nin altında kaldı. Sistem bu yıllarda BIST100'ü geçti.
+  * 2023'te ocak–nisan arasındaki %25'lik düşüş belirleyiciydi. Sistem yine BIST100'ü geçti, ama küçük hisselerin seçim sonrası rallisini tam yakalayamadı.
+  * Hiçbir hisse faktörü (değer, düşük oynaklık, momentum, büyüklük, dolar duyarlılığı) bu yılların reel kaybını önleyemedi. Bu yıllarda tek koruma hisse dışı varlıklar olurdu.
+
 **V3.12 — Zararı satmak yerine tutmak (kârla kapanan işlem oranı %68 → %91):**
 * **Kural:** 6 ayı dolan bir hisse giriş fiyatının altındaysa ve sistem puanı hâlâ ilk %30'daysa satılmaz; en fazla 18 ay daha tutulur. Bu sürede toparlanırsa normal 6 aylık kuralla satılır.
 * **Neden:** Zararla kapanan işlemlerin çoğu, puanı hâlâ yüksek olan ama 6 ay dolduğu için dipte satılan hisselerdi.

@@ -330,6 +330,47 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
             cz = (f["composite"] - f["composite"].mean()) / (f["composite"].std() or 1.0)
             f["sel_score"] = cz + 0.5 * z.fillna(0)
             rank_col = "sel_score"
+    eb = getattr(C, "EXTRA_BLEND", None)              # V3.13: extra signals blended into the selection ranking
+    if eb:
+        num = lambda c: pd.to_numeric(f[c], errors="coerce") if c in f else pd.Series(np.nan, index=f.index)
+        def resid(y, x):
+            m = y.notna() & x.notna()
+            if m.sum() < 20:
+                return y * np.nan
+            b = np.polyfit(x[m], y[m], 1)
+            return y - (b[0] * x + b[1])
+        X = {
+            "low_lottery": -num("max_1m"),
+            "small": -np.log(num("market_cap").where(num("market_cap") > 0)),
+            "low_ivol": -resid(num("vol_ann_pct"), num("beta")),
+            "sector_mom": num("f_mom_12_1").groupby(f["sector"].fillna("NA")).transform("mean") if "sector" in f else num("f_mom_12_1") * np.nan,
+            "ep_x_quality": num("f_earnings_yield").rank(pct=True) * num("f_roe").rank(pct=True),
+            "profitable": (num("net_income") > 0).astype(float).where(num("net_income").notna()),
+            "resid_mom": resid(num("f_mom_12_1"), num("beta")),
+            "ebit_ev": (num("op_margin") / 100 * num("revenue")) / (num("market_cap") + (num("debt_to_equity") * num("equity")).fillna(0)),
+            "sales_growth": num("rev_growth"),
+            "turn": num("ret_3m").rank(pct=True) + num("from_52w_low").rank(pct=True),
+            "near_low": -num("from_52w_low"),
+            "reversal_3m": -num("ret_3m"),
+        }
+        base = f[rank_col] if rank_col in f else f["composite"]
+        tot = (base - base.mean()) / (base.std() or 1.0)
+        for k, w in eb.items():
+            x = X.get(k)
+            if x is None or x.notna().mean() < 0.3:
+                continue
+            r = x.rank(pct=True)
+            tot = tot + float(w) * ((r - r.mean()) / (r.std() or 1.0)).fillna(0)
+        f["sel_score3"] = tot
+        rank_col = "sel_score3"
+    lb = getattr(C, "LOTTERY_BLEND", None)            # penalise names with an extreme 1-month daily jump
+    if lb and "max_1m" in f and pd.to_numeric(f["max_1m"], errors="coerce").notna().mean() > 0.5:
+        base = f[rank_col] if rank_col in f else f["composite"]
+        cz = (base - base.mean()) / (base.std() or 1.0)
+        lot = pd.to_numeric(f["max_1m"], errors="coerce").rank(pct=True)
+        lz = (lot - lot.mean()) / (lot.std() or 1.0)
+        f["sel_score2"] = cz - float(lb) * lz.fillna(0)
+        rank_col = "sel_score2"
     cand = f[elig].sort_values(rank_col, ascending=False)
     # projected portfolio sector weights from the still-active older cohorts (portfolio-level cap)
     sec_of = lambda t: (f.at[t, "sector"] if t in f.index and isinstance(f.at[t, "sector"], str) and f.at[t, "sector"] else "NA")

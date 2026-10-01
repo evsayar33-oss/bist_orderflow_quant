@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.12.0"
+ENGINE_VERSION = "3.13.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -25,7 +25,7 @@ MIN_EDGE_OVER_HURDLE_PCT = 3.0      # margin (pp) added on top of the target
 # V3.6: TARGET = SUM of the components (CPI + USD + gold + deposit) + margin  -> user's goal.
 # "max" = old rule (strongest single alternative). The strongest single alternative is still
 # used as the minimum ENTRY FLOOR: a stock that cannot even beat the best alternative is never bought.
-HURDLE_MODE = os.environ.get("BOQ_HURDLE_MODE", "sum")
+HURDLE_MODE = os.environ.get("BOQ_HURDLE_MODE", "max")   # V3.13: "max" = beat CPI and the BEST single alternative (sum is unreachable by design)
 
 # ---------------------------------------------------------------- paths
 DATA_DIR = os.environ.get("BOQ_DATA_DIR", "data")
@@ -185,3 +185,12 @@ VALUE_TRAP_CUT = 1 / 3            # "filter": skip names whose 'turn' percentile
 #   US   2015-26: lots closed with a gain 51% -> 67%, avg lot +2.3% -> +8.2%, CAGR 9.1% -> 10.6%, max DD -57.6% -> -47.0%
 #   Neighbouring settings (score >= 60/70/80, 6/12/18 months) moved the same way.
 LOSER_EXTENSION = {"min_score_pct": 70, "max_extra_months": 18}
+
+# ---- V3.13: two extra signals in the SELECTION ranking (learned 15-factor composite stays the base) -------------
+# Tested one by one in the full walk-forward engine (12 candidates), then in combinations (8 runs):
+#   sector momentum (sector average 12-1 momentum) and "cheap AND profitable" (earnings-yield rank x ROE rank)
+#   were the only two that improved BOTH halves alone; together (0.5 / 0.5):
+#   2017-26 CAGR 66.9% -> 81.1% · halves 55.6/79.3 -> 66.1/97.7 · 1 TL 2017-25: 129 -> 259 · max DD -40.4% -> -44.2%
+#   Selecting only on the first half would have picked the same combination (it was also best there).
+#   Weight 1.0 on sector momentum hurt the first half -> moderate weights kept.
+EXTRA_BLEND = {"sector_mom": 0.5, "ep_x_quality": 0.5}

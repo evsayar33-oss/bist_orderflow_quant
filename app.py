@@ -365,7 +365,7 @@ with tab3:
                  f'(BIST100 {pct(p.get("xu100_cagr_pct"))}) · maks. düşüş {pct(p.get("max_drawdown_pct"))}']
         if rb:
             lines.append("12 aylık dönemlerde geçme oranı: " +
-                         " · ".join(f'{BENCH.get(k, {"all": "Toplam hedef" if summ else "Hepsi", "each": "Hepsi tek tek"}.get(k, k))} <b>{pct(v, nd=0)}</b>'
+                         " · ".join(f'{BENCH.get(k, {"all": "Toplam hedef" if summ else "En iyi alternatif", "each": "Hepsi tek tek"}.get(k, k))} <b>{pct(v, nd=0)}</b>'
                                     for k, v in rb.items()))
             if summ and p.get("rolling12m_median_gap_pp") is not None:
                 lines.append(f'Tipik 12 ayda toplam hedefe uzaklık: <b>{pct(p.get("rolling12m_median_gap_pp"), True)}</b> puan')
@@ -394,15 +394,36 @@ with tab3:
                         f'gerçekçi düzey).</div></div>', unsafe_allow_html=True)
         py = report.get("per_year") or {}
         if py:
-            tbl = []
+            NM = {"usd": "Dolar", "gold": "Altın", "deposit": "Mevduat"}
+            ok_ = lambda b: {True: "✅", False: "❌"}.get(b, "—")
+            tbl, cum = [], {"p": 1.0, "c": 1.0, "x": 1.0, "u": 1.0, "g": 1.0, "d": 1.0, "n": 0}
             for y, v in py.items():
-                tbl.append({"Yıl": str(y), "Portföy": pct(v.get("nominal_pct"), True), "TÜFE": pct(v.get("cpi_pct")),
-                            "Dolar": pct(v.get("usd_pct")), "Altın": pct(v.get("gold_pct")), "Mevduat": pct(v.get("deposit_pct")),
-                            "BIST100": pct(v.get("xu100_pct"), True),
-                            **({"Hedef (toplam)": pct(v.get("hurdle_pct")),
-                                "Tek tek": {True: "✅", False: "❌"}.get(v.get("beat_each"), "—")} if summ else {}),
-                            ("Hedefi geçti" if summ else "Hepsini geçti"): {True: "✅", False: "❌"}.get(v.get("beat_all"), "—")})
+                p_, c_, x_ = num(v.get("nominal_pct")), num(v.get("cpi_pct")), num(v.get("xu100_pct"))
+                alts = {k: num(v.get(f"{k}_pct")) for k in ("usd", "gold", "deposit")}
+                alts = {k: a for k, a in alts.items() if a is not None}
+                best = max(alts, key=alts.get) if alts else None
+                real = None if p_ is None or c_ is None else ((1 + p_ / 100) / (1 + c_ / 100) - 1) * 100
+                tbl.append({"Yıl": str(y) + ("" if c_ is not None else " (yıl içi)"), "Portföy": pct(p_, True), "BIST100": pct(x_, True), "TÜFE": pct(c_),
+                            "Reel getiri": pct(real, True),
+                            "TÜFE'yi geçti": ok_(None if real is None else real > 0),
+                            "En iyi alternatif": "—" if best is None else f"{NM[best]} {pct(alts[best])}",
+                            "Alternatifi geçti": ok_(None if best is None or p_ is None or c_ is None else p_ > alts[best]),
+                            "BIST100'ü geçti": ok_(None if x_ is None or p_ is None else p_ > x_)})
+                if None not in (p_, c_, x_) and len(alts) == 3:
+                    cum["p"] *= 1 + p_ / 100; cum["c"] *= 1 + c_ / 100; cum["x"] *= 1 + x_ / 100
+                    cum["u"] *= 1 + alts["usd"] / 100; cum["g"] *= 1 + alts["gold"] / 100; cum["d"] *= 1 + alts["deposit"] / 100
+                    cum["n"] += 1
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
+            if cum["n"]:
+                f_ = lambda v: f"{v:.1f}".replace(".", ",")
+                best_c = max(("Dolar", cum["u"]), ("Altın", cum["g"]), ("Mevduat", cum["d"]), key=lambda kv: kv[1])
+                st.markdown(f'<div class="card"><div class="lbl">Tam yıllar toplamı ({cum["n"]} yıl) · 1 birim ne oldu?</div>'
+                            f'<div class="row"><span class="tk">Portföy</span><b>{f_(cum["p"])}</b></div>'
+                            f'<div class="row"><span>BIST100</span><span>{f_(cum["x"])}</span></div>'
+                            f'<div class="row"><span>TÜFE</span><span>{f_(cum["c"])}</span></div>'
+                            f'<div class="row"><span>En iyi alternatif ({best_c[0]})</span><span>{f_(best_c[1])}</span></div>'
+                            f'<div class="note mut" style="margin-top:6px">Reel (TÜFE üstü) birikim: <b>{f_(cum["p"] / cum["c"])} kat</b>. '
+                            'Tek tek yıllarda ❌ olabilir; asıl ölçü yıllar boyunca birikimdir.</div></div>', unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ SAĞLIK
 with tab4:
