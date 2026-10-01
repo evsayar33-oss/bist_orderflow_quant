@@ -108,12 +108,12 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.2,
         "stop_pct": null,
-        "entry_pct": 95.98,
-        "entry_conf": 0.6546,
-        "entry_exp_real": 125.15,
-        "entry_exp_nominal": 192.0,
+        "entry_pct": 95.63,
+        "entry_conf": 0.6524,
+        "entry_exp_real": 125.27,
+        "entry_exp_nominal": 192.15,
         "entry_hurdle": 107.74,
-        "entry_p_beat_all": 0.189
+        "entry_p_beat_all": 0.19
       }
     ],
     "last_rebalance_month": "2026-09",
@@ -131,11 +131,11 @@
           "ALBRK"
         ],
         "confidence": {
-          "MNDRS": 0.6819,
-          "ISFIN": 0.6655,
-          "GOLTS": 0.6849,
-          "BESLR": 0.6737,
-          "ALBRK": 0.6546
+          "MNDRS": 0.6809,
+          "ISFIN": 0.6641,
+          "GOLTS": 0.6838,
+          "BESLR": 0.672,
+          "ALBRK": 0.6524
         },
         "w": {
           "MNDRS": 0.2,
@@ -185,55 +185,55 @@
     },
     "regime_weights": {
       "NEUTRAL": {
-        "mom_12_1": -0.07961,
-        "high_52w": 0.0292,
-        "trend_consistency": 0.01837,
-        "low_vol": 0.09979,
-        "low_beta": -0.0456,
-        "dd_resilience": 0.11326,
-        "liquidity": -0.18229,
-        "roe": 0.01987,
-        "earnings_yield": 0.06883,
-        "book_yield": 0.12238,
-        "sales_yield": 0.10381,
-        "op_margin": 0.01787,
-        "low_leverage": -0.03093,
+        "mom_12_1": -0.07909,
+        "high_52w": 0.02914,
+        "trend_consistency": 0.01696,
+        "low_vol": 0.10013,
+        "low_beta": -0.04377,
+        "dd_resilience": 0.11239,
+        "liquidity": -0.18146,
+        "roe": 0.01923,
+        "earnings_yield": 0.06889,
+        "book_yield": 0.12363,
+        "sales_yield": 0.10071,
+        "op_margin": 0.02543,
+        "low_leverage": -0.03095,
         "div_yield": 0.0,
-        "real_growth": -0.06819
+        "real_growth": -0.06821
       },
       "RISK_ON": {
-        "mom_12_1": -0.07242,
-        "high_52w": 0.03757,
-        "trend_consistency": 0.03985,
-        "low_vol": 0.07395,
-        "low_beta": -0.0158,
-        "dd_resilience": 0.0946,
-        "liquidity": -0.28374,
-        "roe": 0.02534,
-        "earnings_yield": 0.03632,
-        "book_yield": 0.14511,
-        "sales_yield": 0.11835,
-        "op_margin": -0.01567,
-        "low_leverage": -0.00143,
+        "mom_12_1": -0.07348,
+        "high_52w": 0.03661,
+        "trend_consistency": 0.03975,
+        "low_vol": 0.07273,
+        "low_beta": -0.01372,
+        "dd_resilience": 0.09434,
+        "liquidity": -0.28142,
+        "roe": 0.02672,
+        "earnings_yield": 0.03615,
+        "book_yield": 0.15006,
+        "sales_yield": 0.11578,
+        "op_margin": -0.01757,
+        "low_leverage": -0.00145,
         "div_yield": 0.0,
-        "real_growth": -0.03986
+        "real_growth": -0.04023
       },
       "RISK_OFF": {
-        "mom_12_1": -0.06552,
-        "high_52w": 0.00328,
-        "trend_consistency": 0.00726,
-        "low_vol": 0.11313,
-        "low_beta": -0.03688,
-        "dd_resilience": 0.10246,
-        "liquidity": -0.24674,
-        "roe": 0.00094,
-        "earnings_yield": 0.03109,
-        "book_yield": 0.12964,
-        "sales_yield": 0.11563,
-        "op_margin": -0.04493,
-        "low_leverage": 0.05375,
+        "mom_12_1": -0.06661,
+        "high_52w": 0.00204,
+        "trend_consistency": 0.00513,
+        "low_vol": 0.11298,
+        "low_beta": -0.03644,
+        "dd_resilience": 0.10338,
+        "liquidity": -0.25166,
+        "roe": 0.0024,
+        "earnings_yield": 0.0328,
+        "book_yield": 0.13272,
+        "sales_yield": 0.11396,
+        "op_margin": -0.03835,
+        "low_leverage": 0.05207,
         "div_yield": 0.0,
-        "real_growth": -0.04875
+        "real_growth": -0.04945
       }
     },
     "prior_source": "research:2026-10-01",
@@ -257,79 +257,79 @@
       {
         "lo": 0.0,
         "hi": 50.0,
-        "mean_excess": -3.915,
-        "se": 7.694,
-        "p_beat_cpi": 0.4545,
-        "p_beat_all": 0.1864,
+        "mean_excess": -4.26,
+        "se": 7.528,
+        "p_beat_cpi": 0.4541,
+        "p_beat_all": 0.1863,
         "live_n_dates": 0
       },
       {
         "lo": 50.0,
         "hi": 70.0,
-        "mean_excess": -5.44,
-        "se": 4.674,
-        "p_beat_cpi": 0.5049,
-        "p_beat_all": 0.1889,
+        "mean_excess": -4.326,
+        "se": 4.308,
+        "p_beat_cpi": 0.505,
+        "p_beat_all": 0.1893,
         "live_n_dates": 0
       },
       {
         "lo": 70.0,
         "hi": 80.0,
-        "mean_excess": -2.496,
-        "se": 7.034,
-        "p_beat_cpi": 0.5245,
-        "p_beat_all": 0.2036,
+        "mean_excess": -2.38,
+        "se": 7.632,
+        "p_beat_cpi": 0.5282,
+        "p_beat_all": 0.2052,
         "live_n_dates": 0
       },
       {
         "lo": 80.0,
         "hi": 90.0,
-        "mean_excess": -0.91,
-        "se": 9.808,
+        "mean_excess": -1.023,
+        "se": 9.529,
         "p_beat_cpi": 0.5497,
-        "p_beat_all": 0.2014,
+        "p_beat_all": 0.2016,
         "live_n_dates": 0
       },
       {
         "lo": 90.0,
         "hi": 95.0,
-        "mean_excess": 0.18,
-        "se": 6.767,
-        "p_beat_cpi": 0.5912,
-        "p_beat_all": 0.1938,
+        "mean_excess": -0.928,
+        "se": 6.942,
+        "p_beat_cpi": 0.5875,
+        "p_beat_all": 0.1888,
         "live_n_dates": 0
       },
       {
         "lo": 95.0,
         "hi": 100.01,
-        "mean_excess": 65.435,
-        "se": 69.652,
+        "mean_excess": 65.552,
+        "se": 69.53,
         "p_beat_cpi": 0.5947,
-        "p_beat_all": 0.1885,
+        "p_beat_all": 0.1899,
         "live_n_dates": 0
       }
     ],
     "status": "CALIBRATED",
     "cutoffs": {
       "75.0": {
-        "mean_excess": 12.391,
-        "se": 14.966,
-        "lcb": -6.79
+        "mean_excess": 12.241,
+        "se": 14.978,
+        "lcb": -6.955
       },
       "80.0": {
-        "mean_excess": 16.305,
-        "se": 18.204,
-        "lcb": -7.024
+        "mean_excess": 15.999,
+        "se": 18.265,
+        "lcb": -7.409
       },
       "85.0": {
-        "mean_excess": 22.172,
-        "se": 23.464,
-        "lcb": -7.899
+        "mean_excess": 22.021,
+        "se": 23.635,
+        "lcb": -8.27
       },
       "90.0": {
-        "mean_excess": 33.307,
-        "se": 34.169,
-        "lcb": -10.484
+        "mean_excess": 32.809,
+        "se": 34.052,
+        "lcb": -10.832
       }
     },
     "market": {
@@ -359,11 +359,11 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0284,
-      "NEUTRAL": 0.9716,
+      "RISK_OFF": 0.1248,
+      "NEUTRAL": 0.8752,
       "RISK_ON": 0.0
     },
-    "p_risk_off": 0.0284,
+    "p_risk_off": 0.1248,
     "degraded": false,
     "params": {
       "K": 3,
@@ -453,8 +453,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.353,
-    "exp_mkt_12m_pct": 23.95,
+    "exp_mkt_5d_pct": 0.349,
+    "exp_mkt_12m_pct": 23.96,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -1251,7 +1251,7 @@
       "basis": "real"
     },
     "expected_inflation_12m": 29.69,
-    "n_scored": 547,
+    "n_scored": 549,
     "hurdles": {
       "cpi": 29.69,
       "usd": 22.65,
@@ -1276,11 +1276,11 @@
       "ALBRK"
     ],
     "confidence": {
-      "MNDRS": 0.6819,
-      "ISFIN": 0.6655,
-      "GOLTS": 0.6849,
-      "BESLR": 0.6737,
-      "ALBRK": 0.6546
+      "MNDRS": 0.6809,
+      "ISFIN": 0.6641,
+      "GOLTS": 0.6838,
+      "BESLR": 0.672,
+      "ALBRK": 0.6524
     },
     "confidence_grade": {
       "MNDRS": "Yüksek",
@@ -1290,11 +1290,11 @@
       "ALBRK": "Yüksek"
     },
     "suggested_split": {
-      "MNDRS": 0.2114,
+      "MNDRS": 0.212,
       "ISFIN": 0.1923,
-      "GOLTS": 0.2149,
-      "BESLR": 0.2018,
-      "ALBRK": 0.1796
+      "GOLTS": 0.2154,
+      "BESLR": 0.2016,
+      "ALBRK": 0.1786
     },
     "buys": [
       "ALBRK"
@@ -1334,14 +1334,14 @@
     "fingerprint": "6721.4800|8117172799",
     "mode": "REFRESH",
     "monthly_review": true,
-    "utc": "2026-10-01T13:43:01.499340Z"
+    "utc": "2026-10-01T14:51:59.696422Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.1,
-    "rows": 590,
+    "score": 92.2,
+    "rows": 592,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1308,
+    "recommended_missing_rate": 0.1307,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1359,7 +1359,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 590
+      "rows": 592
     }
   },
   "cash_rate": {
@@ -1392,62 +1392,62 @@
     "picks": [
       {
         "ticker": "MNDRS",
-        "confidence": 0.6819,
+        "confidence": 0.6809,
         "grade": "Yüksek",
-        "split": 0.2114,
+        "split": 0.212,
         "score_pct": 99.3,
         "sector": "Consumer Non-Durables",
-        "exp_nominal_12m": 192.0
+        "exp_nominal_12m": 192.1
       },
       {
         "ticker": "ISFIN",
-        "confidence": 0.6655,
+        "confidence": 0.6641,
         "grade": "Yüksek",
         "split": 0.1923,
         "score_pct": 98.9,
         "sector": "Finance",
-        "exp_nominal_12m": 192.0
+        "exp_nominal_12m": 192.1
       },
       {
         "ticker": "GOLTS",
-        "confidence": 0.6849,
+        "confidence": 0.6838,
         "grade": "Yüksek",
-        "split": 0.2149,
+        "split": 0.2154,
         "score_pct": 98.4,
         "sector": "Non-Energy Minerals",
-        "exp_nominal_12m": 192.0
+        "exp_nominal_12m": 192.1
       },
       {
         "ticker": "BESLR",
-        "confidence": 0.6737,
+        "confidence": 0.672,
         "grade": "Yüksek",
-        "split": 0.2018,
-        "score_pct": 97.3,
+        "split": 0.2016,
+        "score_pct": 97.1,
         "sector": "Consumer Non-Durables",
-        "exp_nominal_12m": 192.0
+        "exp_nominal_12m": 192.1
       },
       {
         "ticker": "ALBRK",
-        "confidence": 0.6546,
+        "confidence": 0.6524,
         "grade": "Yüksek",
-        "split": 0.1796,
-        "score_pct": 96.0,
+        "split": 0.1786,
+        "score_pct": 95.6,
         "sector": "Finance",
-        "exp_nominal_12m": 192.0
+        "exp_nominal_12m": 192.1
       }
     ]
   },
   "last_eod_date": "2026-09-30",
   "health": {
     "date": "2026-10-01",
-    "overall": "UYARI",
+    "overall": "OK",
     "checks": [
       {
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 590 hisse döndürdü",
-        "value": 590
+        "msg": "TradingView 592 hisse döndürdü",
+        "value": 592
       },
       {
         "key": "cpi",
@@ -1518,13 +1518,6 @@
         "status": "OK",
         "msg": "canlı geçmiş kısa (0.1 ay); 1 aydan sonra ölçülür",
         "value": null
-      },
-      {
-        "key": "th",
-        "name": "Hedef avcısı",
-        "status": "UYARI",
-        "msg": "testi henüz yok (Walk Forward Backtest çalışınca ölçülür)",
-        "value": null
       }
     ],
     "live_vs_test": {
@@ -1536,37 +1529,35 @@
     "win_rates": {
       "closed_lots": {
         "live": 0,
-        "test": 115
+        "test": 119
       },
       "hit_nominal_pct": {
         "live": null,
-        "test": 91.3
+        "test": 88.2
       },
       "hit_beat_xu100_pct": {
         "live": null,
-        "test": 58.3
+        "test": 59.7
       },
       "hit_beat_cpi_pct": {
         "live": null,
-        "test": 59.6
+        "test": 61.5
       },
       "hit_beat_all_pct": {
         "live": null,
-        "test": 20.2
+        "test": 20.5
       },
       "avg_nominal_pct": {
         "live": null,
-        "test": 77.69
+        "test": 77.33
       },
       "avg_months_held": {
         "live": null,
-        "test": 14.7
+        "test": 14.4
       }
     },
     "red": [],
-    "yellow": [
-      "Hedef avcısı"
-    ]
+    "yellow": []
   },
   "target_hunter": {
     "positions": {},
