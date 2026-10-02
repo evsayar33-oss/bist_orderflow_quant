@@ -1,5 +1,5 @@
 {
-  "version": "3.13.0",
+  "version": "3.14.0",
   "strategy": "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3",
   "objective": {
     "horizon_months": 12,
@@ -109,25 +109,12 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.1,
         "stop_pct": null,
-        "entry_pct": 95.88,
-        "entry_conf": 0.6573,
-        "entry_exp_real": 125.29,
-        "entry_exp_nominal": 192.18,
+        "entry_pct": 75.93,
+        "entry_conf": 0.5821,
+        "entry_exp_real": 24.94,
+        "entry_exp_nominal": 62.04,
         "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.456
-      },
-      {
-        "ticker": "GLRYH",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.1,
-        "stop_pct": null,
-        "entry_pct": 98.92,
-        "entry_conf": 0.6345,
-        "entry_exp_real": 125.29,
-        "entry_exp_nominal": 192.18,
-        "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.456
+        "entry_p_beat_all": 0.416
       },
       {
         "ticker": "PCILT",
@@ -135,25 +122,12 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.1,
         "stop_pct": null,
-        "entry_pct": 92.11,
-        "entry_conf": 0.638,
-        "entry_exp_real": 58.76,
-        "entry_exp_nominal": 105.9,
+        "entry_pct": 86.67,
+        "entry_conf": 0.614,
+        "entry_exp_real": 28.28,
+        "entry_exp_nominal": 66.37,
         "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.452
-      },
-      {
-        "ticker": "TSKB",
-        "action": "BUY",
-        "reason": "NEW_ENTRY",
-        "target_w": 0.1,
-        "stop_pct": null,
-        "entry_pct": 91.76,
-        "entry_conf": 0.636,
-        "entry_exp_real": 58.76,
-        "entry_exp_nominal": 105.9,
-        "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.452
+        "entry_p_beat_all": 0.437
       },
       {
         "ticker": "MTRKS",
@@ -161,25 +135,51 @@
         "reason": "NEW_ENTRY",
         "target_w": 0.1,
         "stop_pct": null,
-        "entry_pct": 77.24,
-        "entry_conf": 0.5675,
-        "entry_exp_real": 57.36,
-        "entry_exp_nominal": 104.09,
+        "entry_pct": 76.3,
+        "entry_conf": 0.5645,
+        "entry_exp_real": 24.94,
+        "entry_exp_nominal": 62.04,
         "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.423
+        "entry_p_beat_all": 0.416
       },
       {
-        "ticker": "LOGO",
+        "ticker": "EPLAS",
         "action": "BUY",
         "reason": "NEW_ENTRY",
         "target_w": 0.1,
         "stop_pct": null,
-        "entry_pct": 75.99,
-        "entry_conf": 0.5593,
-        "entry_exp_real": 57.36,
-        "entry_exp_nominal": 104.09,
+        "entry_pct": 97.04,
+        "entry_conf": 0.6303,
+        "entry_exp_real": 95.18,
+        "entry_exp_nominal": 153.12,
         "entry_hurdle": 29.75,
-        "entry_p_beat_all": 0.423
+        "entry_p_beat_all": 0.459
+      },
+      {
+        "ticker": "KFEIN",
+        "action": "BUY",
+        "reason": "NEW_ENTRY",
+        "target_w": 0.1,
+        "stop_pct": null,
+        "entry_pct": 92.22,
+        "entry_conf": 0.5896,
+        "entry_exp_real": 28.85,
+        "entry_exp_nominal": 67.1,
+        "entry_hurdle": 29.75,
+        "entry_p_beat_all": 0.453
+      },
+      {
+        "ticker": "ASGYO",
+        "action": "BUY",
+        "reason": "NEW_ENTRY",
+        "target_w": 0.1,
+        "stop_pct": null,
+        "entry_pct": 89.81,
+        "entry_conf": 0.625,
+        "entry_exp_real": 28.28,
+        "entry_exp_nominal": 66.37,
+        "entry_hurdle": 29.75,
+        "entry_p_beat_all": 0.437
       }
     ],
     "last_rebalance_month": "2026-10",
@@ -214,31 +214,49 @@
       {
         "month": "2026-10",
         "tickers": [
-          "GLRYH",
           "PCILT",
-          "TSKB",
           "MTRKS",
-          "LOGO"
+          "EPLAS",
+          "KFEIN",
+          "ASGYO"
         ],
         "confidence": {
-          "GLRYH": 0.6345,
-          "PCILT": 0.638,
-          "TSKB": 0.636,
-          "MTRKS": 0.5675,
-          "LOGO": 0.5593
+          "PCILT": 0.614,
+          "MTRKS": 0.5645,
+          "EPLAS": 0.6303,
+          "KFEIN": 0.5896,
+          "ASGYO": 0.625
         },
         "w": {
-          "GLRYH": 0.2,
           "PCILT": 0.2,
-          "TSKB": 0.2,
           "MTRKS": 0.2,
-          "LOGO": 0.2
+          "EPLAS": 0.2,
+          "KFEIN": 0.2,
+          "ASGYO": 0.2
         }
       }
     ]
   },
   "model": {
     "champion_weights": {
+      "mom_12_1": -0.07408,
+      "high_52w": 0.02177,
+      "trend_consistency": 0.02043,
+      "low_vol": 0.09705,
+      "low_beta": -0.03224,
+      "dd_resilience": 0.10524,
+      "liquidity": -0.24774,
+      "roe": 0.0168,
+      "earnings_yield": 0.04465,
+      "book_yield": 0.13749,
+      "sales_yield": 0.11503,
+      "op_margin": -0.01993,
+      "low_leverage": 0.01475,
+      "div_yield": 0.0,
+      "real_growth": -0.05279
+    },
+    "champion_version": "prior-research-2026-10-02",
+    "previous_weights": {
       "mom_12_1": -0.0732,
       "high_52w": 0.0216,
       "trend_consistency": 0.02125,
@@ -255,91 +273,73 @@
       "div_yield": 0.0,
       "real_growth": -0.05226
     },
-    "champion_version": "prior-research-2026-10-01",
-    "previous_weights": {
-      "mom_12_1": -0.01438,
-      "high_52w": 0.09523,
-      "trend_consistency": -0.00272,
-      "low_vol": -0.00117,
-      "low_beta": -0.02338,
-      "dd_resilience": 0.10774,
-      "liquidity": -0.24388,
-      "roe": -0.05615,
-      "earnings_yield": -0.02233,
-      "book_yield": 0.14927,
-      "sales_yield": 0.10583,
-      "op_margin": 0.03251,
-      "low_leverage": -0.02002,
-      "div_yield": 0.0,
-      "real_growth": -0.12541
-    },
     "regime_weights": {
-      "NEUTRAL": {
-        "mom_12_1": -0.0794,
-        "high_52w": 0.02924,
-        "trend_consistency": 0.01703,
-        "low_vol": 0.1005,
-        "low_beta": -0.04388,
-        "dd_resilience": 0.1128,
-        "liquidity": -0.182,
-        "roe": 0.01932,
-        "earnings_yield": 0.06909,
-        "book_yield": 0.12407,
-        "sales_yield": 0.10102,
-        "op_margin": 0.02212,
-        "low_leverage": -0.03107,
+      "RISK_ON": {
+        "mom_12_1": -0.07265,
+        "high_52w": 0.03681,
+        "trend_consistency": 0.04101,
+        "low_vol": 0.07225,
+        "low_beta": -0.01424,
+        "dd_resilience": 0.09329,
+        "liquidity": -0.27638,
+        "roe": 0.02635,
+        "earnings_yield": 0.03856,
+        "book_yield": 0.148,
+        "sales_yield": 0.11565,
+        "op_margin": -0.02243,
+        "low_leverage": -0.00124,
         "div_yield": 0.0,
-        "real_growth": -0.06846
+        "real_growth": -0.04115
       },
       "RISK_OFF": {
-        "mom_12_1": -0.06647,
-        "high_52w": 0.00204,
-        "trend_consistency": 0.00512,
-        "low_vol": 0.11277,
-        "low_beta": -0.03634,
-        "dd_resilience": 0.10316,
-        "liquidity": -0.2511,
-        "roe": 0.00241,
-        "earnings_yield": 0.03271,
-        "book_yield": 0.13245,
-        "sales_yield": 0.11369,
-        "op_margin": -0.04041,
-        "low_leverage": 0.05198,
+        "mom_12_1": -0.0672,
+        "high_52w": 0.00356,
+        "trend_consistency": 0.00537,
+        "low_vol": 0.10974,
+        "low_beta": -0.03693,
+        "dd_resilience": 0.10292,
+        "liquidity": -0.24879,
+        "roe": 0.00465,
+        "earnings_yield": 0.0327,
+        "book_yield": 0.12976,
+        "sales_yield": 0.11442,
+        "op_margin": -0.04191,
+        "low_leverage": 0.05284,
         "div_yield": 0.0,
-        "real_growth": -0.04935
+        "real_growth": -0.04921
       },
-      "RISK_ON": {
-        "mom_12_1": -0.07342,
-        "high_52w": 0.0366,
-        "trend_consistency": 0.03973,
-        "low_vol": 0.0727,
-        "low_beta": -0.0137,
-        "dd_resilience": 0.09425,
-        "liquidity": -0.28122,
-        "roe": 0.02672,
-        "earnings_yield": 0.0361,
-        "book_yield": 0.14996,
-        "sales_yield": 0.11569,
-        "op_margin": -0.01826,
-        "low_leverage": -0.00145,
+      "NEUTRAL": {
+        "mom_12_1": -0.07964,
+        "high_52w": 0.0302,
+        "trend_consistency": 0.01656,
+        "low_vol": 0.09799,
+        "low_beta": -0.04446,
+        "dd_resilience": 0.11358,
+        "liquidity": -0.18307,
+        "roe": 0.02269,
+        "earnings_yield": 0.06768,
+        "book_yield": 0.1224,
+        "sales_yield": 0.10314,
+        "op_margin": 0.02178,
+        "low_leverage": -0.02914,
         "div_yield": 0.0,
-        "real_growth": -0.0402
+        "real_growth": -0.06766
       }
     },
-    "prior_source": "research:2026-10-01",
+    "prior_source": "research:2026-10-02",
     "ic_stats": {},
     "status": "LEARNING_WAIT (0/36 resolved cross-sections)",
     "promotions": 0,
     "rollbacks": 0,
-    "promotion_date": "2026-10-01",
-    "last_fit": "2026-10-01",
+    "promotion_date": "2026-10-02",
+    "last_fit": "2026-10-02",
     "ic_live_12m": {
       "n_dates": 0
     },
     "ic_live_3m": {
       "n_dates": 0
     },
-    "previous_version": "prior-research-2026-09-29"
+    "previous_version": "prior-research-2026-10-01"
   },
   "calibration": {
     "pct_cutoff": 75.0,
@@ -347,90 +347,85 @@
       {
         "lo": 0.0,
         "hi": 50.0,
-        "mean_excess": -4.255,
-        "se": 7.528,
-        "p_beat_cpi": 0.4542,
-        "p_beat_all": 0.368,
+        "mean_excess": -3.544,
+        "se": 7.668,
+        "p_beat_cpi": 0.4541,
+        "p_beat_all": 0.3684,
         "live_n_dates": 0
       },
       {
         "lo": 50.0,
         "hi": 70.0,
-        "mean_excess": -4.361,
-        "se": 4.324,
-        "p_beat_cpi": 0.5044,
-        "p_beat_all": 0.4008,
+        "mean_excess": -4.818,
+        "se": 4.112,
+        "p_beat_cpi": 0.5077,
+        "p_beat_all": 0.4025,
         "live_n_dates": 0
       },
       {
         "lo": 70.0,
         "hi": 80.0,
-        "mean_excess": -2.351,
-        "se": 7.616,
-        "p_beat_cpi": 0.5284,
-        "p_beat_all": 0.4234,
+        "mean_excess": -4.695,
+        "se": 8.557,
+        "p_beat_cpi": 0.521,
+        "p_beat_all": 0.4162,
         "live_n_dates": 0
       },
       {
         "lo": 80.0,
         "hi": 90.0,
-        "mean_excess": -1.008,
-        "se": 9.536,
-        "p_beat_cpi": 0.5502,
-        "p_beat_all": 0.4364,
+        "mean_excess": -1.358,
+        "se": 9.24,
+        "p_beat_cpi": 0.5488,
+        "p_beat_all": 0.4369,
         "live_n_dates": 0
       },
       {
         "lo": 90.0,
         "hi": 95.0,
-        "mean_excess": -0.951,
-        "se": 6.933,
-        "p_beat_cpi": 0.5875,
-        "p_beat_all": 0.4521,
+        "mean_excess": -0.791,
+        "se": 7.11,
+        "p_beat_cpi": 0.5907,
+        "p_beat_all": 0.4526,
         "live_n_dates": 0
       },
       {
         "lo": 95.0,
         "hi": 100.01,
-        "mean_excess": 65.574,
-        "se": 69.525,
-        "p_beat_cpi": 0.5947,
-        "p_beat_all": 0.4563,
+        "mean_excess": 65.536,
+        "se": 69.322,
+        "p_beat_cpi": 0.5965,
+        "p_beat_all": 0.4586,
         "live_n_dates": 0
       }
     ],
     "status": "CALIBRATED",
     "cutoffs": {
       "75.0": {
-        "mean_excess": 12.26,
-        "se": 14.971,
-        "lcb": -6.927
+        "mean_excess": 12.227,
+        "se": 14.844,
+        "lcb": -6.797
       },
       "80.0": {
-        "mean_excess": 16.007,
-        "se": 18.271,
-        "lcb": -7.41
+        "mean_excess": 15.86,
+        "se": 18.159,
+        "lcb": -7.412
       },
       "85.0": {
-        "mean_excess": 22.0,
-        "se": 23.627,
-        "lcb": -8.28
+        "mean_excess": 22.188,
+        "se": 23.389,
+        "lcb": -7.787
       },
       "90.0": {
-        "mean_excess": 32.81,
-        "se": 34.052,
-        "lcb": -10.832
+        "mean_excess": 32.869,
+        "se": 34.133,
+        "lcb": -10.876
       }
     },
     "market": {
-      "NEUTRAL": {
-        "mean": 60.101,
-        "se": 32.968,
-        "basis": "real"
-      },
-      "RISK_OFF": {
-        "mean": 30.025,
-        "se": 17.582,
+      "RISK_ON": {
+        "mean": 34.405,
+        "se": 21.791,
         "basis": "real"
       },
       "all": {
@@ -438,22 +433,27 @@
         "se": 27.575,
         "basis": "real"
       },
-      "RISK_ON": {
-        "mean": 34.405,
-        "se": 21.791,
+      "RISK_OFF": {
+        "mean": 30.025,
+        "se": 17.582,
+        "basis": "real"
+      },
+      "NEUTRAL": {
+        "mean": 60.101,
+        "se": 32.968,
         "basis": "real"
       }
     },
     "source": "research"
   },
   "regime": {
-    "label": "NEUTRAL",
+    "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.2153,
-      "NEUTRAL": 0.7846,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.6493,
+      "NEUTRAL": 0.3504,
+      "RISK_ON": 0.0003
     },
-    "p_risk_off": 0.2153,
+    "p_risk_off": 0.6493,
     "degraded": false,
     "params": {
       "K": 3,
@@ -543,8 +543,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.345,
-    "exp_mkt_12m_pct": 23.98,
+    "exp_mkt_5d_pct": 0.326,
+    "exp_mkt_12m_pct": 24.06,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -555,10 +555,10 @@
       "NEUTRAL",
       "NEUTRAL",
       "NEUTRAL",
-      "NEUTRAL"
+      "RISK_OFF"
     ],
-    "as_of": "2026-10-01",
-    "persistence": 0.9196,
+    "as_of": "2026-10-02",
+    "persistence": 0.9248,
     "source": "hmm_yfinance",
     "state_stats": {
       "RISK_OFF": {
@@ -1259,7 +1259,9 @@
     "SVGYO": "Finance",
     "ATAGY": "Finance",
     "DIRIT": "Process Industries",
-    "INTEK": "Process Industries"
+    "INTEK": "Process Industries",
+    "OZATD": "Producer Manufacturing",
+    "QNBFK": "Finance"
   },
   "performance": {
     "nav": {
@@ -1277,7 +1279,7 @@
       "benchmarks_total_pct": {
         "cpi": null,
         "usd": 0.14,
-        "gold": 0.92,
+        "gold": 0.93,
         "deposit": 0.21,
         "xu100": -2.73,
         "floor": null,
@@ -1323,11 +1325,11 @@
   },
   "last_rebalance": {
     "date": "2026-10-01",
-    "mode": "EOD",
-    "engine_version": "3.13.0",
+    "mode": "REFRESH",
+    "engine_version": "3.14.0",
     "hurdle_mode": "max",
     "status": "OK",
-    "model_version": "prior-research-2026-10-01+NEUTRAL",
+    "model_version": "prior-research-2026-10-02+RISK_OFF",
     "coverage": {
       "mom_12_1": 1.0,
       "high_52w": 1.0,
@@ -1336,23 +1338,23 @@
       "low_beta": 1.0,
       "dd_resilience": 1.0,
       "liquidity": 1.0,
-      "roe": 0.964,
+      "roe": 0.965,
       "earnings_yield": 0.97,
-      "book_yield": 0.987,
+      "book_yield": 0.989,
       "sales_yield": 0.97,
-      "op_margin": 0.964,
-      "low_leverage": 0.987,
+      "op_margin": 0.965,
+      "low_leverage": 0.989,
       "div_yield": 1.0,
-      "real_growth": 0.957
+      "real_growth": 0.956
     },
     "calibrated": true,
     "market_12m": {
-      "mkt_12m_pct": 60.101,
+      "mkt_12m_pct": 30.025,
       "source": "calibrated_regime",
       "basis": "real"
     },
     "expected_inflation_12m": 29.69,
-    "n_scored": 558,
+    "n_scored": 540,
     "hurdles": {
       "cpi": 29.69,
       "usd": 22.7,
@@ -1370,40 +1372,40 @@
     "expiring_next": [],
     "extended": [],
     "picks": [
-      "GLRYH",
       "PCILT",
-      "TSKB",
       "MTRKS",
-      "LOGO"
+      "EPLAS",
+      "KFEIN",
+      "ASGYO"
     ],
     "confidence": {
-      "GLRYH": 0.6345,
-      "PCILT": 0.638,
-      "TSKB": 0.636,
-      "MTRKS": 0.5675,
-      "LOGO": 0.5593
+      "PCILT": 0.614,
+      "MTRKS": 0.5645,
+      "EPLAS": 0.6303,
+      "KFEIN": 0.5896,
+      "ASGYO": 0.625
     },
     "confidence_grade": {
-      "GLRYH": "Yüksek",
-      "PCILT": "Yüksek",
-      "TSKB": "Yüksek",
+      "PCILT": "Orta",
       "MTRKS": "Orta",
-      "LOGO": "Düşük"
+      "EPLAS": "Yüksek",
+      "KFEIN": "Orta",
+      "ASGYO": "Yüksek"
     },
     "suggested_split": {
-      "GLRYH": 0.2513,
-      "PCILT": 0.2578,
-      "TSKB": 0.2541,
-      "MTRKS": 0.1261,
-      "LOGO": 0.1108
+      "PCILT": 0.2178,
+      "MTRKS": 0.1232,
+      "EPLAS": 0.2489,
+      "KFEIN": 0.1712,
+      "ASGYO": 0.2388
     },
     "buys": [
       "ALBRK",
-      "GLRYH",
       "PCILT",
-      "TSKB",
       "MTRKS",
-      "LOGO"
+      "EPLAS",
+      "KFEIN",
+      "ASGYO"
     ],
     "sells": [],
     "sell_reasons": {},
@@ -1419,11 +1421,11 @@
       "GOLTS": 0.1,
       "BESLR": 0.1,
       "ALBRK": 0.1,
-      "GLRYH": 0.1,
       "PCILT": 0.1,
-      "TSKB": 0.1,
       "MTRKS": 0.1,
-      "LOGO": 0.1
+      "EPLAS": 0.1,
+      "KFEIN": 0.1,
+      "ASGYO": 0.1
     },
     "exit_month": {
       "MNDRS": "2027-03",
@@ -1431,27 +1433,27 @@
       "GOLTS": "2027-03",
       "BESLR": "2027-03",
       "ALBRK": "2027-03",
-      "GLRYH": "2027-04",
       "PCILT": "2027-04",
-      "TSKB": "2027-04",
       "MTRKS": "2027-04",
-      "LOGO": "2027-04"
+      "EPLAS": "2027-04",
+      "KFEIN": "2027-04",
+      "ASGYO": "2027-04"
     },
     "n_cohorts": 2,
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-01",
+    "date": "2026-10-02",
     "status": "OK",
     "fingerprint": "6671.2900|7697687948",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": true,
-    "utc": "2026-10-01T18:13:46.462253Z"
+    "utc": "2026-10-02T12:21:26.659201Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.2,
-    "rows": 603,
+    "rows": 583,
     "invalid_rows": 0,
     "recommended_missing_rate": 0.1307,
     "fetch": {
@@ -1471,7 +1473,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 603
+      "rows": 583
     }
   },
   "cash_rate": {
@@ -1503,63 +1505,63 @@
     "month": "2026-10",
     "picks": [
       {
-        "ticker": "GLRYH",
-        "confidence": 0.6345,
+        "ticker": "EPLAS",
+        "confidence": 0.6303,
         "grade": "Yüksek",
-        "split": 0.2513,
-        "score_pct": 98.9,
+        "split": 0.2489,
+        "score_pct": 97.0,
+        "sector": "Producer Manufacturing",
+        "exp_nominal_12m": 153.1
+      },
+      {
+        "ticker": "KFEIN",
+        "confidence": 0.5896,
+        "grade": "Orta",
+        "split": 0.1712,
+        "score_pct": 92.2,
+        "sector": "Technology Services",
+        "exp_nominal_12m": 67.1
+      },
+      {
+        "ticker": "ASGYO",
+        "confidence": 0.625,
+        "grade": "Yüksek",
+        "split": 0.2388,
+        "score_pct": 89.8,
         "sector": "Finance",
-        "exp_nominal_12m": 192.2
+        "exp_nominal_12m": 66.4
       },
       {
         "ticker": "PCILT",
-        "confidence": 0.638,
-        "grade": "Yüksek",
-        "split": 0.2578,
-        "score_pct": 92.1,
+        "confidence": 0.614,
+        "grade": "Orta",
+        "split": 0.2178,
+        "score_pct": 86.7,
         "sector": "Commercial Services",
-        "exp_nominal_12m": 105.9
-      },
-      {
-        "ticker": "TSKB",
-        "confidence": 0.636,
-        "grade": "Yüksek",
-        "split": 0.2541,
-        "score_pct": 91.8,
-        "sector": "Finance",
-        "exp_nominal_12m": 105.9
+        "exp_nominal_12m": 66.4
       },
       {
         "ticker": "MTRKS",
-        "confidence": 0.5675,
+        "confidence": 0.5645,
         "grade": "Orta",
-        "split": 0.1261,
-        "score_pct": 77.2,
+        "split": 0.1232,
+        "score_pct": 76.3,
         "sector": "Technology Services",
-        "exp_nominal_12m": 104.1
-      },
-      {
-        "ticker": "LOGO",
-        "confidence": 0.5593,
-        "grade": "Düşük",
-        "split": 0.1108,
-        "score_pct": 76.0,
-        "sector": "Technology Services",
-        "exp_nominal_12m": 104.1
+        "exp_nominal_12m": 62.0
       }
     ]
   },
   "last_eod_date": "2026-10-01",
   "health": {
-    "date": "2026-10-01",
+    "date": "2026-10-02",
     "overall": "OK",
     "checks": [
       {
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 603 hisse döndürdü",
-        "value": 603
+        "msg": "TradingView 583 hisse döndürdü",
+        "value": 583
       },
       {
         "key": "cpi",
@@ -1572,15 +1574,15 @@
         "key": "fund",
         "name": "Veri: bilanço verileri",
         "status": "OK",
-        "msg": "hisselerin %97'inde bilanço verisi var",
-        "value": 0.9748749999999999
+        "msg": "hisselerin %98'inde bilanço verisi var",
+        "value": 0.9755
       },
       {
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-01 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-10-01 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1588,6 +1590,13 @@
         "status": "OK",
         "msg": "bu ayın taraması yapıldı",
         "value": true
+      },
+      {
+        "key": "calendar",
+        "name": "Tatil takvimi",
+        "status": "OK",
+        "msg": "dini bayramlar 2027 sonuna kadar girili",
+        "value": 2027
       },
       {
         "key": "orders",
@@ -1641,31 +1650,31 @@
     "win_rates": {
       "closed_lots": {
         "live": 1,
-        "test": 144
+        "test": 143
       },
       "hit_nominal_pct": {
         "live": 0.0,
-        "test": 89.6
+        "test": 90.9
       },
       "hit_beat_xu100_pct": {
         "live": 0.0,
-        "test": 67.4
+        "test": 66.4
       },
       "hit_beat_cpi_pct": {
         "live": null,
-        "test": 64.8
+        "test": 65.0
       },
       "hit_beat_all_pct": {
         "live": null,
-        "test": 43.7
+        "test": 46.4
       },
       "avg_nominal_pct": {
         "live": -1.15,
-        "test": 71.65
+        "test": 77.12
       },
       "avg_months_held": {
         "live": 0.0,
-        "test": 12.6
+        "test": 12.4
       }
     },
     "red": [],
