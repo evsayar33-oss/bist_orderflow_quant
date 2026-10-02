@@ -147,22 +147,72 @@ def _read_csv(path: str) -> pd.DataFrame:
     return df
 
 
+def _snapshot_parts():
+    import glob
+    return sorted(glob.glob(os.path.join(C.MONTHLY_SNAPSHOT_DIR, "*.csv.gz")))
+
+
 def load_monthly_snapshots() -> pd.DataFrame:
-    df = _read_csv(C.MONTHLY_SNAPSHOT_FILE)
-    if not df.empty:
-        df["ticker"] = df["ticker"].astype(str)
-    return df
+    """V3.14: aylık kesitler yıl başına sıkıştırılmış dosyalarda (data/monthly_snapshots/YYYY.csv.gz).
+    Eski tek dosya (monthly_snapshots.csv) varsa o da okunur; bir sonraki kayıtta bölünüp silinir."""
+    frames = []
+    for p in _snapshot_parts():
+        try:
+            frames.append(pd.read_csv(p, low_memory=False))
+        except Exception as exc:
+            print(f"⚠️ CSV okuma hatası ({p}): {exc}")
+    legacy = _read_csv(C.MONTHLY_SNAPSHOT_FILE)
+    if not legacy.empty:
+        frames.append(legacy)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df["tarih"] = pd.to_datetime(df["tarih"], errors="coerce").dt.normalize()
+    df["ticker"] = df["ticker"].astype(str)
+    return df.drop_duplicates(["tarih", "ticker"], keep="last").reset_index(drop=True)
 
 
 def save_monthly_snapshots(df: pd.DataFrame) -> bool:
     out = df.copy()
-    dates = sorted(out["tarih"].dropna().unique())
+    out["tarih"] = pd.to_datetime(out["tarih"], errors="coerce").dt.normalize()
+    out = out.dropna(subset=["tarih"]).drop_duplicates(["tarih", "ticker"], keep="last")
+    dates = sorted(out["tarih"].unique())
     if len(dates) > C.MAX_MONTHLY_SNAPSHOTS:
         out = out[out["tarih"] >= dates[-C.MAX_MONTHLY_SNAPSHOTS]]
     num = out.select_dtypes(include=[np.number]).columns
     out[num] = out[num].round(5)
-    out["tarih"] = pd.to_datetime(out["tarih"]).dt.strftime("%Y-%m-%d")
-    return atomic_csv_write(C.MONTHLY_SNAPSHOT_FILE, out.sort_values(["tarih", "ticker"]))
+    os.makedirs(C.MONTHLY_SNAPSHOT_DIR, exist_ok=True)
+    ok = True
+    years = set()
+    for y, g in out.groupby(out["tarih"].dt.year):
+        years.add(int(y))
+        g = g.sort_values(["tarih", "ticker"]).copy()
+        g["tarih"] = g["tarih"].dt.strftime("%Y-%m-%d")
+        path = os.path.join(C.MONTHLY_SNAPSHOT_DIR, f"{int(y)}.csv.gz")
+        tmp = path + ".tmp"
+        try:
+            # mtime=0: içerik değişmeyen yıl dosyası her kayıtta aynı baytları üretir -> git'te değişiklik görünmez
+            g.to_csv(tmp, index=False, compression={"method": "gzip", "mtime": 0})
+            os.replace(tmp, path)
+        except Exception as exc:
+            ok = False
+            print(f"❌ CSV yazma hatası ({path}): {exc}")
+    for p in _snapshot_parts():             # pencereden düşen eski yıllar
+        try:
+            if int(os.path.basename(p).split(".")[0]) not in years:
+                os.remove(p)
+        except ValueError:
+            pass
+    if ok and os.path.exists(C.MONTHLY_SNAPSHOT_FILE):
+        os.remove(C.MONTHLY_SNAPSHOT_FILE)  # eski tek dosya bölündü
+    return ok
+
+
+def clear_monthly_snapshots():
+    import shutil
+    shutil.rmtree(C.MONTHLY_SNAPSHOT_DIR, ignore_errors=True)
+    if os.path.exists(C.MONTHLY_SNAPSHOT_FILE):
+        os.remove(C.MONTHLY_SNAPSHOT_FILE)
 
 
 def append_rows(path: str, rows) -> bool:

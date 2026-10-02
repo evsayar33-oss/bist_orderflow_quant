@@ -106,7 +106,19 @@ def dstr(s):
 state = _json(C.STATE_FILE)
 report = _json(C.BACKTEST_REPORT_FILE)
 nav = _csv(C.NAV_FILE)
-snaps = _csv(C.MONTHLY_SNAPSHOT_FILE)
+def _snaps():
+    import glob
+    parts = [pd.read_csv(p, low_memory=False) for p in sorted(glob.glob(os.path.join(getattr(C, "MONTHLY_SNAPSHOT_DIR", ""), "*.csv.gz")))]
+    old = _csv(C.MONTHLY_SNAPSHOT_FILE)
+    if not old.empty:
+        parts.append(old)
+    if not parts:
+        return pd.DataFrame()
+    d = pd.concat(parts, ignore_index=True)
+    return d.drop_duplicates(["tarih", "ticker"], keep="last") if {"tarih", "ticker"} <= set(d.columns) else d
+
+
+snaps = _snaps()
 
 st.markdown('<div class="hdr">🏛️ BIST Reel Getiri</div>', unsafe_allow_html=True)
 if not state:

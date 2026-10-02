@@ -25,7 +25,7 @@ import config as C
 # TCMB moved EVDS to evds3 in 2025 and TÜİK re-based CPI to 2025=100:
 # old code TP.FG.J0 (2003=100, archived) is spliced with TP.TUKFIY2025.GENEL.
 EVDS_BASES = ["https://evds3.tcmb.gov.tr/igmevdsms-dis/", "https://evds2.tcmb.gov.tr/service/evds/"]
-EVDS_QUERY = "series={code}&startDate=01-01-2003&endDate=01-12-2035&type=json&frequency=5"
+EVDS_QUERY = "series={code}&startDate=01-01-2003&endDate=01-12-" + str(pd.Timestamp.now().year + 2) + "&type=json&frequency=5"
 EVDS_CODES = [c.strip() for c in os.environ.get("EVDS_CPI_SERIES", "TP.FG.J0,TP.TUKFIY2025.GENEL").split(",") if c.strip()]
 FRED_URLS = ["https://fred.stlouisfed.org/graph/fredgraph.csv?id=TURCPIALLMINMEI",
              "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPALTT01TRM661N"]

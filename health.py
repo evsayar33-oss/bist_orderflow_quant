@@ -153,6 +153,18 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
     checks.append(_chk("review", "Aylık tarama", st, "bu ayın taraması yapıldı" if reviewed else
                        f"bu ayın taraması henüz yapılmadı (ayın {sessions_in}. iş günü)", reviewed))
 
+    try:
+        import calendar_tr as _cal
+        ly = _cal.religious_calendar_last_year()
+        need = today.year + (1 if today.month >= 10 else 0)
+        st = GREEN if ly >= need else YELLOW
+        checks.append(_chk("calendar", "Tatil takvimi", st,
+                           f"dini bayramlar {ly} sonuna kadar girili" if st == GREEN else
+                           f"dini bayram listesi {ly}'de bitiyor: calendar_tr.py'ye {need} bayramları (Borsa İstanbul duyurusu) eklenmeli. "
+                           "Eklenmezse sistem bayram günlerini aynı-veri kontrolüyle yine atlar, risk düşük.", ly))
+    except Exception:
+        pass
+
     stuck = [o["ticker"] for o in pf.get("pending", []) if int(o.get("age", 0)) >= 3]
     checks.append(_chk("orders", "Bekleyen emirler", YELLOW if stuck else GREEN,
                        ("3+ gündür gerçekleşmeyen: " + ", ".join(stuck)) if stuck else "takılı emir yok", len(stuck)))

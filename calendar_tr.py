@@ -36,7 +36,7 @@ EXTRA_CLOSURES: List[str] = []
 
 def _holiday_set() -> set:
     out = set()
-    for y in range(2015, 2031):
+    for y in range(2015, date.today().year + 6):
         for m, d in _FIXED:
             out.add(date(y, m, d))
     for s in _RELIGIOUS + EXTRA_CLOSURES:
@@ -45,6 +45,12 @@ def _holiday_set() -> set:
 
 
 HOLIDAYS = _holiday_set()
+
+
+def religious_calendar_last_year() -> int:
+    """Elle girilmiş dini bayram listesinin son yılı (sağlık kontrolü bunu izler)."""
+    ys = [pd.Timestamp(s).year for s in _RELIGIOUS + EXTRA_CLOSURES]
+    return max(ys) if ys else 0
 
 
 def _d(x) -> date:

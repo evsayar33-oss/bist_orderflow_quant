@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.13.0"
+ENGINE_VERSION = "3.14.0"
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -29,7 +29,8 @@ HURDLE_MODE = os.environ.get("BOQ_HURDLE_MODE", "max")   # V3.13: "max" = beat C
 
 # ---------------------------------------------------------------- paths
 DATA_DIR = os.environ.get("BOQ_DATA_DIR", "data")
-MONTHLY_SNAPSHOT_FILE = os.path.join(DATA_DIR, "monthly_snapshots.csv")
+MONTHLY_SNAPSHOT_FILE = os.path.join(DATA_DIR, "monthly_snapshots.csv")   # eski tek dosya (V3.14 ilk çalışmada bölünür)
+MONTHLY_SNAPSHOT_DIR = os.path.join(DATA_DIR, "monthly_snapshots")         # V3.14: yıl başına sıkıştırılmış dosya
 TRADE_LOG_FILE = os.path.join(DATA_DIR, "trade_log.csv")
 NAV_FILE = os.path.join(DATA_DIR, "nav.csv")
 STATE_FILE = os.path.join(DATA_DIR, "engine_state_v3.json")
@@ -194,3 +195,9 @@ LOSER_EXTENSION = {"min_score_pct": 70, "max_extra_months": 18}
 #   Selecting only on the first half would have picked the same combination (it was also best there).
 #   Weight 1.0 on sector momentum hurt the first half -> moderate weights kept.
 EXTRA_BLEND = {"sector_mom": 0.5, "ep_x_quality": 0.5}
+
+
+# ---- V3.14 bot emir dosyası
+ORDERS_FILE = os.path.join(DATA_DIR, "orders.json")
+ORDERS_HISTORY_FILE = os.path.join(DATA_DIR, "orders_history.jsonl")
+BOT_CAPITAL_TL = None              # örn. 250000: emir dosyasına TL tutar ve tahmini adet de yazılır (None: yalnızca ağırlık)

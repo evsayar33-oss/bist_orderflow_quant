@@ -184,6 +184,7 @@ def inflation_gate_check(W) -> dict:
     for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
         if os.path.exists(f):
             os.remove(f)
+    SM.clear_monthly_snapshots()
     # intraday REFRESH: ungated review (no CPI) is redone during the session without trading
     cur["d"] = days[0]
     _run(W, today=days[0], fetch=fetch, hist_fn=hist_fn, regime_fn=no_regime,
@@ -212,6 +213,7 @@ def inflation_gate_check(W) -> dict:
     for f in (C.STATE_FILE, C.NAV_FILE, C.MONTHLY_SNAPSHOT_FILE, C.TRADE_LOG_FILE):
         if os.path.exists(f):
             os.remove(f)
+    SM.clear_monthly_snapshots()
     return {"no_cpi_still_buys": bool(blocked), "ungated_review_redone": bool(redone), "fx_proxy_used": bool(proxy),
             "intraday_refresh": bool(refresh_ok), "upgrade_redoes_review": bool(upgrade_ok), "manual_rescan": bool(rescan_ok)}
 

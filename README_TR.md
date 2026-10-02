@@ -154,3 +154,9 @@ Sistem kaynakları şu sırayla dener: `data/cpi_manual.csv` (isterseniz kendini
 
 ## Ayarlar
 Tüm parametreler `config.py` içindedir: ufuk (`HORIZON_MONTHS`), hedef pozisyon sayısı, AL/TUT eşikleri, minimum beklenen reel getiri, felaket stopu seviyeleri, işlem maliyeti (%0.50 gidiş-dönüş).
+
+## V3.14 — Uzun vadeli dayanıklılık + bot emir dosyası
+- **Paket sürümleri kilitlendi** (`requirements.txt`): pandas/numpy/scipy/streamlit için üst sınır; ileride çıkacak uyumsuz büyük sürümler sistemi bozamaz. yfinance bilerek serbest (Yahoo değiştikçe güncellenmesi gerekir).
+- **Aylık kesitler yıllara bölündü**: `data/monthly_snapshots.csv` ilk çalışmada otomatik olarak `data/monthly_snapshots/YYYY.csv.gz` dosyalarına bölünür ve eski dosya silinir. Sadece içinde bulunulan yılın dosyası değişir; repo şişmez (15 yıllık sınırda bile dosyalar küçük kalır).
+- **Takvim**: resmî tatiller artık her yıl otomatik; dini bayramlar elle girildiği için sağlık panelinde "Tatil takvimi" kontrolü var — yeni yılın bayramları eksikse Ekim'den itibaren uyarır (eksik olsa bile sistem aynı-veri kontrolüyle bayram günlerini atlar). TÜFE sorgusunun bitiş tarihi artık otomatik.
+- **Bot emir dosyası**: her kapanış çalışmasından sonra `data/orders.json` (ertesi açılışta uygulanacak emirler) ve `data/orders_history.jsonl` yazılır; yeni emir varsa Telegram'a sabit biçimli "Bot emirleri" mesajı gelir. `config.py` içinde `BOT_CAPITAL_TL = 250000` gibi bir değer verirsen emirlere TL tutar ve tahmini adet de eklenir. Alanların açıklaması `bot_orders.py` dosyasının başında.
