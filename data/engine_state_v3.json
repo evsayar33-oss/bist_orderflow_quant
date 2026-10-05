@@ -448,11 +448,11 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.6365,
-      "NEUTRAL": 0.3632,
+      "RISK_OFF": 0.6368,
+      "NEUTRAL": 0.3629,
       "RISK_ON": 0.0003
     },
-    "p_risk_off": 0.6365,
+    "p_risk_off": 0.6368,
     "degraded": false,
     "params": {
       "K": 3,
@@ -616,15 +616,15 @@
     "block_new_entries": false
   },
   "inflation": {
-    "last_month": "2026-08-01",
-    "yoy_pct": 31.5,
-    "ann6m_pct": 27.88,
-    "expected_12m_pct": 29.69,
+    "last_month": "2026-09-01",
+    "yoy_pct": 29.73,
+    "ann6m_pct": 27.63,
+    "expected_12m_pct": 28.68,
     "is_proxy": false,
     "source": "evds",
     "tried": {
       "manual": "unavailable",
-      "evds": "ok (last 2026-08)",
+      "evds": "ok (last 2026-09)",
       "fred": "error: HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=60)",
       "dbnomics": "ok (last 2025-07)",
       "cache": "ok (last 2026-08)"
@@ -647,7 +647,7 @@
       "div_yield": "dividends_yield_current",
       "shares": "total_shares_outstanding_fundamental"
     },
-    "checked": "2026-09-28T20:41:31.081883"
+    "checked": "2026-10-05T22:05:44.712041"
   },
   "sector_map": {
     "ASELS": "Electronic Technology",
@@ -1278,10 +1278,13 @@
       "xu100_total_pct": -2.56,
       "xu100_cagr_pct": -90.65,
       "excess_vs_xu100_cagr_pp": 60.68,
+      "cpi_total_pct": 0.0,
+      "real_total_pct": -0.39,
+      "real_cagr_pct": -29.97,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.36,
-        "gold": 0.42,
+        "usd": 0.33,
+        "gold": 0.15,
         "deposit": 0.29,
         "xu100": -2.56,
         "floor": null,
@@ -1475,19 +1478,19 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-02",
+    "date": "2026-10-06",
     "status": "OK",
     "fingerprint": "6752.1000|4538203142",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-02T20:04:50.018348Z"
+    "utc": "2026-10-05T22:09:54.088357Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.2,
-    "rows": 603,
+    "rows": 598,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1303,
+    "recommended_missing_rate": 0.1304,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1505,7 +1508,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 603
+      "rows": 598
     }
   },
   "cash_rate": {
@@ -1515,9 +1518,9 @@
     "net_yield_pct": 29.75
   },
   "hurdles": {
-    "cpi": 29.69,
-    "usd": 23.34,
-    "gold": 23.34,
+    "cpi": 28.68,
+    "usd": 22.94,
+    "gold": 22.94,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
@@ -1585,21 +1588,21 @@
   },
   "last_eod_date": "2026-10-02",
   "health": {
-    "date": "2026-10-02",
+    "date": "2026-10-06",
     "overall": "OK",
     "checks": [
       {
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 603 hisse döndürdü",
-        "value": 603
+        "msg": "TradingView 598 hisse döndürdü",
+        "value": 598
       },
       {
         "key": "cpi",
         "name": "Veri: TÜFE",
         "status": "OK",
-        "msg": "resmî TÜFE (evds, son ay 2026-08-01)",
+        "msg": "resmî TÜFE (evds, son ay 2026-09-01)",
         "value": "OK"
       },
       {
@@ -1613,8 +1616,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-02 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-10-02 (2 iş günü önce)",
+        "value": 2
       },
       {
         "key": "review",
@@ -1662,8 +1665,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 0 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 0
+        "msg": "model 4 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 4
       },
       {
         "key": "live",
