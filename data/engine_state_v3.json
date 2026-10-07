@@ -1286,7 +1286,7 @@
       "benchmarks_total_pct": {
         "cpi": null,
         "usd": 0.53,
-        "gold": -0.31,
+        "gold": -0.47,
         "deposit": 0.64,
         "xu100": -1.74,
         "floor": null,
@@ -1485,7 +1485,7 @@
     "fingerprint": "6601.9300|5049461462",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-07T21:41:46.478097Z"
+    "utc": "2026-10-07T23:06:40.047286Z"
   },
   "data_quality": {
     "ok": true,
@@ -1521,8 +1521,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 22.9,
-    "gold": 22.9,
+    "usd": 22.91,
+    "gold": 22.91,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
