@@ -2,8 +2,11 @@ name: BIST Real-Return Engine V3 - Daily Run (after close)
 
 on:
   schedule:
-    # 18:25 Türkiye = 15:25 UTC, hafta içi. Ayın ilk seansında aylık gözden geçirme otomatik yapılır.
-    - cron: '25 15 * * 1-5'
+    # GitHub zamanlayıcısı yoğunlukta saatlerce gecikebilir -> 3 deneme. İlk gelen kapanışı işler,
+    # sonrakiler "zaten işlendi" diyerek atlar; gece yarısından sonra gelen geç çalışma dünkü kapanışı işler.
+    - cron: '25 15 * * 1-5'   # 18:25 TR
+    - cron: '47 16 * * 1-5'   # 19:47 TR (yedek)
+    - cron: '13 18 * * 1-5'   # 21:13 TR (yedek)
   workflow_dispatch:
     inputs:
       yeniden_tara:
