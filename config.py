@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.14.0"
+ENGINE_VERSION = "3.13.0"   # strateji mantığı değişmedi; sürüm değişirse motor ay ortasında taramayı yeniler
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)

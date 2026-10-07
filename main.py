@@ -241,7 +241,18 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     refresh = bool(refresh)
     if real_run and not force and not refresh:
         now_tr = pd.Timestamp.now(tz=C.MARKET_TZ)
-        if now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15 or not cal.is_session(today):
+        # V3.14.1: GitHub zamanlayıcısı saatlerce gecikebiliyor. Çalışma gece yarısından sonra, seans açılmadan
+        # (10:00 öncesi) gelirse ve bir önceki seansın kapanışı henüz işlenmediyse o seansı işle: veri hâlâ dünkü kapanış.
+        if now_tr.hour < 10:
+            prev = today - pd.Timedelta(days=1)
+            while not cal.is_session(prev):
+                prev -= pd.Timedelta(days=1)
+            st0 = load_state()
+            if str(st0.get("last_eod_date") or "") < str(prev.date()):
+                print(f"ℹ️ Gecikmiş çalışma ({now_tr:%d.%m %H:%M}): {prev.date()} kapanışı şimdi işleniyor.")
+                today = prev
+                force = True
+        if not force and (now_tr.hour * 60 + now_tr.minute < 18 * 60 + 15 or not cal.is_session(today)):
             refresh = True
             print(f"ℹ️ Kapanış verisi yok ({now_tr:%d.%m %H:%M}) → YENİLEME modu: TÜFE/nakit/rejim güncellenir, "
                   "gerekirse aylık gözden geçirme son tamamlanan seansa göre yenilenir; işlem/NAV kaydı yapılmaz.")
@@ -268,6 +279,9 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         send_telegram(TG.blocked_report(today, str(quality.get("reason"))))
         return {"status": "DATA_BLOCKED"}
     fp = _fingerprint(snap)
+    if not refresh and not force and str(state.get("last_eod_date") or "") >= str(today.date()):
+        print(f"ℹ️ {today.date()} kapanışı zaten işlenmiş (yedek zamanlayıcı); atlandı.")
+        return {"status": "ALREADY_DONE"}
     if refresh:
         fp = state.get("last_run", {}).get("fingerprint")      # a refresh never consumes the day
     elif not force and state.get("last_run", {}).get("fingerprint") == fp:
