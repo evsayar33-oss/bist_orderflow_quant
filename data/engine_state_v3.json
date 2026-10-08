@@ -1286,8 +1286,8 @@
       "real_cagr_pct": -58.8,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.72,
-        "gold": 0.39,
+        "usd": 0.57,
+        "gold": 0.43,
         "deposit": 0.72,
         "xu100": -3.73,
         "floor": null,
@@ -1486,7 +1486,7 @@
     "fingerprint": "6789.9300|5071501472",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-08T21:37:12.391383Z"
+    "utc": "2026-10-08T23:22:21.312495Z"
   },
   "data_quality": {
     "ok": true,
@@ -1522,8 +1522,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 23.09,
-    "gold": 23.09,
+    "usd": 22.83,
+    "gold": 22.83,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
