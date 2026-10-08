@@ -1,9 +1,9 @@
 {
  "schema": "boq.orders.v1",
  "engine_version": "3.13.0",
- "generated_at": "2026-10-08T20:48:41Z",
- "signal_date": "2026-10-08",
- "execute_date": "2026-10-09",
+ "generated_at": "2026-10-08T21:37:12Z",
+ "signal_date": "2026-10-09",
+ "execute_date": "2026-10-12",
  "currency": "TRY",
  "capital_tl": null,
  "cash_weight": 0.000129,
