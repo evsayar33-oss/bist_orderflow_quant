@@ -1,7 +1,7 @@
 {
  "schema": "boq.orders.v1",
  "engine_version": "3.13.0",
- "generated_at": "2026-10-07T23:06:40Z",
+ "generated_at": "2026-10-08T20:48:41Z",
  "signal_date": "2026-10-08",
  "execute_date": "2026-10-09",
  "currency": "TRY",
@@ -11,52 +11,52 @@
  "positions": [
   {
    "symbol": "MNDRS",
-   "weight": 0.098766,
+   "weight": 0.099634,
    "entry_date": "2026-09-30",
    "entry_price": 9.2,
-   "last_price": 9.14,
-   "return_pct": -0.97,
+   "last_price": 9.2,
+   "return_pct": -0.32,
    "exit_month": "2027-03"
   },
   {
    "symbol": "ISFIN",
-   "weight": 0.09824,
+   "weight": 0.097692,
    "entry_date": "2026-09-30",
    "entry_price": 17.7,
-   "last_price": 16.74,
-   "return_pct": -5.2,
+   "last_price": 16.61,
+   "return_pct": -5.94,
    "exit_month": "2027-03"
   },
   {
    "symbol": "GOLTS",
-   "weight": 0.099779,
+   "weight": 0.101097,
    "entry_date": "2026-09-30",
    "entry_price": 256.25,
-   "last_price": 250.5,
-   "return_pct": -3.09,
+   "last_price": 253.25,
+   "return_pct": -2.02,
    "exit_month": "2027-03"
   },
   {
    "symbol": "BESLR",
-   "weight": 0.099156,
+   "weight": 0.101589,
    "entry_date": "2026-09-30",
    "entry_price": 10.99,
-   "last_price": 10.77,
-   "return_pct": -2.62,
+   "last_price": 11.01,
+   "return_pct": -0.45,
    "exit_month": "2027-03"
   },
   {
    "symbol": "ALBRK",
-   "weight": 0.102288,
+   "weight": 0.102049,
    "entry_date": "2026-10-02",
    "entry_price": 8.4,
-   "last_price": 8.82,
-   "return_pct": 0.73,
+   "last_price": 8.78,
+   "return_pct": 0.27,
    "exit_month": "2027-03"
   },
   {
    "symbol": "PCILT",
-   "weight": 0.098932,
+   "weight": 0.09915,
    "entry_date": "2026-10-02",
    "entry_price": 32.3,
    "last_price": 30.6,
@@ -65,38 +65,38 @@
   },
   {
    "symbol": "MTRKS",
-   "weight": 0.105874,
+   "weight": 0.105912,
    "entry_date": "2026-10-02",
    "entry_price": 21.26,
-   "last_price": 21.74,
-   "return_pct": 4.31,
+   "last_price": 21.7,
+   "return_pct": 4.12,
    "exit_month": "2027-04"
   },
   {
    "symbol": "EPLAS",
-   "weight": 0.101623,
+   "weight": 0.098297,
    "entry_date": "2026-10-02",
    "entry_price": 5.2,
-   "last_price": 5.45,
-   "return_pct": 0.15,
+   "last_price": 5.26,
+   "return_pct": -3.34,
    "exit_month": "2027-04"
   },
   {
    "symbol": "KFEIN",
-   "weight": 0.097341,
+   "weight": 0.097076,
    "entry_date": "2026-10-02",
    "entry_price": 6.45,
-   "last_price": 6.1,
-   "return_pct": -4.05,
+   "last_price": 6.07,
+   "return_pct": -4.52,
    "exit_month": "2027-04"
   },
   {
    "symbol": "ASGYO",
-   "weight": 0.097872,
+   "weight": 0.097376,
    "entry_date": "2026-10-02",
    "entry_price": 10.01,
-   "last_price": 9.65,
-   "return_pct": -3.5,
+   "last_price": 9.58,
+   "return_pct": -4.2,
    "exit_month": "2027-04"
   }
  ]
