@@ -448,11 +448,11 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.9716,
-      "NEUTRAL": 0.0281,
+      "RISK_OFF": 0.9424,
+      "NEUTRAL": 0.0573,
       "RISK_ON": 0.0003
     },
-    "p_risk_off": 0.9716,
+    "p_risk_off": 0.9424,
     "degraded": false,
     "params": {
       "K": 3,
@@ -542,21 +542,21 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.312,
-    "exp_mkt_12m_pct": 24.12,
+    "exp_mkt_5d_pct": 0.313,
+    "exp_mkt_12m_pct": 24.11,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
       "NEUTRAL",
       "NEUTRAL",
-      "RISK_OFF",
+      "NEUTRAL",
       "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF"
     ],
-    "as_of": "2026-10-09",
+    "as_of": "2026-10-08",
     "persistence": 0.9248,
     "source": "hmm_yfinance",
     "state_stats": {
@@ -1288,10 +1288,10 @@
       "real_cagr_pct": -26.05,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.83,
-        "gold": 1.99,
+        "usd": 0.8,
+        "gold": 1.96,
         "deposit": 0.79,
-        "xu100": -2.6,
+        "xu100": -3.01,
         "floor": null,
         "hurdle": null
       }
@@ -1483,12 +1483,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-09",
+    "date": "2026-10-10",
     "status": "OK",
     "fingerprint": "6463.6600|5033099703",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-09T20:14:20.356804Z"
+    "utc": "2026-10-09T21:24:28.241930Z"
   },
   "data_quality": {
     "ok": true,
@@ -1524,8 +1524,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 23.25,
-    "gold": 23.25,
+    "usd": 23.19,
+    "gold": 23.19,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
@@ -1593,7 +1593,7 @@
   },
   "last_eod_date": "2026-10-09",
   "health": {
-    "date": "2026-10-09",
+    "date": "2026-10-10",
     "overall": "OK",
     "checks": [
       {
@@ -1621,8 +1621,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-09 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-10-09 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1670,8 +1670,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 7 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 7
+        "msg": "model 8 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 8
       },
       {
         "key": "live",
