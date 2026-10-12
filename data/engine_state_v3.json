@@ -1290,8 +1290,8 @@
       "real_cagr_pct": -45.48,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.86,
-        "gold": 1.44,
+        "usd": 0.82,
+        "gold": 1.26,
         "deposit": 1.0,
         "xu100": -2.6,
         "floor": null,
@@ -1485,12 +1485,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-12",
+    "date": "2026-10-13",
     "status": "OK",
     "fingerprint": "6198.7100|5669178503",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-12T22:36:21.406369Z"
+    "utc": "2026-10-12T23:19:43.578227Z"
   },
   "data_quality": {
     "ok": true,
@@ -1526,8 +1526,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 22.91,
-    "gold": 22.91,
+    "usd": 22.85,
+    "gold": 22.85,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
@@ -1595,7 +1595,7 @@
   },
   "last_eod_date": "2026-10-12",
   "health": {
-    "date": "2026-10-12",
+    "date": "2026-10-13",
     "overall": "OK",
     "checks": [
       {
@@ -1623,8 +1623,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-12 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-10-12 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1672,8 +1672,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 10 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 10
+        "msg": "model 11 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 11
       },
       {
         "key": "live",
