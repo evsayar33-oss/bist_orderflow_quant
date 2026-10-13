@@ -1291,8 +1291,8 @@
       "real_cagr_pct": -60.63,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 0.93,
-        "gold": 1.19,
+        "usd": 0.94,
+        "gold": 1.18,
         "deposit": 1.08,
         "xu100": -3.51,
         "floor": null,
@@ -1491,7 +1491,7 @@
     "fingerprint": "6344.7000|4515667227",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-13T21:39:01.820156Z"
+    "utc": "2026-10-13T22:44:39.605911Z"
   },
   "data_quality": {
     "ok": true,
