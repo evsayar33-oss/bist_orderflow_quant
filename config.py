@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 
-ENGINE_VERSION = "3.13.0"   # strateji mantığı değişmedi; sürüm değişirse motor ay ortasında taramayı yeniler
+ENGINE_VERSION = "3.15.0"   # V3.15: seçim puanı kârlı şirketlere daha çok ağırlık verir; sürüm değişirse motor ay ortasında taramayı yeniler
 STRATEGY_NAME = "ADAPTIVE_BIST_REAL_RETURN_ENGINE_V3"
 
 # ---------------------------------------------------------------- objective (edit here)
@@ -205,4 +205,11 @@ EXTRA_BLEND = {"sector_mom": 0.25, "ep_x_quality": 1.0, "quality_mom": 0.25}
 # ---- V3.14 bot emir dosyası
 ORDERS_FILE = os.path.join(DATA_DIR, "orders.json")
 ORDERS_HISTORY_FILE = os.path.join(DATA_DIR, "orders_history.jsonl")
+# ---- V3.15 kasa önerisi (sitede gösterilir)
+# Her ay kasanın ~1/30'u ile bir hisse alınır (1/6 dilim / 5 hisse); BIST'te en küçük işlem 1 adet.
+# Asgari: pahalı hisselerde yuvarlama hatası ~%2'nin altında kalsın. Önerilen: hiçbir hissede ağırlık bozulmasın.
+# Azami: seçilen hisselerin medyan günlük işlem hacmi ~20-35 mn TL; emir günlük hacmin %5'ini geçmesin.
+MIN_CAPITAL_TL = 200_000
+RECOMMENDED_CAPITAL_TL = 500_000
+MAX_CAPITAL_TL = 30_000_000
 BOT_CAPITAL_TL = None              # örn. 250000: emir dosyasına TL tutar ve tahmini adet de yazılır (None: yalnızca ağırlık)

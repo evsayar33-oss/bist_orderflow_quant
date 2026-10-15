@@ -184,6 +184,18 @@ else:
     st.markdown(f'<div class="card note mut">Portföy {dstr(pf.get("start_date"))} tarihinde başladı. '
                 'Getiri kartları ilk işlem günlerinden sonra görünür.</div>', unsafe_allow_html=True)
 
+# ------------------------------------------------------------------ KASA
+def _tl(v):
+    return f"{v:,.0f} TL".replace(",", ".")
+st.markdown(f'<div class="card"><div class="lbl" style="margin-bottom:6px">Kasa önerisi</div>'
+            f'<div style="display:flex;gap:12px">'
+            f'<div style="flex:1;min-width:0"><div class="lbl">Asgari</div><div class="kpi v">{_tl(C.MIN_CAPITAL_TL)}</div></div>'
+            f'<div style="flex:1;min-width:0"><div class="lbl">Önerilen</div><div class="kpi v pos">{_tl(C.RECOMMENDED_CAPITAL_TL)}</div></div>'
+            f'</div><div class="note mut" style="margin-top:8px">Her ay kasanın yaklaşık 1/30\'u ile bir hisse alınır. '
+            f'Asgari tutarın altında pahalı hisselerde ağırlıklar bozulur. Önerilen tutarda tüm hisseler doğru ağırlıkla alınır. '
+            f'Kasa {_tl(C.MAX_CAPITAL_TL)} üstüne çıkarsa sığ hisselerde alım fiyatı bozulur.</div></div>',
+            unsafe_allow_html=True)
+
 tab1, tab2, tab3, tab4 = st.tabs(["Portföy", "Hisse Ara", "Performans", "Sağlık"])
 
 # ------------------------------------------------------------------ PORTFÖY
