@@ -40,13 +40,34 @@ def _weights(pf):
     return {t: float(p.get("value", 0)) / nav for t, p in (pf.get("positions") or {}).items()}
 
 
+def capital_now(state):
+    """V3.15 bileşik kasa. Öncelik: data/bot_equity.json (aracı kurumdaki gerçek hesap değeri, para giriş/çıkışı dahil);
+    yoksa BOT_CAPITAL_TL, botun başladığı günden bu yana portföy getirisiyle büyütülür (kâr kasaya eklenir)."""
+    try:
+        with open(C.BOT_EQUITY_FILE, encoding="utf-8") as fh:
+            eq = float(json.load(fh).get("equity_tl") or 0)
+        if eq > 0:
+            return eq
+    except (OSError, ValueError, TypeError):
+        pass
+    cap = getattr(C, "BOT_CAPITAL_TL", None)
+    if not cap:
+        state.pop("bot_anchor", None)
+        return None
+    nav = float((state.get("portfolio") or {}).get("nav") or 1.0)
+    a = state.get("bot_anchor") or {}
+    if float(a.get("capital") or 0) != float(cap) or not a.get("nav"):
+        a = {"capital": float(cap), "nav": nav, "date": str(pd.Timestamp.today().date())}   # yeni başlangıç noktası
+        state["bot_anchor"] = a
+    return float(cap) * nav / float(a["nav"])
+
+
 def build(state, today, prices=None):
     pf = state.get("portfolio") or {}
     pend = pf.get("pending") or []
     w = _weights(pf)
     exe = cal.add_sessions(pd.Timestamp(today), 1)
-    cap = getattr(C, "BOT_CAPITAL_TL", None)
-    cap_now = float(cap) * float(pf.get("nav") or 1.0) if cap else None
+    cap_now = capital_now(state)
     lr = state.get("last_rebalance") or {}
     exit_m = lr.get("exit_month") or {}
     prices = prices or {}

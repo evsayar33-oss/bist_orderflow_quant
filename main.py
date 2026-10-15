@@ -387,6 +387,18 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         state["health"] = HL.evaluate(state, None, nav_df, read_json(C.BACKTEST_REPORT_FILE), today)
     except Exception as exc:
         state["health"] = {"overall": "UYARI", "checks": [], "error": str(exc)[:200]}
+    try:                                   # V3.15: kasa önerisi güncel fiyat ve hacimden
+        import capital as CAP
+        sn = load_monthly_snapshots()
+        if sn is not None and not sn.empty:
+            last = sn[sn["tarih"] == sn["tarih"].max()]
+            pxs = ({str(k): float(v) for k, v in snap.set_index("ticker")["close"].items() if pd.notna(v)}
+                   if snap is not None and not snap.empty and "close" in snap else None)
+            adv = CAP.advise(last, pxs, state.get("liq_floor_tl"))
+            if adv:
+                state["capital_advice"] = {**adv, "date": str(today.date())}
+    except Exception as exc:
+        print(f"⚠️ Kasa önerisi hesaplanamadı: {exc}")
     state["last_run"] = {"date": str(today.date()), "status": "OK", "fingerprint": fp, "mode": "REFRESH" if refresh else "EOD",
                          "monthly_review": bool(review), "utc": datetime.utcnow().isoformat() + "Z"}
     save_state(state)

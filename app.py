@@ -185,15 +185,18 @@ else:
                 'Getiri kartları ilk işlem günlerinden sonra görünür.</div>', unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ KASA
+import capital as CAP
 def _tl(v):
     return f"{v:,.0f} TL".replace(",", ".")
+KA = CAP.current(state)
+_when = f"{dstr(KA['date'])} fiyatlarıyla hesaplandı. " if KA["dynamic"] else ""
 st.markdown(f'<div class="card"><div class="lbl" style="margin-bottom:6px">Kasa önerisi</div>'
             f'<div style="display:flex;gap:12px">'
-            f'<div style="flex:1;min-width:0"><div class="lbl">Asgari</div><div class="kpi v">{_tl(C.MIN_CAPITAL_TL)}</div></div>'
-            f'<div style="flex:1;min-width:0"><div class="lbl">Önerilen</div><div class="kpi v pos">{_tl(C.RECOMMENDED_CAPITAL_TL)}</div></div>'
-            f'</div><div class="note mut" style="margin-top:8px">Her ay kasanın yaklaşık 1/30\'u ile bir hisse alınır. '
-            f'Asgari tutarın altında pahalı hisselerde ağırlıklar bozulur. Önerilen tutarda tüm hisseler doğru ağırlıkla alınır. '
-            f'Kasa {_tl(C.MAX_CAPITAL_TL)} üstüne çıkarsa sığ hisselerde alım fiyatı bozulur.</div></div>',
+            f'<div style="flex:1;min-width:0"><div class="lbl">Asgari</div><div class="kpi v">{_tl(KA["min_tl"])}</div></div>'
+            f'<div style="flex:1;min-width:0"><div class="lbl">Önerilen</div><div class="kpi v pos">{_tl(KA["recommended_tl"])}</div></div>'
+            f'</div><div class="note mut" style="margin-top:8px">{_when}Tutarlar her gün güncel hisse fiyatı ve işlem hacminden '
+            f'yeniden hesaplanır. Her ay kasanın yaklaşık 1/30\'u ile bir hisse alınır. Asgari tutarın altında pahalı hisselerde '
+            f'ağırlıklar bozulur. Kasa {_tl(KA["max_tl"])} üstüne çıkarsa sığ hisselerde alım fiyatı bozulur.</div></div>',
             unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4 = st.tabs(["Portföy", "Hisse Ara", "Performans", "Sağlık"])

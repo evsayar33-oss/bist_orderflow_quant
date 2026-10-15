@@ -205,7 +205,7 @@ EXTRA_BLEND = {"sector_mom": 0.25, "ep_x_quality": 1.0, "quality_mom": 0.25}
 # ---- V3.14 bot emir dosyası
 ORDERS_FILE = os.path.join(DATA_DIR, "orders.json")
 ORDERS_HISTORY_FILE = os.path.join(DATA_DIR, "orders_history.jsonl")
-# ---- V3.15 kasa önerisi (sitede gösterilir)
+# ---- V3.15 kasa önerisi: yedek değerler; günlük çalışma bunları güncel fiyat/hacimden yeniden hesaplar (capital.py)
 # Her ay kasanın ~1/30'u ile bir hisse alınır (1/6 dilim / 5 hisse); BIST'te en küçük işlem 1 adet.
 # Asgari: pahalı hisselerde yuvarlama hatası ~%2'nin altında kalsın. Önerilen: hiçbir hissede ağırlık bozulmasın.
 # Azami: seçilen hisselerin medyan günlük işlem hacmi ~20-35 mn TL; emir günlük hacmin %5'ini geçmesin.
@@ -213,3 +213,6 @@ MIN_CAPITAL_TL = 200_000
 RECOMMENDED_CAPITAL_TL = 500_000
 MAX_CAPITAL_TL = 30_000_000
 BOT_CAPITAL_TL = None              # örn. 250000: emir dosyasına TL tutar ve tahmini adet de yazılır (None: yalnızca ağırlık)
+# V3.15 bileşik kasa: BOT_CAPITAL_TL botun BAŞLANGIÇ kasasıdır; tutarlar o günden bu yana portföy getirisiyle büyür.
+# Bot aracı kurumdaki gerçek hesap değerini {"equity_tl": 812345.6} olarak bu dosyaya yazarsa o kullanılır.
+BOT_EQUITY_FILE = os.path.join(DATA_DIR, "bot_equity.json")
