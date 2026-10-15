@@ -194,7 +194,12 @@ LOSER_EXTENSION = {"min_score_pct": 70, "max_extra_months": 18}
 #   2017-26 CAGR 66.9% -> 81.1% · halves 55.6/79.3 -> 66.1/97.7 · 1 TL 2017-25: 129 -> 259 · max DD -40.4% -> -44.2%
 #   Selecting only on the first half would have picked the same combination (it was also best there).
 #   Weight 1.0 on sector momentum hurt the first half -> moderate weights kept.
-EXTRA_BLEND = {"sector_mom": 0.5, "ep_x_quality": 0.5}
+# V3.15 (variant lab, 2026-10-15, same engine, only this line changed; USD figures):
+#   base 0.5/0.5           USD CAGR 27.3% · Sharpe 0.83 · USD max DD -51.6% · beat gold 53% of 12m windows
+#   this 0.25/1.0/+qm 0.25 USD CAGR 34.9% · Sharpe 0.95 · USD max DD -50.4% · beat gold 61% of 12m windows
+#   beats base in every sub-period (2017-19, 2020-22, 2023-26) and both halves; neighbouring weights
+#   (ep_x_quality 1.0-1.5, quality_mom 0.25-0.5) also beat base -> a plateau, not a single lucky setting.
+EXTRA_BLEND = {"sector_mom": 0.25, "ep_x_quality": 1.0, "quality_mom": 0.25}
 
 
 # ---- V3.14 bot emir dosyası
