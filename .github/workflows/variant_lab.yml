@@ -2,6 +2,10 @@ name: BIST Variant Lab - alternative buying rules
 
 on:
   workflow_dispatch:
+    inputs:
+      set:
+        description: 'rules or score'
+        default: 'score'
   push:
     branches: [ccr-b00241bf-ozkvet]
     paths: [.github/workflows/variant_lab.yml]
@@ -25,7 +29,7 @@ jobs:
       - name: Walk-forward backtest + variants (live state not changed)
         env:
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
-        run: python backtest_optimizer.py --start-date 2012-01-01 --no-save --variants
+        run: python backtest_optimizer.py --start-date 2012-01-01 --no-save --variants ${{ inputs.set || 'score' }}
       - name: Commit variants report
         run: |
           git config --local user.email "quantbot@users.noreply.github.com"

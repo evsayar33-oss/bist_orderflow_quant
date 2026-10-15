@@ -402,6 +402,23 @@ VARIANTS = [
 ]
 
 
+_EB = {"sector_mom": 0.5, "ep_x_quality": 0.5}
+SCORE_VARIANTS = [{"name": "base"}] + [
+    {"name": n, "EXTRA_BLEND": eb} for n, eb in [
+        ("sector_mom_0.25", {**_EB, "sector_mom": 0.25}), ("sector_mom_0.75", {**_EB, "sector_mom": 0.75}),
+        ("ep_q_0.25", {**_EB, "ep_x_quality": 0.25}), ("ep_q_0.75", {**_EB, "ep_x_quality": 0.75}),
+        ("ep_q_1.0", {**_EB, "ep_x_quality": 1.0}),
+        ("+high_52w", {**_EB, "high_52w": 0.25}), ("+trend", {**_EB, "trend": 0.25}),
+        ("+accel", {**_EB, "accel": 0.25}), ("+resid_mom", {**_EB, "resid_mom": 0.25}),
+        ("+low_lottery", {**_EB, "low_lottery": 0.25}), ("+low_ivol", {**_EB, "low_ivol": 0.25}),
+        ("+div_yield", {**_EB, "div_yield": 0.25}), ("+real_growth", {**_EB, "real_growth": 0.25}),
+        ("+book_x_quality", {**_EB, "book_x_quality": 0.25}), ("+quality_mom", {**_EB, "quality_mom": 0.25}),
+        ("+ebit_ev", {**_EB, "ebit_ev": 0.25}), ("+sales_growth", {**_EB, "sales_growth": 0.25}),
+        ("+profitable", {**_EB, "profitable": 0.25}), ("+small", {**_EB, "small": 0.25}),
+        ("+high_52w_0.5", {**_EB, "high_52w": 0.5}), ("+quality_mom_0.5", {**_EB, "quality_mom": 0.5}),
+    ]]
+
+
 def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
     """Re-run only the portfolio simulation with config overrides (scores are computed once)."""
     rows = []
@@ -415,9 +432,14 @@ def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
             m = nav_metrics(nd, cpi, bench)
             yrs = nd.set_index("tarih")["nav"]
             m["worst_year_pct"] = round(float((yrs.resample("YE").last().pct_change().dropna().min()) * 100), 1)
+            for tag, a, b in (("h1", None, "2021-12-31"), ("h2", "2022-01-01", None)):
+                h = yrs.loc[a:b].dropna()
+                yy = max((h.index[-1] - h.index[0]).days / 365.25, 1e-9) if len(h) > 1 else None
+                m[f"cagr_{tag}_pct"] = round(float((h.iloc[-1] / h.iloc[0]) ** (1 / yy) - 1) * 100, 1) if yy else None
             rows.append({"name": v["name"], **over, "avg_names": round(float(np.mean(nn)), 1) if nn else None,
                          **{k: m.get(k) for k in ("cagr_pct", "usd_cagr_pct", "usd_max_drawdown_pct", "max_drawdown_pct",
-                                                  "ann_vol_pct", "real_cagr_pct", "rolling12m_beat_all_pct", "worst_year_pct")}})
+                                                  "ann_vol_pct", "real_cagr_pct", "rolling12m_beat_all_pct", "worst_year_pct",
+                                                  "cagr_h1_pct", "cagr_h2_pct")}})
             print(f"🔬 {v['name']}: {rows[-1]}")
         except Exception as exc:
             rows.append({"name": v["name"], "error": str(exc)})
@@ -434,9 +456,10 @@ def main():
     ap.add_argument("--start-date", default="2012-01-01")
     ap.add_argument("--end-date", default=None)
     ap.add_argument("--no-save", action="store_true")
-    ap.add_argument("--variants", action="store_true", help="also test alternative buying rules (data/variants_report.json)")
+    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score"],
+                    help="also test alternative buying rules or selection-score signals (data/variants_report.json)")
     a = ap.parse_args()
-    run(a.start_date, a.end_date, save=not a.no_save, variants=VARIANTS if a.variants else None)
+    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS}.get(a.variants))
 
 
 if __name__ == "__main__":
