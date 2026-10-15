@@ -33,4 +33,4 @@ jobs:
           git add data/variants_report.json
           git diff --cached --quiet && exit 0
           git commit -m "🔬 Variant lab report"
-          for i in 1 2 3; do git pull --rebase && git push && break; sleep 5; done
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 5; done
