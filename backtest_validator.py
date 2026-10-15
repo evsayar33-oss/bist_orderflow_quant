@@ -121,6 +121,20 @@ def nav_metrics(nav_df: pd.DataFrame, cpi: Optional[pd.Series], bench: Optional[
         a0, a1 = d["tarih"].iloc[0], d["tarih"].iloc[-1]
         tot = window_returns(bench.get("bm"), cpi, bench.get("crate"), a0, a1, approx_cpi=True)
         out["benchmarks_total_pct"] = {k: (round(float(v), 2) if np.isfinite(v) else None) for k, v in tot.items()}
+        # USD view: TL figures are inflated by the lira's depreciation; this is the currency-neutral result
+        bm = bench.get("bm")
+        if bm is not None and "usdtry" in bm and bm["usdtry"].notna().sum() > 2:
+            fx = pd.to_numeric(bm["usdtry"], errors="coerce").reindex(d["tarih"].values, method="ffill").values
+            nu = pd.Series(nv.values / fx, index=d["tarih"].values).dropna()
+            if len(nu) > 2 and nu.iloc[0] > 0:
+                tu = nu.iloc[-1] / nu.iloc[0]
+                out["usd_total_pct"] = round((tu - 1) * 100, 2)
+                out["usd_cagr_pct"] = round((tu ** (1 / years) - 1) * 100, 2) if tu > 0 else -100.0
+                out["usd_max_drawdown_pct"] = round(float((nu / nu.cummax() - 1).min() * 100), 2)
+                if "xu100" in d:
+                    xu = pd.Series(pd.to_numeric(d["xu100"], errors="coerce").ffill().values / fx).dropna()
+                    if len(xu) > 2:
+                        out["xu100_usd_cagr_pct"] = round(((xu.iloc[-1] / xu.iloc[0]) ** (1 / years) - 1) * 100, 2)
         m = d.set_index("tarih")["nav"].resample("ME").last().dropna()
         if len(m) >= 13:
             wins = {k: 0 for k in ("cpi", "usd", "gold", "deposit", "floor", "hurdle")}
