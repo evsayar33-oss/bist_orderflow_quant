@@ -114,6 +114,15 @@ CATASTROPHE_FROM_PEAK_PCT = 35.0   # drawdown FLAG: 35% below highest close sinc
 CATASTROPHE_FROM_ENTRY_PCT = 30.0  # ... or 30% below entry -> sold at the monthly review ONLY if the
                                    #     thesis also failed (score below the BUY cut-off)
 HARD_STOP_FROM_ENTRY_PCT = 1000.0  # V3.8: no forced stop (every name is re-decided within 6 months; flag stays informational)
+# ---- V3.16 portföy seviyesinde koruma (risk.py). None = kapalı; test: variant_lab set=risk
+# Test 2026-10-15 (2017-26, USD): hiçbir koruma risk-ayarlı getiride kapalı halden iyi değil (Calmar 0.71).
+#   dd_brake 20/0.5: USD CAGR 35.6 -> 28.2, USD max DD değişmedi (-50.4) | trend_usd 10m: 22.3, -52.4
+#   vol_target 30: 31.8, -50.4 | hard_stop 35: 33.9, -49.8. Neden: TL nakde geçmek dolar bazında korumaz
+#   (2018 düşüşü kur krizi). Sonraki test: koruma parasını TL nakit yerine altına/dolara taşımak.
+RISK_MODE = None
+RISK_DD_TRIGGER_PCT = 20.0; RISK_DD_EXPOSURE = 0.5
+RISK_TREND_MONTHS = 10; RISK_TREND_EXPOSURE = 0.5
+RISK_VOL_TARGET_PCT = 25.0; RISK_MIN_EXPOSURE = 0.3
 # Exposure: a beat-CPI investor is fully invested; the guard/regime only trim, never halve it
 EXPOSURE_BY_MODE = {"NORMAL": 1.0, "WATCH": 0.9, "RECOVERY": 0.75, "SAFE": 0.0}
 REGIME_EXPOSURE_FLOOR = 0.8

@@ -366,6 +366,18 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         g0 = state.get("autonomy_guard", {}) or {}
         guard = {"mode": g0.get("mode", "WATCH"), "block_new_entries": bool(g0.get("block_new_entries", False))}
 
+    try:                                   # V3.16 portföy seviyesinde koruma (risk.py; RISK_MODE=None ise 1.0)
+        import risk as RK
+        navs = pd.Series(pd.to_numeric(nav_df["nav"], errors="coerce").values,
+                         index=pd.to_datetime(nav_df["tarih"])) if nav_df is not None and not nav_df.empty else None
+        idx_usd = None
+        if index_close is not None and bm is not None and "usdtry" in bm:
+            idx_usd = (index_close / pd.to_numeric(bm["usdtry"], errors="coerce").reindex(index_close.index, method="ffill")).dropna()
+        state["risk_exposure"] = RK.exposure(navs, idx_usd, state.setdefault("risk_mem", {}))
+    except Exception as exc:
+        state["risk_exposure"] = 1.0
+        print(f"⚠️ Portföy koruması hesaplanamadı: {exc}")
+
     review, top = None, []
     state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
     review_month = (as_of or today).strftime("%Y-%m")
