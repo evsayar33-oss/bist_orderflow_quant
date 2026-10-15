@@ -239,21 +239,26 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     # (meta_engine.plan_tranche + portfolio.apply_day). No strategy search: the rules are fixed
     # in config.py (TRANCHE_N / TRANCHE_MONTHS / TRANCHE_SECTOR_CAP), so nothing is tuned on the test years.
     print(f"🧪 Simülasyon: her ay en iyi {C.TRANCHE_N} hisse, her dilim {C.TRANCHE_MONTHS} ay, %100 hisse")
-    pf = new_portfolio(sim_days[0])
-    nav_rows, lots_all, n_names = [], [], []
-    for day in sim_days:
-        bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
-        _, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day) if len(crate) else None)
-        lots_all.extend(lots)
-        if day in frames:
-            frame, st, reg = frames[day]
-            orders, summ = plan_tranche(pf, frame, st, day, today_change=bars["chg_pct"])
-            pf["pending"] = orders
-            n_names.append(len(summ["target_weights"]))
-        wts = pf_weights(pf)
-        nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": round(sum(wts.values()), 4),
-                         "xu100": float(index_close.asof(day)) if index_close is not None else np.nan})
-    nav_df = pd.DataFrame(nav_rows)
+    def simulate():
+        pf = new_portfolio(sim_days[0])
+        nav_rows, lots_all, n_names = [], [], []
+        for day in sim_days:
+            bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
+            _, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day) if len(crate) else None)
+            lots_all.extend(lots)
+            if day in frames:
+                frame, st, reg = frames[day]
+                orders, summ = plan_tranche(pf, frame, st, day, today_change=bars["chg_pct"])
+                pf["pending"] = orders
+                n_names.append(len(summ["target_weights"]))
+            wts = pf_weights(pf)
+            nav_rows.append({"tarih": day, "nav": pf["nav"], "exposure": round(sum(wts.values()), 4),
+                             "xu100": float(index_close.asof(day)) if index_close is not None else np.nan})
+        return pf, pd.DataFrame(nav_rows), lots_all, n_names
+
+    pf, nav_df, lots_all, n_names = simulate()
+    if variants:
+        run_variants(variants, simulate, cpi, bench)
     lots_df = enrich_lots(pd.DataFrame(lots_all), cpi, index_close, bench)
     open_now = {t: round((p["level"] - 1) * 100, 2) for t, p in pf["positions"].items()}
 
@@ -381,13 +386,114 @@ def build_research_prior(ds: pd.DataFrame, X: Optional[pd.DataFrame], oos_l: pd.
     return prior
 
 
+VARIANTS = [
+    {"name": "base"},
+    {"name": "picks3", "TRANCHE_N": 3}, {"name": "picks8", "TRANCHE_N": 8}, {"name": "picks10", "TRANCHE_N": 10},
+    {"name": "hold3m", "TRANCHE_MONTHS": 3}, {"name": "hold9m", "TRANCHE_MONTHS": 9}, {"name": "hold12m", "TRANCHE_MONTHS": 12},
+    {"name": "cap10", "MAX_NAME_W": 0.10}, {"name": "cap25", "MAX_NAME_W": 0.25},
+    {"name": "sector1", "TRANCHE_SECTOR_CAP": 1}, {"name": "sector3", "TRANCHE_SECTOR_CAP": 3},
+    {"name": "defensive", "DEFENSIVE_IN_DOWNTREND": True},
+    {"name": "no_loser_ext", "LOSER_EXTENSION": None},
+    {"name": "picks8_hold9m", "TRANCHE_N": 8, "TRANCHE_MONTHS": 9},
+    {"name": "picks3_hold12m", "TRANCHE_N": 3, "TRANCHE_MONTHS": 12},
+    {"name": "w_inv_vol", "TRANCHE_WEIGHTING": "inv_vol"}, {"name": "w_lottery_vol", "TRANCHE_WEIGHTING": "lottery_vol"},
+    {"name": "skip_top20_vol", "ENTRY_MAX_VOL_PCTILE": 0.8},
+    {"name": "no_value_trap", "VALUE_TRAP_MODE": None}, {"name": "no_extra_blend", "EXTRA_BLEND": None},
+]
+
+
+_EB = {"sector_mom": 0.5, "ep_x_quality": 0.5}
+SCORE_VARIANTS = [{"name": "base"}] + [
+    {"name": n, "EXTRA_BLEND": eb} for n, eb in [
+        ("sector_mom_0.25", {**_EB, "sector_mom": 0.25}), ("sector_mom_0.75", {**_EB, "sector_mom": 0.75}),
+        ("ep_q_0.25", {**_EB, "ep_x_quality": 0.25}), ("ep_q_0.75", {**_EB, "ep_x_quality": 0.75}),
+        ("ep_q_1.0", {**_EB, "ep_x_quality": 1.0}),
+        ("+high_52w", {**_EB, "high_52w": 0.25}), ("+trend", {**_EB, "trend": 0.25}),
+        ("+accel", {**_EB, "accel": 0.25}), ("+resid_mom", {**_EB, "resid_mom": 0.25}),
+        ("+low_lottery", {**_EB, "low_lottery": 0.25}), ("+low_ivol", {**_EB, "low_ivol": 0.25}),
+        ("+div_yield", {**_EB, "div_yield": 0.25}), ("+real_growth", {**_EB, "real_growth": 0.25}),
+        ("+book_x_quality", {**_EB, "book_x_quality": 0.25}), ("+quality_mom", {**_EB, "quality_mom": 0.25}),
+        ("+ebit_ev", {**_EB, "ebit_ev": 0.25}), ("+sales_growth", {**_EB, "sales_growth": 0.25}),
+        ("+profitable", {**_EB, "profitable": 0.25}), ("+small", {**_EB, "small": 0.25}),
+        ("+high_52w_0.5", {**_EB, "high_52w": 0.5}), ("+quality_mom_0.5", {**_EB, "quality_mom": 0.5}),
+    ]]
+
+
+_A = {"sector_mom": 0.5, "ep_x_quality": 1.0}
+_AB = {**_A, "quality_mom": 0.25}
+DEEP_VARIANTS = [{"name": "base"}] + [
+    {"name": n, "EXTRA_BLEND": eb} for n, eb in [
+        ("A ep_q_1.0", _A), ("B +qm_0.25", {**_EB, "quality_mom": 0.25}), ("C +qm_0.5", {**_EB, "quality_mom": 0.5}),
+        # robustness: neighbours of the winners (a real edge is a plateau, not a spike)
+        ("A ep_q_1.25", {**_A, "ep_x_quality": 1.25}), ("A ep_q_1.5", {**_A, "ep_x_quality": 1.5}),
+        ("B +qm_0.75", {**_EB, "quality_mom": 0.75}),
+        # combinations
+        ("A+B", _AB), ("A+C", {**_A, "quality_mom": 0.5}),
+        ("A+B sector_mom_0.25", {**_AB, "sector_mom": 0.25}),
+        ("A+B +resid_mom", {**_AB, "resid_mom": 0.25}), ("A+B +small", {**_AB, "small": 0.25}),
+        ("A+B +high_52w", {**_AB, "high_52w": 0.5}),
+        # quant_lab ideas
+        ("A +qvm", {**_A, "qvm": 0.25}), ("A +magic", {**_A, "magic": 0.25}),
+        ("A +value_mom", {**_A, "value_mom": 0.25}), ("A +quality_lowvol", {**_A, "quality_lowvol": 0.25}),
+        ("A+B +qvm", {**_AB, "qvm": 0.25}),
+    ]] + [
+    # interaction with the buying rules
+    {"name": "A+B picks3", "EXTRA_BLEND": _AB, "TRANCHE_N": 3},
+    {"name": "A+B sector1", "EXTRA_BLEND": _AB, "TRANCHE_SECTOR_CAP": 1},
+]
+
+
+def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
+    """Re-run only the portfolio simulation with config overrides (scores are computed once)."""
+    rows = []
+    for v in variants:
+        over = {k: val for k, val in v.items() if k != "name"}
+        old = {k: getattr(C, k, None) for k in over}
+        try:
+            for k, val in over.items():
+                setattr(C, k, val)
+            _, nd, _, nn = simulate()
+            m = nav_metrics(nd, cpi, bench)
+            yrs = nd.set_index("tarih")["nav"]
+            m["worst_year_pct"] = round(float((yrs.resample("YE").last().pct_change().dropna().min()) * 100), 1)
+            for tag, a, b in (("h1", None, "2021-12-31"), ("h2", "2022-01-01", None),
+                              ("p1", None, "2019-12-31"), ("p2", "2020-01-01", "2022-12-31"), ("p3", "2023-01-01", None)):
+                h = yrs.loc[a:b].dropna()
+                yy = max((h.index[-1] - h.index[0]).days / 365.25, 1e-9) if len(h) > 1 else None
+                m[f"cagr_{tag}_pct"] = round(float((h.iloc[-1] / h.iloc[0]) ** (1 / yy) - 1) * 100, 1) if yy else None
+            fx = bench.get("bm")["usdtry"] if bench and bench.get("bm") is not None and "usdtry" in bench.get("bm") else None
+            if fx is not None:
+                um = (yrs / pd.to_numeric(fx, errors="coerce").reindex(yrs.index, method="ffill")).resample("ME").last().dropna()
+                ur = um.pct_change().dropna()
+                m["usd_sharpe"] = round(float(ur.mean() / ur.std() * np.sqrt(12)), 2) if ur.std() > 0 else None
+                m["usd_per_year"] = {int(k.year): round(float(v * 100), 1) for k, v in um.resample("YE").last().pct_change().dropna().items()}
+                m["usd_calmar"] = round(m["usd_cagr_pct"] / abs(m["usd_max_drawdown_pct"]), 2) if m.get("usd_max_drawdown_pct") else None
+            rows.append({"name": v["name"], **over, "avg_names": round(float(np.mean(nn)), 1) if nn else None,
+                         **{k: m.get(k) for k in ("cagr_pct", "usd_cagr_pct", "usd_max_drawdown_pct", "max_drawdown_pct",
+                                                  "ann_vol_pct", "real_cagr_pct", "rolling12m_beat_all_pct", "worst_year_pct",
+                                                  "cagr_h1_pct", "cagr_h2_pct", "cagr_p1_pct", "cagr_p2_pct",
+                                                  "cagr_p3_pct", "usd_sharpe", "usd_calmar", "usd_per_year",
+                                                  "rolling12m_beat")}})
+            print(f"🔬 {v['name']}: {rows[-1]}")
+        except Exception as exc:
+            rows.append({"name": v["name"], "error": str(exc)})
+        finally:
+            for k, val in old.items():
+                setattr(C, k, val)
+    atomic_json_write(os.path.join(os.path.dirname(C.BACKTEST_REPORT_FILE), "variants_report.json"),
+                      {"generated_at": datetime.utcnow().isoformat() + "Z", "variants": rows})
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start-date", default="2012-01-01")
     ap.add_argument("--end-date", default=None)
     ap.add_argument("--no-save", action="store_true")
+    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score", "deep"],
+                    help="also test alternative buying rules or selection-score signals (data/variants_report.json)")
     a = ap.parse_args()
-    run(a.start_date, a.end_date, save=not a.no_save)
+    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS, "deep": DEEP_VARIANTS}.get(a.variants))
 
 
 if __name__ == "__main__":
