@@ -419,6 +419,30 @@ SCORE_VARIANTS = [{"name": "base"}] + [
     ]]
 
 
+_A = {"sector_mom": 0.5, "ep_x_quality": 1.0}
+_AB = {**_A, "quality_mom": 0.25}
+DEEP_VARIANTS = [{"name": "base"}] + [
+    {"name": n, "EXTRA_BLEND": eb} for n, eb in [
+        ("A ep_q_1.0", _A), ("B +qm_0.25", {**_EB, "quality_mom": 0.25}), ("C +qm_0.5", {**_EB, "quality_mom": 0.5}),
+        # robustness: neighbours of the winners (a real edge is a plateau, not a spike)
+        ("A ep_q_1.25", {**_A, "ep_x_quality": 1.25}), ("A ep_q_1.5", {**_A, "ep_x_quality": 1.5}),
+        ("B +qm_0.75", {**_EB, "quality_mom": 0.75}),
+        # combinations
+        ("A+B", _AB), ("A+C", {**_A, "quality_mom": 0.5}),
+        ("A+B sector_mom_0.25", {**_AB, "sector_mom": 0.25}),
+        ("A+B +resid_mom", {**_AB, "resid_mom": 0.25}), ("A+B +small", {**_AB, "small": 0.25}),
+        ("A+B +high_52w", {**_AB, "high_52w": 0.5}),
+        # quant_lab ideas
+        ("A +qvm", {**_A, "qvm": 0.25}), ("A +magic", {**_A, "magic": 0.25}),
+        ("A +value_mom", {**_A, "value_mom": 0.25}), ("A +quality_lowvol", {**_A, "quality_lowvol": 0.25}),
+        ("A+B +qvm", {**_AB, "qvm": 0.25}),
+    ]] + [
+    # interaction with the buying rules
+    {"name": "A+B picks3", "EXTRA_BLEND": _AB, "TRANCHE_N": 3},
+    {"name": "A+B sector1", "EXTRA_BLEND": _AB, "TRANCHE_SECTOR_CAP": 1},
+]
+
+
 def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
     """Re-run only the portfolio simulation with config overrides (scores are computed once)."""
     rows = []
@@ -432,14 +456,24 @@ def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
             m = nav_metrics(nd, cpi, bench)
             yrs = nd.set_index("tarih")["nav"]
             m["worst_year_pct"] = round(float((yrs.resample("YE").last().pct_change().dropna().min()) * 100), 1)
-            for tag, a, b in (("h1", None, "2021-12-31"), ("h2", "2022-01-01", None)):
+            for tag, a, b in (("h1", None, "2021-12-31"), ("h2", "2022-01-01", None),
+                              ("p1", None, "2019-12-31"), ("p2", "2020-01-01", "2022-12-31"), ("p3", "2023-01-01", None)):
                 h = yrs.loc[a:b].dropna()
                 yy = max((h.index[-1] - h.index[0]).days / 365.25, 1e-9) if len(h) > 1 else None
                 m[f"cagr_{tag}_pct"] = round(float((h.iloc[-1] / h.iloc[0]) ** (1 / yy) - 1) * 100, 1) if yy else None
+            fx = bench.get("bm")["usdtry"] if bench and bench.get("bm") is not None and "usdtry" in bench.get("bm") else None
+            if fx is not None:
+                um = (yrs / pd.to_numeric(fx, errors="coerce").reindex(yrs.index, method="ffill")).resample("ME").last().dropna()
+                ur = um.pct_change().dropna()
+                m["usd_sharpe"] = round(float(ur.mean() / ur.std() * np.sqrt(12)), 2) if ur.std() > 0 else None
+                m["usd_per_year"] = {int(k.year): round(float(v * 100), 1) for k, v in um.resample("YE").last().pct_change().dropna().items()}
+                m["usd_calmar"] = round(m["usd_cagr_pct"] / abs(m["usd_max_drawdown_pct"]), 2) if m.get("usd_max_drawdown_pct") else None
             rows.append({"name": v["name"], **over, "avg_names": round(float(np.mean(nn)), 1) if nn else None,
                          **{k: m.get(k) for k in ("cagr_pct", "usd_cagr_pct", "usd_max_drawdown_pct", "max_drawdown_pct",
                                                   "ann_vol_pct", "real_cagr_pct", "rolling12m_beat_all_pct", "worst_year_pct",
-                                                  "cagr_h1_pct", "cagr_h2_pct")}})
+                                                  "cagr_h1_pct", "cagr_h2_pct", "cagr_p1_pct", "cagr_p2_pct",
+                                                  "cagr_p3_pct", "usd_sharpe", "usd_calmar", "usd_per_year",
+                                                  "rolling12m_beat")}})
             print(f"🔬 {v['name']}: {rows[-1]}")
         except Exception as exc:
             rows.append({"name": v["name"], "error": str(exc)})
@@ -456,10 +490,10 @@ def main():
     ap.add_argument("--start-date", default="2012-01-01")
     ap.add_argument("--end-date", default=None)
     ap.add_argument("--no-save", action="store_true")
-    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score"],
+    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score", "deep"],
                     help="also test alternative buying rules or selection-score signals (data/variants_report.json)")
     a = ap.parse_args()
-    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS}.get(a.variants))
+    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS, "deep": DEEP_VARIANTS}.get(a.variants))
 
 
 if __name__ == "__main__":

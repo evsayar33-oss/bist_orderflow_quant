@@ -359,6 +359,12 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
             "real_growth": num("f_real_growth"),
             "book_x_quality": num("f_book_yield").rank(pct=True) * num("f_roe").rank(pct=True),
             "quality_mom": num("f_roe").rank(pct=True) * num("f_mom_12_1").rank(pct=True),
+            # quant_lab ideas: AQR QVM, Greenblatt magic formula, cheap AND rising, quality + low risk
+            "qvm": (num("f_earnings_yield").rank(pct=True) + num("f_book_yield").rank(pct=True)) / 2
+                   + (num("f_roe").rank(pct=True) + num("f_op_margin").rank(pct=True)) / 2 + num("f_mom_12_1").rank(pct=True),
+            "magic": num("f_earnings_yield").rank(pct=True) + num("f_roe").rank(pct=True),
+            "value_mom": num("f_earnings_yield").rank(pct=True) * num("f_mom_12_1").rank(pct=True),
+            "quality_lowvol": num("f_roe").rank(pct=True) * num("f_low_vol").rank(pct=True),
         }
         base = f[rank_col] if rank_col in f else f["composite"]
         tot = (base - base.mean()) / (base.std() or 1.0)

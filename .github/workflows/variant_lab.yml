@@ -5,7 +5,7 @@ on:
     inputs:
       set:
         description: 'rules or score'
-        default: 'score'
+        default: 'deep'
 
 permissions:
   contents: write
@@ -26,7 +26,7 @@ jobs:
       - name: Walk-forward backtest + variants (live state not changed)
         env:
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
-        run: python backtest_optimizer.py --start-date 2012-01-01 --no-save --variants ${{ inputs.set || 'score' }}
+        run: python backtest_optimizer.py --start-date 2012-01-01 --no-save --variants ${{ inputs.set || 'deep' }}
       - name: Commit variants report
         run: |
           git config --local user.email "quantbot@users.noreply.github.com"
