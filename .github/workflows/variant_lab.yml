@@ -6,9 +6,6 @@ on:
       set:
         description: 'rules or score'
         default: 'score'
-  push:
-    branches: [ccr-b00241bf-ozkvet]
-    paths: [.github/workflows/variant_lab.yml]
 
 permissions:
   contents: write
@@ -37,4 +34,4 @@ jobs:
           git add data/variants_report.json
           git diff --cached --quiet && exit 0
           git commit -m "🔬 Variant lab report"
-          for i in 1 2 3; do git pull --rebase --autostash && git push && break; sleep 5; done
+          for i in 1 2 3; do git pull --rebase --autostash -X theirs && git push && break; sleep 5; done
