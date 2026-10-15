@@ -478,6 +478,9 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     tot_w = sum(tw.values())
     if tot_w > 0 and abs(tot_w - 1.0) > 1e-9:                     # stock-only: always fully invested
         tw = {t: w / tot_w for t, w in tw.items()}
+    rx = float(state.get("risk_exposure") or 1.0)                 # V3.16 portfolio-level protection (risk.py)
+    if rx < 1.0:
+        tw = {t: w * rx for t, w in tw.items()}
     # ---- orders
     cw = pf_weights(pf)
     held = list(pf["positions"].keys())
@@ -490,7 +493,8 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
             holds.append(t)
             if not getattr(C, "TRIM_WINNERS", True) and cw.get(t, 0.0) > tw[t] and cw.get(t, 0.0) - tw[t] <= 0.10:
                 continue                                           # let the winner run
-            if abs(cw.get(t, 0.0) - tw[t]) > C.REBALANCE_BAND:
+            band = C.REBALANCE_BAND if rx >= 1.0 or cw.get(t, 0.0) <= tw[t] else 0.005
+            if abs(cw.get(t, 0.0) - tw[t]) > band:
                 orders.append({"ticker": t, "action": "REBAL", "reason": "COHORT_WEIGHT", "target_w": round(tw[t], 5)})
     # stock-only: idle cash (from exits / below-band drift) is re-deployed into under-weight holdings
     rebal_set = {o["ticker"] for o in orders if o["action"] == "REBAL"}

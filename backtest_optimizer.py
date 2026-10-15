@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 import config as C
+import risk as RK
 import fundamentals_hist as FH
 import inflation as INF
 import market_data as MD
@@ -239,15 +240,25 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
     # (meta_engine.plan_tranche + portfolio.apply_day). No strategy search: the rules are fixed
     # in config.py (TRANCHE_N / TRANCHE_MONTHS / TRANCHE_SECTOR_CAP), so nothing is tuned on the test years.
     print(f"🧪 Simülasyon: her ay en iyi {C.TRANCHE_N} hisse, her dilim {C.TRANCHE_MONTHS} ay, %100 hisse")
+    idx_usd = None
+    try:
+        if index_close is not None and bm is not None and "usdtry" in bm:
+            idx_usd = (index_close / pd.to_numeric(bm["usdtry"], errors="coerce").reindex(index_close.index, method="ffill")).dropna()
+    except Exception:
+        idx_usd = None
+
     def simulate():
         pf = new_portfolio(sim_days[0])
         nav_rows, lots_all, n_names = [], [], []
+        risk_mem = {}
         for day in sim_days:
             bars = pd.DataFrame({"open": O.loc[day], "close": Cl.loc[day], "chg_pct": chg.loc[day]}).dropna()
             _, lots = apply_day(pf, bars, day, cash_yield_pct=INF.cash_yield_at(crate, day) if len(crate) else None)
             lots_all.extend(lots)
             if day in frames:
                 frame, st, reg = frames[day]
+                navs = pd.Series([r["nav"] for r in nav_rows], index=[r["tarih"] for r in nav_rows], dtype=float)
+                st = {**st, "risk_exposure": RK.exposure(navs, idx_usd.loc[:day] if idx_usd is not None else None, risk_mem)}
                 orders, summ = plan_tranche(pf, frame, st, day, today_change=bars["chg_pct"])
                 pf["pending"] = orders
                 n_names.append(len(summ["target_weights"]))
@@ -443,6 +454,29 @@ DEEP_VARIANTS = [{"name": "base"}] + [
 ]
 
 
+_BEST = {"sector_mom": 0.25, "ep_x_quality": 1.0, "quality_mom": 0.25}
+RISK_VARIANTS = [{"name": "base"}] + [
+    # per-stock exits
+    {"name": "stop_atr_all", "STOP_MODE": "all"}, {"name": "stop_atr_high_risk", "STOP_MODE": "high_risk"},
+    {"name": "stop_atr_low_conf", "STOP_MODE": "low_conf"},
+    {"name": "hard_stop_25", "HARD_STOP_FROM_ENTRY_PCT": 25.0}, {"name": "hard_stop_35", "HARD_STOP_FROM_ENTRY_PCT": 35.0},
+    # portfolio-level protection
+    {"name": "dd_brake_15_x0.5", "RISK_MODE": "dd_brake", "RISK_DD_TRIGGER_PCT": 15.0, "RISK_DD_EXPOSURE": 0.5},
+    {"name": "dd_brake_20_x0.5", "RISK_MODE": "dd_brake", "RISK_DD_TRIGGER_PCT": 20.0, "RISK_DD_EXPOSURE": 0.5},
+    {"name": "dd_brake_25_x0.5", "RISK_MODE": "dd_brake", "RISK_DD_TRIGGER_PCT": 25.0, "RISK_DD_EXPOSURE": 0.5},
+    {"name": "dd_brake_20_x0.3", "RISK_MODE": "dd_brake", "RISK_DD_TRIGGER_PCT": 20.0, "RISK_DD_EXPOSURE": 0.3},
+    {"name": "trend_usd_10m_x0.5", "RISK_MODE": "trend_usd", "RISK_TREND_MONTHS": 10, "RISK_TREND_EXPOSURE": 0.5},
+    {"name": "trend_usd_6m_x0.5", "RISK_MODE": "trend_usd", "RISK_TREND_MONTHS": 6, "RISK_TREND_EXPOSURE": 0.5},
+    {"name": "trend_usd_12m_x0.5", "RISK_MODE": "trend_usd", "RISK_TREND_MONTHS": 12, "RISK_TREND_EXPOSURE": 0.5},
+    {"name": "vol_target_25", "RISK_MODE": "vol_target", "RISK_VOL_TARGET_PCT": 25.0},
+    {"name": "vol_target_30", "RISK_MODE": "vol_target", "RISK_VOL_TARGET_PCT": 30.0},
+    {"name": "combo_20_10m", "RISK_MODE": "combo", "RISK_DD_TRIGGER_PCT": 20.0, "RISK_DD_EXPOSURE": 0.5,
+     "RISK_TREND_MONTHS": 10, "RISK_TREND_EXPOSURE": 0.5},
+    {"name": "combo + stop_high_risk", "RISK_MODE": "combo", "RISK_DD_TRIGGER_PCT": 20.0, "RISK_DD_EXPOSURE": 0.5,
+     "RISK_TREND_MONTHS": 10, "RISK_TREND_EXPOSURE": 0.5, "STOP_MODE": "high_risk"},
+]
+
+
 def run_variants(variants: List[Dict], simulate, cpi, bench) -> List[Dict]:
     """Re-run only the portfolio simulation with config overrides (scores are computed once)."""
     rows = []
@@ -490,10 +524,10 @@ def main():
     ap.add_argument("--start-date", default="2012-01-01")
     ap.add_argument("--end-date", default=None)
     ap.add_argument("--no-save", action="store_true")
-    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score", "deep"],
+    ap.add_argument("--variants", nargs="?", const="rules", choices=["rules", "score", "deep", "risk"],
                     help="also test alternative buying rules or selection-score signals (data/variants_report.json)")
     a = ap.parse_args()
-    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS, "deep": DEEP_VARIANTS}.get(a.variants))
+    run(a.start_date, a.end_date, save=not a.no_save, variants={"rules": VARIANTS, "score": SCORE_VARIANTS, "deep": DEEP_VARIANTS, "risk": RISK_VARIANTS}.get(a.variants))
 
 
 if __name__ == "__main__":

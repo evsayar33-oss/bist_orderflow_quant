@@ -114,6 +114,11 @@ CATASTROPHE_FROM_PEAK_PCT = 35.0   # drawdown FLAG: 35% below highest close sinc
 CATASTROPHE_FROM_ENTRY_PCT = 30.0  # ... or 30% below entry -> sold at the monthly review ONLY if the
                                    #     thesis also failed (score below the BUY cut-off)
 HARD_STOP_FROM_ENTRY_PCT = 1000.0  # V3.8: no forced stop (every name is re-decided within 6 months; flag stays informational)
+# ---- V3.16 portföy seviyesinde koruma (risk.py). None = kapalı; test: variant_lab set=risk
+RISK_MODE = None
+RISK_DD_TRIGGER_PCT = 20.0; RISK_DD_EXPOSURE = 0.5
+RISK_TREND_MONTHS = 10; RISK_TREND_EXPOSURE = 0.5
+RISK_VOL_TARGET_PCT = 25.0; RISK_MIN_EXPOSURE = 0.3
 # Exposure: a beat-CPI investor is fully invested; the guard/regime only trim, never halve it
 EXPOSURE_BY_MODE = {"NORMAL": 1.0, "WATCH": 0.9, "RECOVERY": 0.75, "SAFE": 0.0}
 REGIME_EXPOSURE_FLOOR = 0.8
