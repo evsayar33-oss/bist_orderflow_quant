@@ -1,0 +1,37 @@
+name: BIST bekçisi
+
+# Günlük tarama 54 saattir commit atmadıysa Telegram uyarısı (tek kaçan gün zararsız; tatil sonrası yanlış alarm olmaz).
+on:
+  schedule:
+    - cron: '17 9 * * 2-6'      # Salı-Cumartesi 12:17 TR
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - name: Denetle
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, time, urllib.request, urllib.parse
+          ts = subprocess.run(["git", "log", "-1", "--format=%ct", "--grep=V3 daily run"], capture_output=True, text=True).stdout.strip()
+          age = (time.time() - int(ts)) / 3600 if ts else 1e9
+          print(f"son günlük çalışma {age:.1f} saat önce")
+          if age > 54:
+              msg = f"🚨 <b>BIST sistemi</b>: günlük tarama {age:.0f} saattir tamamlanmadı. Actions sayfasını kontrol et."
+              tok, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("CHAT_ID")
+              if tok and chat:
+                  data = urllib.parse.urlencode({"chat_id": chat, "text": msg, "parse_mode": "HTML"}).encode()
+                  urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage", data, timeout=20)
+              raise SystemExit(1)
+          PY
