@@ -6,3 +6,11 @@ Invoke the `task-observer` skill before the FIRST tool call of every session, an
 - Observation log: `/home/claude/bist_orderflow_quant/.claude/skill-observations/observation-log/`
 - Substitute this path for `[ABSOLUTE PATH]` in every skill snippet. Keep it in double quotes. Run snippets with bash.
 - Commit new observation files to the repo so they persist between sessions.
+
+# Gerçekçilik kuralı (sahibin isteği — tüm çalışmalar)
+
+Sahibe canlıda en iyi çalışacak sonuç lazım, testte en iyi görüneni değil.
+- Kabul kuralını sonuçlara bakmadan ÖNCE yaz (alt dönemlerin hepsinde geçmeli, komşu ayarlarda da geçmeli, yüksek maliyette de geçmeli).
+- Çok deneme = şans riski (aşırı uyum). Deneme sayısını söyle; tek en iyi noktayı değil, düz/sağlam bölgeyi seç.
+- Daha iyisi kurala göre çıkmazsa açıkça yaz: "daha iyisi bulunamadı" veya "canlıda aynısı olmayabilir, bu yüzden önermiyorum".
+- Zayıf yönleri (geride kalınan dönemler, test edilemeyen veriler, tek sektöre bağımlılık) her raporda yaz.
