@@ -448,11 +448,11 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.9228,
-      "NEUTRAL": 0.03,
-      "RISK_ON": 0.0473
+      "RISK_OFF": 0.8578,
+      "NEUTRAL": 0.0542,
+      "RISK_ON": 0.088
     },
-    "p_risk_off": 0.9228,
+    "p_risk_off": 0.8578,
     "degraded": true,
     "params": {
       "K": 3,
@@ -542,8 +542,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.326,
-    "exp_mkt_12m_pct": 24.16,
+    "exp_mkt_5d_pct": 0.339,
+    "exp_mkt_12m_pct": 24.19,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -1292,7 +1292,7 @@
       "benchmarks_total_pct": {
         "cpi": null,
         "usd": 1.39,
-        "gold": 1.02,
+        "gold": 1.03,
         "deposit": 1.51,
         "xu100": -6.92,
         "floor": null,
@@ -1301,7 +1301,7 @@
       "usd_total_pct": -13.32,
       "usd_cagr_pct": -91.67,
       "usd_max_drawdown_pct": -13.45,
-      "xu100_usd_cagr_pct": -84.97
+      "xu100_usd_cagr_pct": -84.98
     },
     "lots": {
       "closed_lots": 1,
@@ -1493,7 +1493,7 @@
     "fingerprint": "5903.6500|5392020415",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-19T21:20:23.559370Z"
+    "utc": "2026-10-19T22:22:54.873747Z"
   },
   "data_quality": {
     "ok": true,
