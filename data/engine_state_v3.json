@@ -448,12 +448,12 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.9976,
-      "NEUTRAL": 0.0018,
-      "RISK_ON": 0.0006
+      "RISK_OFF": 0.9228,
+      "NEUTRAL": 0.03,
+      "RISK_ON": 0.0473
     },
-    "p_risk_off": 0.9976,
-    "degraded": false,
+    "p_risk_off": 0.9228,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -542,8 +542,8 @@
       "fit_date": "2026-09-28"
     },
     "last_fit": "2026-09-28",
-    "exp_mkt_5d_pct": 0.31,
-    "exp_mkt_12m_pct": 24.12,
+    "exp_mkt_5d_pct": 0.326,
+    "exp_mkt_12m_pct": 24.16,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -558,7 +558,7 @@
     ],
     "as_of": "2026-10-19",
     "persistence": 0.9248,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.0503,
@@ -1291,17 +1291,17 @@
       "real_cagr_pct": -89.72,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 1.34,
-        "gold": 0.92,
+        "usd": 1.39,
+        "gold": 1.02,
         "deposit": 1.51,
-        "xu100": -9.23,
+        "xu100": -6.92,
         "floor": null,
         "hurdle": null
       },
-      "usd_total_pct": -13.28,
-      "usd_cagr_pct": -91.61,
-      "usd_max_drawdown_pct": -13.41,
-      "xu100_usd_cagr_pct": -84.85
+      "usd_total_pct": -13.32,
+      "usd_cagr_pct": -91.67,
+      "usd_max_drawdown_pct": -13.45,
+      "xu100_usd_cagr_pct": -84.97
     },
     "lots": {
       "closed_lots": 1,
@@ -1313,9 +1313,7 @@
       },
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
-      "hit_beat_deposit_pct": 0.0,
-      "hit_beat_xu100_pct": 0.0,
-      "avg_xu_excess_pct": -3.67
+      "hit_beat_deposit_pct": 0.0
     },
     "open_positions": {
       "MNDRS": {
@@ -1490,12 +1488,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-19",
+    "date": "2026-10-20",
     "status": "OK",
     "fingerprint": "5903.6500|5392020415",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-19T20:43:42.039558Z"
+    "utc": "2026-10-19T21:20:23.559370Z"
   },
   "data_quality": {
     "ok": true,
@@ -1531,8 +1529,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 23.31,
-    "gold": 23.31,
+    "usd": 23.39,
+    "gold": 23.39,
     "deposit": 29.75,
     "hurdle": 29.75,
     "floor": 29.75,
@@ -1600,7 +1598,7 @@
   },
   "last_eod_date": "2026-10-19",
   "health": {
-    "date": "2026-10-19",
+    "date": "2026-10-20",
     "overall": "OK",
     "checks": [
       {
@@ -1628,8 +1626,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-19 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-10-19 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1677,8 +1675,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 4 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 4
+        "msg": "model 5 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 5
       },
       {
         "key": "live",
@@ -1704,7 +1702,7 @@
         "test": 91.2
       },
       "hit_beat_xu100_pct": {
-        "live": 0.0,
+        "live": null,
         "test": 65.7
       },
       "hit_beat_cpi_pct": {
@@ -1816,6 +1814,6 @@
     "median_price_tl": 8.95,
     "max_price_tl": 366.0,
     "median_adv_tl": 31636663.0,
-    "date": "2026-10-19"
+    "date": "2026-10-20"
   }
 }
