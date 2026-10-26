@@ -624,10 +624,10 @@
     "ann6m_pct": 27.63,
     "expected_12m_pct": 28.68,
     "is_proxy": false,
-    "source": "evds",
+    "source": "dbnomics+cache",
     "tried": {
       "manual": "unavailable",
-      "evds": "ok (last 2026-09)",
+      "evds": "error: TP.FG.J0@evds3.tcmb.gov.tr: HTTPSConnectionPool(host='evds3.tcmb.gov.tr', port=443): Rea; TP.FG.J0@evds2.tcmb.gov.tr: HT",
       "fred": "error: HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=60)",
       "dbnomics": "ok (last 2025-07)",
       "cache": "ok (last 2026-09)"
@@ -1295,16 +1295,16 @@
       "benchmarks_total_pct": {
         "cpi": null,
         "usd": 1.87,
-        "gold": -1.71,
+        "gold": -1.79,
         "deposit": 1.97,
         "xu100": -11.72,
         "floor": null,
         "hurdle": null
       },
-      "usd_total_pct": -16.6,
-      "usd_cagr_pct": -90.63,
+      "usd_total_pct": -16.59,
+      "usd_cagr_pct": -90.62,
       "usd_max_drawdown_pct": -18.27,
-      "xu100_usd_cagr_pct": -73.0
+      "xu100_usd_cagr_pct": -72.99
     },
     "lots": {
       "closed_lots": 1,
@@ -1498,7 +1498,7 @@
     "fingerprint": "6120.1000|4576286804",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-26T21:17:43.437844Z"
+    "utc": "2026-10-26T22:45:05.272785Z"
   },
   "data_quality": {
     "ok": true,
@@ -1528,14 +1528,15 @@
   },
   "cash_rate": {
     "series": "TP.APIFON4",
-    "source": "evds",
+    "error": "HTTPSConnectionPool(host='evds2.tcmb.gov.tr', port=443): Read timed out. (read timeout=40)",
+    "source": "cache",
     "last_month": "2026-10-01",
     "net_yield_pct": 28.9
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 23.55,
-    "gold": 23.55,
+    "usd": 23.54,
+    "gold": 23.54,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1617,7 +1618,7 @@
         "key": "cpi",
         "name": "Veri: TÜFE",
         "status": "OK",
-        "msg": "resmî TÜFE (evds, son ay 2026-09-01)",
+        "msg": "resmî TÜFE (dbnomics+cache, son ay 2026-09-01)",
         "value": "OK"
       },
       {
