@@ -2,9 +2,9 @@
 
 Invoke the `task-observer` skill before the FIRST tool call of every session, and before writing or proposing a plan.
 
-- Workspace folder (pinned): `/home/claude/bist_orderflow_quant/.claude`
-- Observation log: `/home/claude/bist_orderflow_quant/.claude/skill-observations/observation-log/`
-- Substitute this path for `[ABSOLUTE PATH]` in every skill snippet. Keep it in double quotes. Run snippets with bash.
+- Workspace folder (pinned to the repo): `<repo root>/.claude`. Resolve the absolute path at session start with `git rev-parse --show-toplevel` — the checkout lives at a different location per environment (for example `/home/claude/bist_orderflow_quant` or `/home/user/bist_orderflow_quant`), so a fixed path is wrong somewhere.
+- Observation log: `<repo root>/.claude/skill-observations/observation-log/`
+- Substitute the resolved `<repo root>/.claude` for `[ABSOLUTE PATH]` in every skill snippet. Keep it in double quotes. Run snippets with bash.
 - Commit new observation files to the repo so they persist between sessions.
 
 # Gerçekçilik kuralı (sahibin isteği — tüm çalışmalar)
