@@ -1493,12 +1493,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-10-29",
+    "date": "2026-10-30",
     "status": "OK",
     "fingerprint": "6033.6400|1507573166",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-29T20:27:17.578684Z"
+    "utc": "2026-10-29T21:31:39.576402Z"
   },
   "data_quality": {
     "ok": true,
@@ -1603,7 +1603,7 @@
   },
   "last_eod_date": "2026-10-28",
   "health": {
-    "date": "2026-10-29",
+    "date": "2026-10-30",
     "overall": "OK",
     "checks": [
       {
@@ -1631,8 +1631,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-10-28 (1 iş günü önce)",
-        "value": 1
+        "msg": "son kapanış işlemi 2026-10-28 (2 iş günü önce)",
+        "value": 2
       },
       {
         "key": "review",
@@ -1680,8 +1680,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 14 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 14
+        "msg": "model 15 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 15
       },
       {
         "key": "live",
@@ -1819,6 +1819,6 @@
     "median_price_tl": 9.0,
     "max_price_tl": 341.75,
     "median_adv_tl": 31636663.0,
-    "date": "2026-10-29"
+    "date": "2026-10-30"
   }
 }
