@@ -447,14 +447,14 @@
     "source": "research"
   },
   "regime": {
-    "label": "NEUTRAL",
+    "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.4204,
-      "NEUTRAL": 0.5587,
-      "RISK_ON": 0.0209
+      "RISK_OFF": 0.9684,
+      "NEUTRAL": 0.0314,
+      "RISK_ON": 0.0003
     },
-    "p_risk_off": 0.4204,
-    "degraded": true,
+    "p_risk_off": 0.9684,
+    "degraded": false,
     "params": {
       "K": 3,
       "means": [
@@ -543,8 +543,8 @@
       "fit_date": "2026-10-27"
     },
     "last_fit": "2026-10-28",
-    "exp_mkt_5d_pct": 0.311,
-    "exp_mkt_12m_pct": 22.83,
+    "exp_mkt_5d_pct": 0.287,
+    "exp_mkt_12m_pct": 22.93,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -555,11 +555,11 @@
       "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF",
-      "NEUTRAL"
+      "RISK_OFF"
     ],
-    "as_of": "2026-10-30",
-    "persistence": 0.9178,
-    "source": "hmm_propagated",
+    "as_of": "2026-10-28",
+    "persistence": 0.9254,
+    "source": "hmm_yfinance",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -1316,7 +1316,9 @@
       },
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
-      "hit_beat_deposit_pct": 0.0
+      "hit_beat_deposit_pct": 0.0,
+      "hit_beat_xu100_pct": 0.0,
+      "avg_xu_excess_pct": -3.67
     },
     "open_positions": {
       "MNDRS": {
@@ -1496,7 +1498,7 @@
     "fingerprint": "5824.7600|5815168759",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-10-30T21:10:55.513773Z"
+    "utc": "2026-10-30T22:18:58.974348Z"
   },
   "data_quality": {
     "ok": true,
@@ -1717,7 +1719,7 @@
         "test": 91.2
       },
       "hit_beat_xu100_pct": {
-        "live": null,
+        "live": 0.0,
         "test": 65.7
       },
       "hit_beat_cpi_pct": {
