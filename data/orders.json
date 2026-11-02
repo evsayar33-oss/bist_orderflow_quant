@@ -1,15 +1,15 @@
 {
  "schema": "boq.orders.v1",
  "engine_version": "3.15.0",
- "generated_at": "2026-11-02T23:14:17Z",
- "signal_date": "2026-11-02",
- "execute_date": "2026-11-03",
+ "generated_at": "2026-11-02T23:47:08Z",
+ "signal_date": "2026-11-03",
+ "execute_date": "2026-11-04",
  "currency": "TRY",
  "capital_tl": null,
  "cash_weight": 0.000152,
  "orders": [
   {
-   "id": "bist-2026-11-02-ULUFA-BUY",
+   "id": "bist-2026-11-03-ULUFA-BUY",
    "action": "BUY",
    "symbol": "ULUFA",
    "yahoo_symbol": "ULUFA.IS",
@@ -19,12 +19,12 @@
    "sell_all": false,
    "ref_price": 1.51,
    "order_type": "MARKET_ON_OPEN",
-   "execute_date": "2026-11-03",
+   "execute_date": "2026-11-04",
    "exit_month": "2027-05",
    "reason": "NEW_ENTRY"
   },
   {
-   "id": "bist-2026-11-02-KZGYO-BUY",
+   "id": "bist-2026-11-03-KZGYO-BUY",
    "action": "BUY",
    "symbol": "KZGYO",
    "yahoo_symbol": "KZGYO.IS",
@@ -34,7 +34,7 @@
    "sell_all": false,
    "ref_price": 14.96,
    "order_type": "MARKET_ON_OPEN",
-   "execute_date": "2026-11-03",
+   "execute_date": "2026-11-04",
    "exit_month": "2027-05",
    "reason": "NEW_ENTRY"
   }

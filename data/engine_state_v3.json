@@ -1336,17 +1336,17 @@
       "real_cagr_pct": -83.64,
       "benchmarks_total_pct": {
         "cpi": null,
-        "usd": 2.35,
-        "gold": -3.1,
+        "usd": 2.37,
+        "gold": -3.13,
         "deposit": 2.47,
         "xu100": -14.56,
         "floor": null,
         "hurdle": null
       },
-      "usd_total_pct": -17.62,
-      "usd_cagr_pct": -86.77,
+      "usd_total_pct": -17.64,
+      "usd_cagr_pct": -86.8,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -84.34
+      "xu100_usd_cagr_pct": -84.37
     },
     "lots": {
       "closed_lots": 1,
@@ -1529,12 +1529,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-02",
+    "date": "2026-11-03",
     "status": "OK",
     "fingerprint": "6652.0600|4947375751",
-    "mode": "EOD",
-    "monthly_review": true,
-    "utc": "2026-11-02T23:14:17.639659Z"
+    "mode": "REFRESH",
+    "monthly_review": false,
+    "utc": "2026-11-02T23:47:08.762934Z"
   },
   "data_quality": {
     "ok": true,
@@ -1570,8 +1570,8 @@
   },
   "hurdles": {
     "cpi": 28.68,
-    "usd": 23.84,
-    "gold": 23.84,
+    "usd": 23.88,
+    "gold": 23.88,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1612,7 +1612,7 @@
   },
   "last_eod_date": "2026-11-02",
   "health": {
-    "date": "2026-11-02",
+    "date": "2026-11-03",
     "overall": "OK",
     "checks": [
       {
@@ -1640,8 +1640,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-02 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-02 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1689,8 +1689,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 0 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 0
+        "msg": "model 1 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 1
       },
       {
         "key": "live",
