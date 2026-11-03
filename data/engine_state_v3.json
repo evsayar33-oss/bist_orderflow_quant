@@ -464,12 +464,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0829,
-      "NEUTRAL": 0.9171,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.1486,
+      "NEUTRAL": 0.8441,
+      "RISK_ON": 0.0073
     },
-    "p_risk_off": 0.0829,
-    "degraded": false,
+    "p_risk_off": 0.1486,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -559,7 +559,7 @@
     },
     "last_fit": "2026-10-28",
     "exp_mkt_5d_pct": 0.316,
-    "exp_mkt_12m_pct": 22.73,
+    "exp_mkt_12m_pct": 22.76,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -574,7 +574,7 @@
     ],
     "as_of": "2026-11-02",
     "persistence": 0.9178,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -1309,17 +1309,17 @@
       "real_cagr_pct": -83.58,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 2.37,
-        "gold": -3.53,
+        "usd": 2.44,
+        "gold": -3.52,
         "deposit": 2.54,
         "xu100": -12.95,
         "floor": 2.58,
         "hurdle": 2.58
       },
-      "usd_total_pct": -15.89,
-      "usd_cagr_pct": -82.73,
+      "usd_total_pct": -15.95,
+      "usd_cagr_pct": -82.85,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -80.12
+      "xu100_usd_cagr_pct": -80.25
     },
     "lots": {
       "closed_lots": 1,
@@ -1336,9 +1336,7 @@
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
       "hit_beat_deposit_pct": 0.0,
-      "hit_beat_all_pct": 0.0,
-      "hit_beat_xu100_pct": 0.0,
-      "avg_xu_excess_pct": -3.67
+      "hit_beat_all_pct": 0.0
     },
     "open_positions": {
       "MNDRS": {
@@ -1512,7 +1510,7 @@
     "fingerprint": "6074.1700|5107435022",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-03T22:07:55.868288Z"
+    "utc": "2026-11-03T23:20:49.033070Z"
   },
   "data_quality": {
     "ok": true,
@@ -1548,8 +1546,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.51,
-    "gold": 23.51,
+    "usd": 23.63,
+    "gold": 23.63,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1706,7 +1704,7 @@
         "test": 90.3
       },
       "hit_beat_xu100_pct": {
-        "live": 0.0,
+        "live": null,
         "test": 62.1
       },
       "hit_beat_cpi_pct": {
