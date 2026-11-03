@@ -645,7 +645,7 @@
       "evds": "ok (last 2026-10)",
       "fred": "error: HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=60)",
       "dbnomics": "ok (last 2025-07)",
-      "cache": "ok (last 2026-09)"
+      "cache": "ok (last 2026-10)"
     },
     "status": "OK"
   },
@@ -1309,17 +1309,17 @@
       "real_cagr_pct": -83.58,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 2.38,
-        "gold": -3.73,
+        "usd": 2.37,
+        "gold": -3.53,
         "deposit": 2.54,
         "xu100": -12.95,
         "floor": 2.58,
         "hurdle": 2.58
       },
-      "usd_total_pct": -15.9,
-      "usd_cagr_pct": -82.75,
+      "usd_total_pct": -15.89,
+      "usd_cagr_pct": -82.73,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -80.14
+      "xu100_usd_cagr_pct": -80.12
     },
     "lots": {
       "closed_lots": 1,
@@ -1507,19 +1507,19 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-03",
+    "date": "2026-11-04",
     "status": "OK",
     "fingerprint": "6074.1700|5107435022",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-03T21:13:45.073775Z"
+    "utc": "2026-11-03T22:07:55.868288Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.1,
     "rows": 593,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1309,
+    "recommended_missing_rate": 0.1312,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1548,8 +1548,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.52,
-    "gold": 23.52,
+    "usd": 23.51,
+    "gold": 23.51,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1590,7 +1590,7 @@
   },
   "last_eod_date": "2026-11-03",
   "health": {
-    "date": "2026-11-03",
+    "date": "2026-11-04",
     "overall": "OK",
     "checks": [
       {
@@ -1618,8 +1618,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-03 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-03 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1667,8 +1667,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 1 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 1
+        "msg": "model 2 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 2
       },
       {
         "key": "live",
