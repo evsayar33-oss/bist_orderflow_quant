@@ -7,14 +7,14 @@
     "secondary": "XU100"
   },
   "portfolio": {
-    "cash": 0.00012816123872556797,
+    "cash": 0.00012829041439129039,
     "positions": {
       "MNDRS": {
-        "value": 0.10178934779024426,
+        "value": 0.09914684135747572,
         "cost_basis": 0.09780345162266027,
         "entry_date": "2026-09-30",
         "entry_px": 9.2,
-        "level": 1.0433625525946708,
+        "level": 1.0162762973352037,
         "peak": 1.0444460028050495,
         "missing": 0,
         "entry_pct": 99.61,
@@ -24,14 +24,14 @@
         "entry_p_beat_all": 0.195,
         "entry_conf": 0.6872,
         "stop_level": null,
-        "last_close": 9.63
+        "last_close": 9.38
       },
       "ISFIN": {
-        "value": 0.09161828082908507,
+        "value": 0.09299599933779312,
         "cost_basis": 0.10162587582813618,
         "entry_date": "2026-09-30",
         "entry_px": 17.7,
-        "level": 0.9037845906082455,
+        "level": 0.9173753363316777,
         "peak": 1.0,
         "missing": 0,
         "entry_pct": 98.62,
@@ -41,14 +41,14 @@
         "entry_p_beat_all": 0.195,
         "entry_conf": 0.6661,
         "stop_level": null,
-        "last_close": 15.96
+        "last_close": 16.2
       },
       "GOLTS": {
-        "value": 0.0877823491165534,
+        "value": 0.08786027397151705,
         "cost_basis": 0.10096265121249166,
         "entry_date": "2026-09-30",
         "entry_px": 256.25,
-        "level": 0.8716327666440618,
+        "level": 0.8724065196548422,
         "peak": 1.0087804878048783,
         "missing": 0,
         "entry_pct": 96.84,
@@ -58,14 +58,14 @@
         "entry_p_beat_all": 0.195,
         "entry_conf": 0.679,
         "stop_level": null,
-        "last_close": 225.3
+        "last_close": 225.5
       },
       "BESLR": {
-        "value": 0.0903268280607936,
+        "value": 0.08933620482184174,
         "cost_basis": 0.09985460317028662,
         "entry_date": "2026-09-30",
         "entry_px": 10.99,
-        "level": 0.9068506429702633,
+        "level": 0.8969051224591239,
         "peak": 1.0243886126473667,
         "missing": 0,
         "entry_pct": 96.25,
@@ -75,14 +75,14 @@
         "entry_p_beat_all": 0.195,
         "entry_conf": 0.6703,
         "stop_level": null,
-        "last_close": 10.03
+        "last_close": 9.92
       },
       "ALBRK": {
-        "value": 0.09676516393711161,
+        "value": 0.09404258019210494,
         "cost_basis": 0.09957996463665791,
         "entry_date": "2026-10-02",
         "entry_px": 8.4,
-        "level": 0.9741686844229219,
+        "level": 0.9467594834543989,
         "peak": 1.0164245359160615,
         "missing": 0,
         "entry_pct": 75.93,
@@ -92,14 +92,14 @@
         "entry_p_beat_all": 0.416,
         "entry_conf": 0.5821,
         "stop_level": null,
-        "last_close": 8.53
+        "last_close": 8.29
       },
       "PCILT": {
-        "value": 0.09740515847040852,
+        "value": 0.09892316094007723,
         "cost_basis": 0.09955506964549875,
         "entry_date": "2026-10-02",
         "entry_px": 32.3,
-        "level": 0.9808569470375537,
+        "level": 0.996143029329048,
         "peak": 1.0012383900928794,
         "missing": 0,
         "entry_pct": 86.67,
@@ -109,14 +109,14 @@
         "entry_p_beat_all": 0.437,
         "entry_conf": 0.614,
         "stop_level": null,
-        "last_close": 30.8
+        "last_close": 31.28
       },
       "MTRKS": {
-        "value": 0.07202699274656071,
+        "value": 0.07240808794627797,
         "cost_basis": 0.09953018087808736,
         "entry_date": "2026-10-02",
         "entry_px": 21.26,
-        "level": 0.7254835758192758,
+        "level": 0.7293221132574731,
         "peak": 1.0891849980884634,
         "missing": 0,
         "entry_pct": 76.3,
@@ -126,15 +126,15 @@
         "entry_p_beat_all": 0.416,
         "entry_conf": 0.5645,
         "stop_level": null,
-        "last_close": 15.12,
+        "last_close": 15.2,
         "dd_flag": true
       },
       "EPLAS": {
-        "value": 0.08900850992591268,
+        "value": 0.08700217056282858,
         "cost_basis": 0.09950529833286784,
         "entry_date": "2026-10-02",
         "entry_px": 5.2,
-        "level": 0.8967521367521366,
+        "level": 0.8765384615384614,
         "peak": 1.0382478632478633,
         "missing": 0,
         "entry_pct": 97.04,
@@ -144,14 +144,14 @@
         "entry_p_beat_all": 0.459,
         "entry_conf": 0.6303,
         "stop_level": null,
-        "last_close": 4.88
+        "last_close": 4.77
       },
       "KFEIN": {
-        "value": 0.0802311647024387,
+        "value": 0.07945070590183131,
         "cost_basis": 0.09948042200828462,
         "entry_date": "2026-10-02",
         "entry_px": 6.45,
-        "level": 0.8085233626072644,
+        "level": 0.8006583493523299,
         "peak": 1.0,
         "missing": 0,
         "entry_pct": 92.22,
@@ -161,14 +161,14 @@
         "entry_p_beat_all": 0.453,
         "entry_conf": 0.5896,
         "stop_level": null,
-        "last_close": 5.14
+        "last_close": 5.09
       },
       "ASGYO": {
-        "value": 0.0922627992730959,
+        "value": 0.09246121389518858,
         "cost_basis": 0.09945555190278255,
         "entry_date": "2026-10-02",
         "entry_px": 10.01,
-        "level": 0.9300037312085498,
+        "level": 0.9320037392326543,
         "peak": 1.0,
         "missing": 0,
         "entry_pct": 89.81,
@@ -178,14 +178,14 @@
         "entry_p_beat_all": 0.437,
         "entry_conf": 0.625,
         "stop_level": null,
-        "last_close": 9.3
+        "last_close": 9.32
       }
     },
     "pending": [],
     "last_rebalance_month": "2026-11",
     "start_date": "2026-09-28",
-    "nav": 0.89934475609093,
-    "last_date": "2026-11-04",
+    "nav": 0.8937555293413275,
+    "last_date": "2026-11-05",
     "cohorts": [
       {
         "month": "2026-09",
@@ -464,12 +464,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0619,
-      "NEUTRAL": 0.9381,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.1308,
+      "NEUTRAL": 0.8628,
+      "RISK_ON": 0.0064
     },
-    "p_risk_off": 0.0619,
-    "degraded": false,
+    "p_risk_off": 0.1308,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -559,7 +559,7 @@
     },
     "last_fit": "2026-10-28",
     "exp_mkt_5d_pct": 0.317,
-    "exp_mkt_12m_pct": 22.73,
+    "exp_mkt_12m_pct": 22.75,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -574,7 +574,7 @@
     ],
     "as_of": "2026-11-03",
     "persistence": 0.9178,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -594,41 +594,41 @@
   "autonomy_guard": {
     "version": "2.0.0",
     "mode": "WATCH",
-    "watch_streak": 1,
+    "watch_streak": 0,
     "severe_streak": 0,
     "healthy_streak": 0,
     "feature_baseline": {
       "change_pct": {
-        "median": -3.0120850375821395,
-        "q25": -5.110493582516723,
-        "q75": -0.9198330671416095,
-        "mad": 2.1031666889831473,
-        "n": 601
+        "median": -2.792511988138344,
+        "q25": -4.877068431674384,
+        "q75": -0.6867313953150037,
+        "mad": 2.0987488257100715,
+        "n": 598
       },
       "log_value_traded": {
-        "median": 17.227291294601905,
-        "q25": 16.303142617842045,
-        "q75": 18.466338829682606,
-        "mad": 1.0473432065336266,
-        "n": 601
+        "median": 17.228913217597746,
+        "q25": 16.30781570664894,
+        "q75": 18.4660481040219,
+        "mad": 1.045724253015576,
+        "n": 598
       }
     },
-    "reason": "FEATURE_DRIFT",
+    "reason": "HEALTHY",
     "last_transition": "2026-10-07T20:45:36.537057+00:00",
-    "last_evaluation": "2026-11-04T21:26:49.880062+00:00",
+    "last_evaluation": "2026-11-05T21:34:02.592167+00:00",
     "self_test": {
       "passed": true,
       "cases": 16,
       "passed_cases": 16,
-      "timestamp": "2026-11-04T21:26:49.877882+00:00"
+      "timestamp": "2026-11-05T21:34:02.590605+00:00"
     },
-    "drift_score": 0.5432,
+    "drift_score": 0.2817,
     "performance_drift": 0.0,
     "performance_detail": {
-      "nav_drawdown_pct": -10.25
+      "nav_drawdown_pct": -10.81
     },
     "ops_score": 94.07,
-    "regime_stress": 0.3333,
+    "regime_stress": 0.5,
     "exposure_multiplier": 0.6,
     "pct_cutoff_add": 3.0,
     "block_new_entries": false
@@ -1294,32 +1294,32 @@
   "performance": {
     "nav": {
       "start": "2026-09-28",
-      "end": "2026-11-04",
-      "days": 26,
-      "total_return_pct": -10.07,
-      "cagr_pct": -64.91,
+      "end": "2026-11-05",
+      "days": 27,
+      "total_return_pct": -10.62,
+      "cagr_pct": -66.03,
       "max_drawdown_pct": -17.05,
-      "ann_vol_pct": 34.62,
-      "avg_exposure_pct": 91.5,
+      "ann_vol_pct": 33.98,
+      "avg_exposure_pct": 91.8,
       "xu100_total_pct": -12.46,
-      "xu100_cagr_pct": -73.12,
-      "excess_vs_xu100_cagr_pp": 8.21,
+      "xu100_cagr_pct": -72.17,
+      "excess_vs_xu100_cagr_pp": 6.14,
       "cpi_total_pct": 2.58,
-      "real_total_pct": -12.33,
-      "real_cagr_pct": -72.71,
+      "real_total_pct": -12.87,
+      "real_cagr_pct": -73.4,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 2.46,
-        "gold": -0.22,
-        "deposit": 2.61,
-        "xu100": -12.46,
-        "floor": 2.61,
-        "hurdle": 2.61
+        "usd": 2.5,
+        "gold": 0.52,
+        "deposit": 2.68,
+        "xu100": -8.85,
+        "floor": 2.68,
+        "hurdle": 2.68
       },
-      "usd_total_pct": -11.96,
-      "usd_cagr_pct": -71.57,
+      "usd_total_pct": -12.54,
+      "usd_cagr_pct": -72.41,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -78.22
+      "xu100_usd_cagr_pct": -77.4
     },
     "lots": {
       "closed_lots": 1,
@@ -1336,59 +1336,57 @@
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
       "hit_beat_deposit_pct": 0.0,
-      "hit_beat_all_pct": 0.0,
-      "hit_beat_xu100_pct": 0.0,
-      "avg_xu_excess_pct": -3.67
+      "hit_beat_all_pct": 0.0
     },
     "open_positions": {
       "MNDRS": {
-        "w": 0.1132,
-        "ret_pct": 4.34,
+        "w": 0.1109,
+        "ret_pct": 1.63,
         "since": "2026-09-30"
       },
       "ISFIN": {
-        "w": 0.1019,
-        "ret_pct": -9.62,
+        "w": 0.1041,
+        "ret_pct": -8.26,
         "since": "2026-09-30"
       },
       "GOLTS": {
-        "w": 0.0976,
-        "ret_pct": -12.84,
+        "w": 0.0983,
+        "ret_pct": -12.76,
         "since": "2026-09-30"
       },
       "BESLR": {
-        "w": 0.1004,
-        "ret_pct": -9.31,
+        "w": 0.1,
+        "ret_pct": -10.31,
         "since": "2026-09-30"
       },
       "ALBRK": {
-        "w": 0.1076,
-        "ret_pct": -2.58,
+        "w": 0.1052,
+        "ret_pct": -5.32,
         "since": "2026-10-02"
       },
       "PCILT": {
-        "w": 0.1083,
-        "ret_pct": -1.91,
+        "w": 0.1107,
+        "ret_pct": -0.39,
         "since": "2026-10-02"
       },
       "MTRKS": {
-        "w": 0.0801,
-        "ret_pct": -27.45,
+        "w": 0.081,
+        "ret_pct": -27.07,
         "since": "2026-10-02"
       },
       "EPLAS": {
-        "w": 0.099,
-        "ret_pct": -10.32,
+        "w": 0.0973,
+        "ret_pct": -12.35,
         "since": "2026-10-02"
       },
       "KFEIN": {
-        "w": 0.0892,
-        "ret_pct": -19.15,
+        "w": 0.0889,
+        "ret_pct": -19.93,
         "since": "2026-10-02"
       },
       "ASGYO": {
-        "w": 0.1026,
-        "ret_pct": -7.0,
+        "w": 0.1035,
+        "ret_pct": -6.8,
         "since": "2026-10-02"
       }
     }
@@ -1509,17 +1507,17 @@
   "last_run": {
     "date": "2026-11-05",
     "status": "OK",
-    "fingerprint": "6983.9800|7978814203",
-    "mode": "REFRESH",
+    "fingerprint": "6746.7400|7107643229",
+    "mode": "EOD",
     "monthly_review": false,
-    "utc": "2026-11-04T23:41:42.875354Z"
+    "utc": "2026-11-05T21:34:02.621682Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.1,
-    "rows": 601,
+    "rows": 598,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1321,
+    "recommended_missing_rate": 0.1318,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1537,7 +1535,7 @@
         "div_yield": "dividends_yield_current",
         "shares": "total_shares_outstanding_fundamental"
       },
-      "rows": 601
+      "rows": 598
     }
   },
   "cash_rate": {
@@ -1548,8 +1546,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.55,
-    "gold": 23.55,
+    "usd": 23.52,
+    "gold": 23.52,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1588,7 +1586,7 @@
       }
     ]
   },
-  "last_eod_date": "2026-11-04",
+  "last_eod_date": "2026-11-05",
   "health": {
     "date": "2026-11-05",
     "overall": "OK",
@@ -1597,8 +1595,8 @@
         "key": "scan",
         "name": "Veri: hisse taraması",
         "status": "OK",
-        "msg": "TradingView 601 hisse döndürdü",
-        "value": 601
+        "msg": "TradingView 598 hisse döndürdü",
+        "value": 598
       },
       {
         "key": "cpi",
@@ -1618,8 +1616,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-04 (1 iş günü önce)",
-        "value": 1
+        "msg": "son kapanış işlemi 2026-11-05 (0 iş günü önce)",
+        "value": 0
       },
       {
         "key": "review",
@@ -1674,26 +1672,26 @@
         "key": "live",
         "name": "Canlı sonuç vs test",
         "status": "OK",
-        "msg": "1,2 aylık BIST100'e göre fark, testteki aynı süreli dönemlerin %52'inden iyi (normal aralıkta)",
-        "value": 51.6
+        "msg": "1,2 aylık BIST100'e göre fark, testteki aynı süreli dönemlerin %48'inden iyi (normal aralıkta)",
+        "value": 48.5
       }
     ],
     "live_vs_test": {
       "months": 1.2,
-      "live_ret_pct": -10.07,
+      "live_ret_pct": -10.62,
       "live_xu100_pct": -12.46,
       "band_ret_pct": {
         "p10": -6.6,
         "p50": 4.1,
         "p90": 25.4
       },
-      "live_excess_pp": 2.4,
+      "live_excess_pp": 1.84,
       "band_excess_pp": {
         "p10": -4.2,
         "p50": 2.1,
         "p90": 12.3
       },
-      "percentile": 51.6,
+      "percentile": 48.5,
       "status": "OK"
     },
     "win_rates": {
@@ -1706,7 +1704,7 @@
         "test": 90.3
       },
       "hit_beat_xu100_pct": {
-        "live": 0.0,
+        "live": null,
         "test": 62.1
       },
       "hit_beat_cpi_pct": {
