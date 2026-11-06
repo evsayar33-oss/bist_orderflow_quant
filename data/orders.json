@@ -1,7 +1,7 @@
 {
  "schema": "boq.orders.v1",
  "engine_version": "3.15.0",
- "generated_at": "2026-11-06T21:51:04Z",
+ "generated_at": "2026-11-06T23:08:30Z",
  "signal_date": "2026-11-07",
  "execute_date": "2026-11-09",
  "currency": "TRY",
