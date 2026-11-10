@@ -1309,17 +1309,17 @@
       "real_cagr_pct": -61.07,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 2.84,
-        "gold": 1.94,
+        "usd": 2.7,
+        "gold": 1.61,
         "deposit": 2.97,
         "xu100": -8.82,
         "floor": 2.97,
         "hurdle": 2.97
       },
-      "usd_total_pct": -10.2,
-      "usd_cagr_pct": -60.78,
+      "usd_total_pct": -10.08,
+      "usd_cagr_pct": -60.31,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -63.81
+      "xu100_usd_cagr_pct": -63.39
     },
     "lots": {
       "closed_lots": 1,
@@ -1507,12 +1507,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-09",
+    "date": "2026-11-10",
     "status": "OK",
     "fingerprint": "6735.2300|4528548362",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-09T23:52:54.700962Z"
+    "utc": "2026-11-10T00:31:36.854259Z"
   },
   "data_quality": {
     "ok": true,
@@ -1548,8 +1548,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.63,
-    "gold": 23.63,
+    "usd": 23.38,
+    "gold": 23.38,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1590,7 +1590,7 @@
   },
   "last_eod_date": "2026-11-09",
   "health": {
-    "date": "2026-11-09",
+    "date": "2026-11-10",
     "overall": "OK",
     "checks": [
       {
@@ -1618,8 +1618,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-09 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-09 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1667,8 +1667,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 7 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 7
+        "msg": "model 8 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 8
       },
       {
         "key": "live",
