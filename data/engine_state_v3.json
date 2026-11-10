@@ -464,12 +464,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.1157,
-      "NEUTRAL": 0.8786,
-      "RISK_ON": 0.0056
+      "RISK_OFF": 0.0441,
+      "NEUTRAL": 0.9559,
+      "RISK_ON": 0.0
     },
-    "p_risk_off": 0.1157,
-    "degraded": true,
+    "p_risk_off": 0.0441,
+    "degraded": false,
     "params": {
       "K": 3,
       "means": [
@@ -558,8 +558,8 @@
       "fit_date": "2026-10-27"
     },
     "last_fit": "2026-10-28",
-    "exp_mkt_5d_pct": 0.317,
-    "exp_mkt_12m_pct": 22.75,
+    "exp_mkt_5d_pct": 0.318,
+    "exp_mkt_12m_pct": 22.72,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -574,7 +574,7 @@
     ],
     "as_of": "2026-11-09",
     "persistence": 0.9178,
-    "source": "hmm_propagated",
+    "source": "hmm_yfinance",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -1309,17 +1309,17 @@
       "real_cagr_pct": -68.35,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 2.91,
-        "gold": -0.61,
+        "usd": 2.89,
+        "gold": -0.56,
         "deposit": 3.04,
         "xu100": -6.99,
         "floor": 3.04,
         "hurdle": 3.04
       },
-      "usd_total_pct": -12.64,
-      "usd_cagr_pct": -68.28,
+      "usd_total_pct": -12.62,
+      "usd_cagr_pct": -68.22,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -56.38
+      "xu100_usd_cagr_pct": -56.29
     },
     "lots": {
       "closed_lots": 1,
@@ -1336,7 +1336,9 @@
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
       "hit_beat_deposit_pct": 0.0,
-      "hit_beat_all_pct": 0.0
+      "hit_beat_all_pct": 0.0,
+      "hit_beat_xu100_pct": 0.0,
+      "avg_xu_excess_pct": -3.67
     },
     "open_positions": {
       "MNDRS": {
@@ -1510,14 +1512,14 @@
     "fingerprint": "6328.8600|4591288181",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-10T22:02:43.578890Z"
+    "utc": "2026-11-10T23:18:16.772433Z"
   },
   "data_quality": {
     "ok": true,
-    "score": 92.1,
+    "score": 92.0,
     "rows": 594,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.131,
+    "recommended_missing_rate": 0.133,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1546,8 +1548,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.87,
-    "gold": 23.87,
+    "usd": 23.83,
+    "gold": 23.83,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1704,7 +1706,7 @@
         "test": 90.3
       },
       "hit_beat_xu100_pct": {
-        "live": null,
+        "live": 0.0,
         "test": 62.1
       },
       "hit_beat_cpi_pct": {
