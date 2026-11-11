@@ -464,12 +464,12 @@
   "regime": {
     "label": "NEUTRAL",
     "probs": {
-      "RISK_OFF": 0.0619,
-      "NEUTRAL": 0.9381,
-      "RISK_ON": 0.0
+      "RISK_OFF": 0.1308,
+      "NEUTRAL": 0.8628,
+      "RISK_ON": 0.0064
     },
-    "p_risk_off": 0.0619,
-    "degraded": false,
+    "p_risk_off": 0.1308,
+    "degraded": true,
     "params": {
       "K": 3,
       "means": [
@@ -559,7 +559,7 @@
     },
     "last_fit": "2026-10-28",
     "exp_mkt_5d_pct": 0.317,
-    "exp_mkt_12m_pct": 22.73,
+    "exp_mkt_12m_pct": 22.75,
     "argmax_history": [
       "RISK_OFF",
       "RISK_OFF",
@@ -574,7 +574,7 @@
     ],
     "as_of": "2026-11-10",
     "persistence": 0.9178,
-    "source": "hmm_yfinance",
+    "source": "hmm_propagated",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -1310,7 +1310,7 @@
       "benchmarks_total_pct": {
         "cpi": 2.58,
         "usd": 2.94,
-        "gold": -1.72,
+        "gold": -1.62,
         "deposit": 3.11,
         "xu100": -7.39,
         "floor": 3.11,
@@ -1336,9 +1336,7 @@
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
       "hit_beat_deposit_pct": 0.0,
-      "hit_beat_all_pct": 0.0,
-      "hit_beat_xu100_pct": 0.0,
-      "avg_xu_excess_pct": -3.67
+      "hit_beat_all_pct": 0.0
     },
     "open_positions": {
       "MNDRS": {
@@ -1507,12 +1505,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-11",
+    "date": "2026-11-12",
     "status": "OK",
     "fingerprint": "6382.4000|5337928616",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-11T22:09:19.996669Z"
+    "utc": "2026-11-11T23:10:44.579814Z"
   },
   "data_quality": {
     "ok": true,
@@ -1590,7 +1588,7 @@
   },
   "last_eod_date": "2026-11-11",
   "health": {
-    "date": "2026-11-11",
+    "date": "2026-11-12",
     "overall": "UYARI",
     "checks": [
       {
@@ -1618,8 +1616,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-11 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-11 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1667,8 +1665,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 9 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 9
+        "msg": "model 10 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 10
       },
       {
         "key": "live",
@@ -1706,7 +1704,7 @@
         "test": 90.3
       },
       "hit_beat_xu100_pct": {
-        "live": 0.0,
+        "live": null,
         "test": 62.1
       },
       "hit_beat_cpi_pct": {
