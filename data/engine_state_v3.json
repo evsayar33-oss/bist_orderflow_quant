@@ -639,10 +639,10 @@
     "ann6m_pct": 23.74,
     "expected_12m_pct": 26.75,
     "is_proxy": false,
-    "source": "dbnomics+cache",
+    "source": "evds",
     "tried": {
       "manual": "unavailable",
-      "evds": "error: TP.FG.J0@evds3.tcmb.gov.tr: 503 Server Error: Service Unavailable for url: https://evds3; TP.FG.J0@evds2.tcmb.gov.tr: Ex",
+      "evds": "ok (last 2026-10)",
       "fred": "error: HTTPSConnectionPool(host='fred.stlouisfed.org', port=443): Read timed out. (read timeout=60)",
       "dbnomics": "ok (last 2025-07)",
       "cache": "ok (last 2026-10)"
@@ -1513,7 +1513,7 @@
     "fingerprint": "6731.6800|4434685347",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-13T22:17:46.368059Z"
+    "utc": "2026-11-13T23:33:51.368784Z"
   },
   "data_quality": {
     "ok": true,
@@ -1543,8 +1543,7 @@
   },
   "cash_rate": {
     "series": "TP.APIFON4",
-    "error": "Expecting value: line 1 column 1 (char 0)",
-    "source": "cache",
+    "source": "evds",
     "last_month": "2026-11-01",
     "net_yield_pct": 28.9
   },
@@ -1606,7 +1605,7 @@
         "key": "cpi",
         "name": "Veri: TÜFE",
         "status": "OK",
-        "msg": "resmî TÜFE (dbnomics+cache, son ay 2026-10-01)",
+        "msg": "resmî TÜFE (evds, son ay 2026-10-01)",
         "value": "OK"
       },
       {
