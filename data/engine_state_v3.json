@@ -1310,17 +1310,17 @@
       "real_cagr_pct": -68.66,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 3.22,
-        "gold": -4.23,
+        "usd": 3.19,
+        "gold": -4.12,
         "deposit": 3.25,
         "xu100": -6.21,
         "floor": 3.25,
         "hurdle": 3.25
       },
-      "usd_total_pct": -13.81,
-      "usd_cagr_pct": -69.27,
+      "usd_total_pct": -13.78,
+      "usd_cagr_pct": -69.2,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -51.84
+      "xu100_usd_cagr_pct": -51.73
     },
     "lots": {
       "closed_lots": 1,
@@ -1508,12 +1508,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-13",
+    "date": "2026-11-14",
     "status": "OK",
     "fingerprint": "6731.6800|4434685347",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-13T21:32:47.656936Z"
+    "utc": "2026-11-13T22:17:46.368059Z"
   },
   "data_quality": {
     "ok": true,
@@ -1550,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 24.01,
-    "gold": 24.01,
+    "usd": 23.95,
+    "gold": 23.95,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1592,7 +1592,7 @@
   },
   "last_eod_date": "2026-11-13",
   "health": {
-    "date": "2026-11-13",
+    "date": "2026-11-14",
     "overall": "UYARI",
     "checks": [
       {
@@ -1620,8 +1620,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-13 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-13 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1669,8 +1669,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 11 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 11
+        "msg": "model 12 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 12
       },
       {
         "key": "live",
