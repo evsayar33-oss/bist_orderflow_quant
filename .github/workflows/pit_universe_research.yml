@@ -64,6 +64,30 @@ jobs:
           path: artifacts/pit_universe_membership_smoke.json
           retention-days: 30
 
+  price-coverage-pr:
+    if: github.event_name == 'pull_request'
+    needs: offline-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research dependencies
+        run: pip install pandas numpy scipy requests yfinance
+      - name: Query historical OHLCV for dated universe (read only)
+        run: |
+          python research/run_pit_audit.py --start 2017-01-01 --end 2026-10-01 \
+            --output artifacts/pit_universe_price_coverage_pr.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bist-pit-price-coverage-pr
+          path: artifacts/pit_universe_price_coverage_pr.json
+          if-no-files-found: warn
+          retention-days: 30
+
   research-audit:
     if: github.event_name == 'workflow_dispatch'
     needs: offline-regressions
