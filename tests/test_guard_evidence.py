@@ -16,6 +16,7 @@ import pandas as pd
 import health
 from meta_engine import plan_tranche
 from portfolio import new_portfolio
+from safety_orders import enforce_pending_gate
 
 
 class GuardParityTests(unittest.TestCase):
@@ -64,6 +65,35 @@ class GuardParityTests(unittest.TestCase):
         self.assertEqual(orders, [])
         self.assertEqual(status["block_reason"], "INVALID_RISK_EXPOSURE")
         self.assertIn("OLD", pf["positions"])
+
+
+class PendingOrderSafetyTests(unittest.TestCase):
+    def test_safe_cancels_old_buys_and_increasing_rebalances(self):
+        pf = GuardParityTests.portfolio()
+        pf["pending"] = [
+            {"ticker": "NEW", "action": "BUY", "target_w": 0.1},
+            {"ticker": "OLD", "action": "REBAL", "target_w": 0.8},
+            {"ticker": "OLD", "action": "REBAL", "target_w": 0.4},
+            {"ticker": "RISK", "action": "SELL", "target_w": 0.0},
+        ]
+        canceled = enforce_pending_gate(pf, {"mode": "SAFE"})
+        self.assertEqual(canceled, 2)
+        self.assertEqual([o["action"] for o in pf["pending"]], ["REBAL", "SELL"])
+        self.assertEqual(pf["pending"][0]["target_w"], 0.4)
+
+    def test_normal_mode_retains_existing_pending(self):
+        pf = GuardParityTests.portfolio()
+        pf["pending"] = [{"ticker": "NEW", "action": "BUY", "target_w": 0.1}]
+        self.assertEqual(enforce_pending_gate(pf, {"mode": "NORMAL",
+                                                    "block_new_entries": False}), 0)
+        self.assertEqual(len(pf["pending"]), 1)
+
+    def test_explicit_block_overrides_normal_label(self):
+        pf = GuardParityTests.portfolio()
+        pf["pending"] = [{"ticker": "NEW", "action": "BUY", "target_w": 0.1}]
+        self.assertEqual(enforce_pending_gate(pf, {"mode": "NORMAL",
+                                                    "block_new_entries": True}), 1)
+        self.assertEqual(pf["pending"], [])
 
 
 class EvidenceTests(unittest.TestCase):
