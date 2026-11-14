@@ -121,7 +121,7 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         data: Optional[Dict] = None, regime_df: Optional[pd.DataFrame] = None,
         cpi: Optional[pd.Series] = None, pit: Optional[pd.DataFrame] = None,
         bm: Optional[pd.DataFrame] = None, crate: Optional[pd.Series] = None,
-        variants: Optional[List[Dict]] = None) -> Dict:
+        variants: Optional[List[Dict]] = None, pit_membership=None) -> Dict:
     state = load_state()
     sector_map = state.get("sector_map", {})
     data = data if data is not None else MD.download_history(backtest_universe(), start, end, min_rows=300)
@@ -161,15 +161,29 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         lp = pit.dropna(subset=["paid_in"]).sort_values("period_end").groupby("ticker")["paid_in"].last()
         latest_paid = lp.to_dict()
 
+    if pit_membership is not None and not hasattr(pit_membership, "at"):
+        raise ValueError("PIT_MEMBERSHIP_INVALID")
     wide = wide_from_history(data)
     idx = wide["close"].index
     reb = month_start_sessions(idx[C.MIN_HISTORY_SESSIONS:])
     inputs, zrows = {}, []
     for d in reb:
         pf_ = price_factors_at(wide, index_close, d)
+        if pit_membership is not None:
+            # Crucial: dates with unknown membership do not get today's list.
+            known = pit_membership.at(d)
+            if known is None:
+                continue
+            pf_ = pf_[pf_["ticker"].isin(known)].copy()
         if len(pf_) < C.MIN_CROSS_SECTION:
             continue
-        fi = fund_inputs_at(pit, d, pf_, latest_paid)
+        if pit_membership is None:
+            paid_at = latest_paid
+        else:
+            disclosed = FH.point_in_time(pit, d, pf_["ticker"].tolist())
+            paid_at = (disclosed.set_index("ticker")["paid_in"].dropna().to_dict()
+                       if not disclosed.empty and "paid_in" in disclosed else {})
+        fi = fund_inputs_at(pit, d, pf_, paid_at)
         cs = cpi_stats_at(cpi, d, proxy=cpi_meta.get("status") == "PROXY")
         inputs[d] = (pf_, fi, cs)
         fr, cov = build_frame(pf_, fi, cs.get("yoy_pct"), sector_map)
@@ -325,6 +339,9 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
                       "secondary": "excess vs XU100"},
         "period": f"{str(pd.Timestamp(dates[first_test_i]).date())}..{str(pd.Timestamp(idx[-1]).date())}",
         "universe_downloaded": len(data), "rebalance_months": len(dates),
+        "pit_membership_filter_applied": pit_membership is not None,
+        "historical_universe_verified": False,  # membership alone cannot verify prices/delisting settlement
+        "survivorship_bias_resolved": False,
         "cpi_source": cpi_meta, "cash_rate_source": cr_meta, "fundamentals_coverage": round(fund_cov, 3),
         "data_source": "Yahoo Finance adjusted OHLCV + Is Yatirim statements + CPI (EVDS/FRED)",
         "synthetic_data_used": False, "cost_round_trip_pct": C.COST_ROUND_TRIP_PCT,
@@ -343,7 +360,9 @@ def run(start: str = "2012-01-01", end: Optional[str] = None, save: bool = True,
         "folds": folds,
         "factor_ic_full_sample_12m": prior.get("ic_mean"),
         "factor_t_full_sample_12m": prior.get("ic_t_nw"),
-        "limitations": ["survivorship: universe = today's liquid names",
+        "limitations": [("research PIT membership filtered, but missing delisted price/fill/exit-recovery "
+                         "and publication-time guarantees remain unverified" if pit_membership is not None else
+                         "survivorship: universe = today's liquid names"),
                         "dividends are in adjusted prices (reinvested); idle cash earns TCMB funding rate - 2pp, after 15% tax"
                         if len(crate) else "dividends are in adjusted prices (reinvested); idle cash earns 0 (rate series unavailable)",
                         f"fundamentals coverage {round(fund_cov, 2)} (Is Yatirim best effort)",
