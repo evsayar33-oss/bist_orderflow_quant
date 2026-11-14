@@ -375,8 +375,15 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
             idx_usd = (index_close / pd.to_numeric(bm["usdtry"], errors="coerce").reindex(index_close.index, method="ffill")).dropna()
         state["risk_exposure"] = RK.exposure(navs, idx_usd, state.setdefault("risk_mem", {}))
     except Exception as exc:
+        # Do not silently fall back to 100% *new* exposure after a broken
+        # risk-control calculation. Preserve existing holdings and stop fresh
+        # entries until the risk calculation is repaired.
         state["risk_exposure"] = 1.0
-        print(f"⚠️ Portföy koruması hesaplanamadı: {exc}")
+        g = state.setdefault("autonomy_guard", {})
+        g.update({"mode": "SAFE", "block_new_entries": True,
+                  "reason": "RISK_CALC_FAILED:" + type(exc).__name__})
+        guard = {"mode": "SAFE", "block_new_entries": True, "reason": g["reason"]}
+        print(f"⚠️ Portföy koruması hesaplanamadı; yeni alımlar engellendi: {exc}")
 
     review, top = None, []
     state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
