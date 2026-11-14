@@ -1,0 +1,69 @@
+name: BIST free challenger research (branch only)
+
+on:
+  push:
+    branches:
+      - 'research/free-challenger-lab-*'
+    paths:
+      - 'research/run_free_challenger_lab.py'
+      - 'tests/test_free_challenger_lab.py'
+      - '.github/workflows/free_challenger_research.yml'
+  pull_request:
+    paths:
+      - 'research/run_free_challenger_lab.py'
+      - 'tests/test_free_challenger_lab.py'
+      - '.github/workflows/free_challenger_research.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-challenger-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy
+      - run: python -m unittest discover -s tests -p 'test_free_challenger_lab.py' -v
+      - run: python -m py_compile research/run_free_challenger_lab.py
+
+  historical-challenger-research:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: offline-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy scipy requests yfinance
+      - name: Record protected production baseline
+        run: sha256sum data/backtest_report_v3.json > /tmp/free-challenger-production.sha256
+      - name: Free PIT multi-strategy study
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: |
+          python research/run_free_challenger_lab.py \
+            --start 2017-01-01 --end 2026-10-01 \
+            --output artifacts/free_challenger_lab.json
+      - name: Assert production state unchanged
+        if: always()
+        run: |
+          sha256sum --check /tmp/free-challenger-production.sha256
+          git diff --exit-code -- data/engine_state_v3.json data/research_prior_v3.json data/backtest_report_v3.json data/nav.csv data/trade_log.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bist-free-challenger-results
+          path: artifacts/free_challenger_lab.json
+          if-no-files-found: warn
+          retention-days: 30
