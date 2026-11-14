@@ -21,11 +21,11 @@ from pit_universe import Membership, download_membership, read_membership, save_
 
 
 def check_prices(members: Membership, start: str, end: str, *, download: bool):
-    import market_data as MD
     universe = sorted(members.in_range(start, end))
     if not download:
         return {}, {"requested": len(universe), "loaded": 0, "mode": "MEMBERSHIP_ONLY",
                     "price_provider": "NOT_QUERIED"}
+    import market_data as MD
     # No survivors-only prefilter: explicitly request symbols which later
     # disappear from BIST, and audit provider omissions.
     bars = MD.download_history(universe, start, end, min_rows=2)
