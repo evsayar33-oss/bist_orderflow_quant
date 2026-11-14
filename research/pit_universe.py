@@ -17,6 +17,9 @@ import pandas as pd
 
 SOURCE_URL = ("https://raw.githubusercontent.com/GocmenCo/"
               "bist-constituents/master/data/bist_constituents.csv")
+# SHA-256 observed by GitHub Actions 2026-11-14; any upstream update
+# requires explicit code review rather than silently revising the history.
+EXPECTED_SOURCE_SHA256 = "fbda6e52154b3ec3d2ffa0583db4921a2ffaf737e8617b9dacfdc67f2c3680aa"
 REQUIRED = {"snapshot_date", "ticker"}
 VALID_TICKER = re.compile(r"^[A-Z0-9]{3,7}$")
 
@@ -54,8 +57,11 @@ def download_membership(url: str = SOURCE_URL, timeout: int = 25,
         blob = response.read(max_bytes + 1)
     if len(blob) > max_bytes:
         raise ValueError("PIT_MEMBERSHIP_FILE_TOO_LARGE")
+    digest = sha256(blob).hexdigest()
+    if digest != EXPECTED_SOURCE_SHA256:
+        raise ValueError("PIT_MEMBERSHIP_UPSTREAM_SHA256_CHANGED")
     result = read_membership(blob)
-    return result, {"source": url, "sha256": sha256(blob).hexdigest(),
+    return result, {"source": url, "sha256": digest,
                     "bytes": len(blob), "snapshots": int(result.snapshot_date.nunique()),
                     "unique_tickers": int(result.ticker.nunique()),
                     "first_snapshot": result.snapshot_date.min().date().isoformat(),
