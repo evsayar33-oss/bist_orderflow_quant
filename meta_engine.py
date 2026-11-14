@@ -288,19 +288,6 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     from confidence import predict, grade
     month = pd.Timestamp(today).strftime("%Y-%m")
     K, N, cap = int(C.TRANCHE_MONTHS), int(C.TRANCHE_N), int(C.TRANCHE_SECTOR_CAP)
-    # Parity with autonomy_guard: SAFE blocks fresh orders without liquidating
-    # existing long-horizon cohorts. This decision is evaluated before ranking.
-    guard = state.get("autonomy_guard") or {}
-    if guard.get("block_new_entries") or str(guard.get("mode", "")).upper() == "SAFE":
-        held = list(pf.get("positions", {}))
-        return [], {"engine": "tranche", "month": month, "blocked": True,
-                    "block_reason": guard.get("reason", "AUTONOMY_SAFE"),
-                    "picks": [], "buys": [], "sells": [], "holds": held,
-                    "confidence": {}, "confidence_grade": {}, "suggested_split": {},
-                    "extended": [], "expiring_next": [],
-                    "sell_reasons": {}, "target_weights": pf_weights(pf),
-                    "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
-                    "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
     # Explicit zero-exposure policy exits at the next open and cannot leave
     # ghost cohorts whose names would be bought after risk recovers.
     raw_rx = state.get("risk_exposure", 1.0)
@@ -329,6 +316,19 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
                         "confidence_grade": {}, "suggested_split": {}, "extended": [],
                         "expiring_next": [], "sell_reasons": sells, "target_weights": {},
                         "exit_month": {}, "n_cohorts": 0, "cash_target": 1.0}
+    # Parity with autonomy_guard: SAFE blocks fresh orders without liquidating
+    # existing long-horizon cohorts. This decision is evaluated before ranking.
+    guard = state.get("autonomy_guard") or {}
+    if guard.get("block_new_entries") or str(guard.get("mode", "")).upper() == "SAFE":
+        held = list(pf.get("positions", {}))
+        return [], {"engine": "tranche", "month": month, "blocked": True,
+                    "block_reason": guard.get("reason", "AUTONOMY_SAFE"),
+                    "picks": [], "buys": [], "sells": [], "holds": held,
+                    "confidence": {}, "confidence_grade": {}, "suggested_split": {},
+                    "extended": [], "expiring_next": [],
+                    "sell_reasons": {}, "target_weights": pf_weights(pf),
+                    "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
+                    "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
     f = frame.copy()
     f["confidence"] = predict(f, conf_model).to_numpy()
     f = f.set_index("ticker")
