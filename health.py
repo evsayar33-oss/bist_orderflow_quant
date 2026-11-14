@@ -215,6 +215,16 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
         checks.append(_chk("conf", "Güven oranı tutarlılığı", WAITING,
                            f"KANIT BEKLENİYOR ({c12.get('picks_n', 0)}/30 sonuçlanmış öneri)", None))
 
+    g_state = state.get("autonomy_guard") or {}
+    g_mode = str(g_state.get("mode") or "UNKNOWN").upper()
+    g_blocked = bool(g_state.get("block_new_entries")) or g_mode == "SAFE"
+    checks.append(_chk(
+        "guard_policy", "Yeni alım güvenlik kapısı",
+        RED if g_blocked else YELLOW if g_mode in ("WATCH", "RECOVERY", "UNKNOWN") else GREEN,
+        ("YENİ ALIMLAR BLOKE; " if g_blocked else "Alım izni açık; ")
+        + f"mod={g_mode}, neden={str(g_state.get('reason') or '—')[:80]}",
+        not g_blocked))
+
     stop = float(getattr(C, "HARD_STOP_FROM_ENTRY_PCT", 1000.0))
     overlay = getattr(C, "RISK_MODE", None)
     checks.append(_chk(
