@@ -1,0 +1,28 @@
+name: BIST Risk Guard and Evidence CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deterministic test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy scipy requests yfinance
+      - name: Safety and evidence regressions
+        run: python -m unittest discover -s tests -p 'test_guard_evidence.py' -v
+      - name: Existing synthetic live/backtest parity
+        run: python main.py --self-test
