@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import traceback
 
 import pandas as pd
 
@@ -32,6 +33,72 @@ def check_prices(members: Membership, start: str, end: str, *, download: bool):
     return bars, {"requested": len(universe), "loaded": len(bars),
                   "mode": "HISTORICAL_PRICE_QUERY", "price_provider": "YAHOO_ADJUSTED",
                   "requested_includes_no_longer_listed": True}
+
+
+
+# Research-only loader: the committed fundamentals_hist.csv is a RAW
+# financial-statement cache, not the derived PIT table expected by B.run().
+RAW_FIELDS = {
+    "ticker", "year", "period", "net_income", "equity", "revenue",
+    "op_profit", "paid_in", "fin_debt",
+}
+PIT_FIELDS = {
+    "ticker", "period_end", "avail_date", "net_income_ttm",
+    "revenue_ttm", "op_profit_ttm", "rev_growth_pct", "equity",
+    "fin_debt", "paid_in",
+}
+
+
+def load_research_fundamentals(path: Path) -> tuple[pd.DataFrame, dict]:
+    """Build an isolated, as-of-compatible frame without writing production cache.
+
+    Derived availability dates use the configured lag assumptions, NOT actual
+    filing timestamps. This is suitable only for unverified research.
+    """
+    if not path.is_file():
+        raise ValueError("PIT_FUNDAMENTALS_CACHE_MISSING")
+    cache = pd.read_csv(path)
+    if cache.empty:
+        raise ValueError("PIT_FUNDAMENTALS_CACHE_EMPTY")
+    columns = set(cache.columns)
+    if PIT_FIELDS <= columns:
+        result, mode = cache.copy(), "PRECOMPUTED_PIT_CACHE"
+    elif RAW_FIELDS <= columns:
+        import fundamentals_hist as FH
+        for name in ("year", "period"):
+            cache[name] = pd.to_numeric(cache[name], errors="raise")
+            if cache[name].isna().any() or (cache[name] % 1 != 0).any():
+                raise ValueError("PIT_FUNDAMENTALS_INVALID_" + name.upper())
+            cache[name] = cache[name].astype(int)
+        if not cache["period"].isin([3, 6, 9, 12]).all():
+            raise ValueError("PIT_FUNDAMENTALS_INVALID_PERIOD")
+        result = FH.build_point_in_time(cache)
+        mode = "DERIVED_FROM_RAW_CACHE"
+    else:
+        missing = sorted(RAW_FIELDS - columns)
+        raise ValueError("PIT_FUNDAMENTALS_SCHEMA_UNSUPPORTED: missing raw fields " +
+                         ",".join(missing))
+    if result.empty or not PIT_FIELDS <= set(result.columns):
+        raise ValueError("PIT_FUNDAMENTALS_DERIVATION_INCOMPLETE")
+    for date_name in ("period_end", "avail_date"):
+        result[date_name] = pd.to_datetime(result[date_name], errors="coerce")
+    if (result[["period_end", "avail_date"]].isna().any().any() or
+            (result["avail_date"] <= result["period_end"]).any()):
+        raise ValueError("PIT_FUNDAMENTALS_INVALID_AVAILABILITY_DATES")
+    if result["ticker"].isna().any() or (result["ticker"].astype(str).str.strip() == "").any():
+        raise ValueError("PIT_FUNDAMENTALS_INVALID_TICKER")
+    metadata = {
+        "status": "LOADED",
+        "mode": mode,
+        "records": int(len(result)),
+        "tickers": int(result["ticker"].nunique()),
+        "availability_rule": ("CONFIGURED_75_100_DAY_LAG_FROM_PERIOD_END"
+                              if mode == "DERIVED_FROM_RAW_CACHE"
+                              else "CACHED_DATES_UNVERIFIED"),
+        "filing_publication_timestamps_verified": False,
+        "restatement_history_verified": False,
+    }
+    return result, metadata
 
 
 def run(args):
@@ -73,6 +140,7 @@ def run(args):
                     "pit_universe_verified": False}
     retest = {"status": "NOT_RUN", "reason": "RESEARCH_RETEST_NOT_REQUESTED"}
     if args.retest:
+        fundamentals_meta = {"status": "NOT_LOADED"}
         if not bars:
             retest = {"status": "NOT_TESTABLE", "reason": "HISTORICAL_PRICE_DATA_UNAVAILABLE"}
         else:
@@ -81,16 +149,13 @@ def run(args):
                 # Do not let this experiment call FH.load_history() and mutate
                 # production cache: read existing best-effort PIT fundamentals.
                 import config as C
-                pf = pd.DataFrame()
-                if Path(C.FUNDAMENTALS_CACHE_FILE).exists():
-                    pf = pd.read_csv(C.FUNDAMENTALS_CACHE_FILE)
-                    for name in ("avail_date", "period_end"):
-                        if name in pf:
-                            pf[name] = pd.to_datetime(pf[name], errors="coerce")
+                pf, fundamentals_meta = load_research_fundamentals(
+                    Path(C.FUNDAMENTALS_CACHE_FILE))
                 result = B.run(start=args.start, end=args.end, save=False,
                                data=bars, pit=pf, pit_membership=members)
                 rep = result["report"]
                 retest = {"status": "EXPLORATORY_INCOMPLETE_PIT",
+                          "fundamentals": fundamentals_meta,
                           "portfolio": rep.get("portfolio"),
                           "closed_lots": rep.get("closed_lots"),
                           "period": rep.get("period"),
@@ -100,10 +165,12 @@ def run(args):
                               "SURVIVORSHIP_PRICE_COVERAGE_INCOMPLETE",
                               "DELISTING_TERMINAL_RECOVERY_UNKNOWN",
                               "FUNDAMENTAL_PUBLICATION_TIMES_UNVERIFIED",
+                              "PIT_FINANCIAL_RESTATEMENTS_UNVERIFIED",
                               "UNADJUSTED_EXECUTION_SPREAD_SLIPPAGE_UNVERIFIED"]}
             except Exception as exc:
                 retest = {"status": "NOT_TESTABLE", "reason": type(exc).__name__,
-                          "detail": str(exc)[:300]}
+                          "detail": str(exc)[:300], "fundamentals": fundamentals_meta,
+                          "traceback": traceback.format_exc(limit=12)[-5000:]}
     report = {
         "schema": "BIST_PIT_RESEARCH_V1",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -128,6 +195,10 @@ def run(args):
                       "missing_historical_price_tickers": audit["symbols_without_price_series"],
                       "low_coverage_months": (None if args.membership_only else len(audit["months_below_95pct_price_coverage"])),
                       "retest": retest["status"], "conclusion": report["conclusion"]}, indent=2))
+    # The artifact is written first; a non-testable requested retest then fails CI.
+    # upload-artifact uses if: always() so diagnostics remain downloadable.
+    if args.retest and retest["status"] == "NOT_TESTABLE":
+        raise SystemExit(2)
     return report
 
 
