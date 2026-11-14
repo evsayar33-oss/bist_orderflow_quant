@@ -46,7 +46,21 @@ def run(args):
     members = Membership(frame)
     bars, price = check_prices(members, args.start, args.end,
                                download=not args.membership_only)
-    audit = members.audit(args.start, args.end, bars)
+    if args.membership_only:
+        audit = {
+            "status": "NOT_VERIFIED",
+            "period": [args.start, args.end],
+            "historical_tickers": len(members.in_range(args.start, args.end)),
+            "price_coverage_status": "NOT_QUERIED",
+            "symbols_with_any_price_series": None,
+            "symbols_without_price_series": None,
+            "months_below_95pct_price_coverage": [],
+            "monthly_coverage": [],
+            "survivorship_bias_resolved": False,
+            "source_only": True,
+        }
+    else:
+        audit = members.audit(args.start, args.end, bars)
     baseline = None
     p = ROOT / "data" / "backtest_report_v3.json"
     if p.exists():
@@ -112,7 +126,7 @@ def run(args):
                       "historical_tickers": audit["historical_tickers"],
                       "priced": audit["symbols_with_any_price_series"],
                       "missing_historical_price_tickers": audit["symbols_without_price_series"],
-                      "low_coverage_months": len(audit["months_below_95pct_price_coverage"]),
+                      "low_coverage_months": (None if args.membership_only else len(audit["months_below_95pct_price_coverage"])),
                       "retest": retest["status"], "conclusion": report["conclusion"]}, indent=2))
     return report
 
