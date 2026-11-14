@@ -1,0 +1,89 @@
+name: BIST PIT Universe Research — historical survivorship audit
+
+on:
+  pull_request:
+    paths:
+      - 'research/pit_universe.py'
+      - 'research/run_pit_audit.py'
+      - 'backtest_optimizer.py'
+      - 'tests/test_pit_universe.py'
+      - '.github/workflows/pit_universe_research.yml'
+  workflow_dispatch:
+    inputs:
+      audit_mode:
+        description: 'Historical membership catalog, observed OHLCV, or exploratory full retest'
+        type: choice
+        options:
+          - price_coverage
+          - membership_only
+          - exploratory_retest
+        default: price_coverage
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bist-pit-research-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: pip install pandas numpy
+      - name: Membership and time-causality regressions
+        run: python -m unittest discover -s tests -p test_pit_universe.py -v
+      - name: Python syntax check
+        run: python -m py_compile research/pit_universe.py research/run_pit_audit.py backtest_optimizer.py
+
+  research-audit:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install research dependencies
+        run: pip install pandas numpy scipy requests yfinance
+      - name: Immutable production baseline check
+        run: |
+          git status --porcelain
+          sha256sum data/backtest_report_v3.json > /tmp/boq-pit-production-report.sha256
+      - name: PIT coverage and optional research-only simulation
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+          AUDIT_MODE: ${{ inputs.audit_mode }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          flags=()
+          if [[ "$AUDIT_MODE" == "membership_only" ]]; then
+            flags+=(--membership-only)
+          fi
+          if [[ "$AUDIT_MODE" == "exploratory_retest" ]]; then
+            flags+=(--retest)
+          fi
+          python research/run_pit_audit.py --start 2017-01-01 --end 2026-10-01 \
+            --output artifacts/pit_universe_audit.json "${flags[@]}"
+      - name: Assert no tracked production state changed
+        if: always()
+        run: |
+          sha256sum --check /tmp/boq-pit-production-report.sha256
+          git diff --exit-code -- data/engine_state_v3.json data/research_prior_v3.json data/backtest_report_v3.json data/nav.csv data/trade_log.csv
+      - name: Upload historical audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bist-pit-universe-audit
+          path: artifacts/pit_universe_audit.json
+          if-no-files-found: warn
+          retention-days: 30
