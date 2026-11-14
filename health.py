@@ -215,6 +215,16 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
         checks.append(_chk("conf", "Güven oranı tutarlılığı", WAITING,
                            f"KANIT BEKLENİYOR ({c12.get('picks_n', 0)}/30 sonuçlanmış öneri)", None))
 
+    stop = float(getattr(C, "HARD_STOP_FROM_ENTRY_PCT", 1000.0))
+    overlay = getattr(C, "RISK_MODE", None)
+    checks.append(_chk(
+        "risk_policy", "Koruma politikası",
+        WAITING if stop > 100 and not overlay else GREEN,
+        ("Zorunlu hisse stopu ve portföy koruma overlay'i KAPALI; zarar bayrakları bilgi amaçlı"
+         if stop > 100 and not overlay else
+         f"Zorunlu stop: {stop if stop <= 100 else 'kapalı'}%; portföy overlay: {overlay or 'kapalı'}"),
+        {"hard_stop_pct": stop, "portfolio_overlay": overlay}))
+
     gen = (report or {}).get("generated_at")
     age = (today - pd.Timestamp(gen[:10])).days if gen else None
     st = GREEN if age is not None and age <= 45 else (YELLOW if age is not None and age <= 100 else RED)
