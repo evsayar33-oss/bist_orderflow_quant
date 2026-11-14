@@ -301,6 +301,34 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
                     "sell_reasons": {}, "target_weights": pf_weights(pf),
                     "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
                     "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
+    # Explicit zero-exposure policy exits at the next open and cannot leave
+    # ghost cohorts whose names would be bought after risk recovers.
+    raw_rx = state.get("risk_exposure", 1.0)
+    try:
+        rx_check = 1.0 if raw_rx is None else float(raw_rx)
+    except (TypeError, ValueError):
+        rx_check = float("nan")
+    if not np.isfinite(rx_check) or not 0.0 <= rx_check <= 1.0:
+        held = list(pf.get("positions", {}))
+        return [], {"engine": "tranche", "month": month, "blocked": True,
+                    "block_reason": "INVALID_RISK_EXPOSURE", "picks": [], "buys": [],
+                    "sells": [], "holds": held, "confidence": {},
+                    "confidence_grade": {}, "suggested_split": {}, "extended": [],
+                    "expiring_next": [], "sell_reasons": {}, "target_weights": pf_weights(pf),
+                    "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
+                    "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
+    if rx_check == 0:
+        held = list(pf.get("positions", {}))
+        sells = {t: "RISK_EXPOSURE_ZERO" for t in held}
+        orders = [{"ticker": t, "action": "SELL", "reason": "RISK_EXPOSURE_ZERO",
+                   "target_w": 0.0} for t in held]
+        pf["cohorts"] = []
+        return orders, {"engine": "tranche", "month": month, "blocked": True,
+                        "block_reason": "RISK_EXPOSURE_ZERO", "picks": [], "buys": [],
+                        "sells": held, "holds": [], "confidence": {},
+                        "confidence_grade": {}, "suggested_split": {}, "extended": [],
+                        "expiring_next": [], "sell_reasons": sells, "target_weights": {},
+                        "exit_month": {}, "n_cohorts": 0, "cash_target": 1.0}
     f = frame.copy()
     f["confidence"] = predict(f, conf_model).to_numpy()
     f = f.set_index("ticker")
