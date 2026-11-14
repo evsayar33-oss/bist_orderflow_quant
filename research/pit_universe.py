@@ -95,14 +95,23 @@ class Membership:
                 base.update(self.groups[dt])
         return base
 
-    def audit(self, start, end, price_tickers: set[str], *, min_snapshot_days=120) -> dict:
+    def audit(self, start, end, prices, *, min_snapshot_days=120,
+              min_feature_sessions=260, max_bar_age_days=7) -> dict:
+        """Monthly as-of coverage: a ticker is priced ONLY with usable history.
+
+        prices: mapping ticker -> actual OHLCV DataFrame (preferred); a set is
+        accepted only for catalog-only tests, not as verified monthly coverage.
+        """
         start, end = pd.Timestamp(start), pd.Timestamp(end)
         if end < start:
             raise ValueError("PIT_INVERTED_WINDOW")
+        detailed = isinstance(prices, dict)
+        price_tickers = set(prices)
         dates = pd.date_range(start, end, freq="MS")
         records = []
         missing_price = set()
         late_months = []
+        deficient_months = []
         for d in dates:
             known = self.at(d)
             prev = [pd.Timestamp(k) for k in self.snapshots if pd.Timestamp(k) <= d]
@@ -111,27 +120,50 @@ class Membership:
             if stale:
                 late_months.append(d.strftime("%Y-%m"))
             members = known or set()
-            absent = members - price_tickers
+            ready = set()
+            for ticker in members & price_tickers:
+                if not detailed:
+                    ready.add(ticker)
+                    continue
+                g = prices.get(ticker)
+                if g is None or g.empty or "close" not in g.columns:
+                    continue
+                historical = g.loc[g.index <= d]
+                if len(historical) < min_feature_sessions:
+                    continue
+                if (d - pd.Timestamp(historical.index[-1])).days > max_bar_age_days:
+                    continue
+                close = pd.to_numeric(historical["close"], errors="coerce")
+                if close.iloc[-1] <= 0 or not pd.notna(close.iloc[-1]):
+                    continue
+                ready.add(ticker)
+            absent = members - ready
             missing_price.update(absent)
+            coverage = len(ready) / len(members) if members else 0.0
+            if members and coverage < 0.95:
+                deficient_months.append(d.strftime("%Y-%m"))
             records.append({"month": d.strftime("%Y-%m"),
-                            "members": len(members), "priced_symbols": len(members & price_tickers),
-                            "missing_price_symbols": len(absent),
+                            "members": len(members), "usable_asof_price_history": len(ready),
+                            "missing_or_short_asof_price_history": len(absent),
+                            "coverage_ratio": round(coverage, 5),
                             "snapshot_age_days": observation_age,
                             "membership_stale": stale})
         all_tickers = self.in_range(start, end)
         unavailable = all_tickers - price_tickers
-        # Missing delisted data and unknown liquidation proceeds prevent honest
-        # closed-lot and portfolio NAV reconstruction; no fake zero exits.
-        eligible = (not late_months and not unavailable and bool(records))
+        # 95% is an AUDIT QUALITY GATE, not an alpha certification.
+        price_quality_pass = (detailed and not late_months and not deficient_months
+                              and not unavailable and bool(records))
         return {
-            "status": "FULL_HISTORY_RETEST_ELIGIBLE" if eligible else "NOT_VERIFIED",
+            "status": "COVERAGE_GATE_PASS_ONLY" if price_quality_pass else "NOT_VERIFIED",
             "period": [start.date().isoformat(), end.date().isoformat()],
             "snapshot_frequency": "QUARTERLY_OR_IRREGULAR_NOT_DAILY",
             "membership_asof_rule": "LATEST_SNAPSHOT_ON_OR_BEFORE_DECISION_DATE",
+            "pricing_audit_method": "ASOF_MIN_260_SESSIONS_7_CALENDAR_DAY_FRESHNESS" if detailed else "SYMBOL_CATALOG_ONLY",
             "historical_tickers": len(all_tickers),
-            "priced_historical_tickers": len(all_tickers & price_tickers),
-            "missing_historical_price_tickers": len(unavailable),
-            "missing_historical_price_examples": sorted(unavailable)[:40],
+            "symbols_with_any_price_series": len(all_tickers & price_tickers),
+            "symbols_without_price_series": len(unavailable),
+            "symbols_without_price_series_examples": sorted(unavailable)[:40],
+            "months_below_95pct_price_coverage": deficient_months[:50],
             "membership_stale_months": late_months[:50],
             "monthly_coverage": records,
             "exit_recovery_verified": False,
@@ -140,7 +172,6 @@ class Membership:
             "survivorship_bias_resolved": False,
             "live_execution_verified": False,
         }
-
 
 def save_json(path: str | Path, obj: dict):
     p = Path(path)
