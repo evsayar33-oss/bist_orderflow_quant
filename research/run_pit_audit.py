@@ -46,7 +46,7 @@ def run(args):
     members = Membership(frame)
     bars, price = check_prices(members, args.start, args.end,
                                download=not args.membership_only)
-    audit = members.audit(args.start, args.end, set(bars))
+    audit = members.audit(args.start, args.end, bars)
     baseline = None
     p = ROOT / "data" / "backtest_report_v3.json"
     if p.exists():
@@ -110,8 +110,9 @@ def run(args):
     save_json(dest, report)
     print(json.dumps({"artifact": str(dest), "source_sha256": source["sha256"],
                       "historical_tickers": audit["historical_tickers"],
-                      "priced": audit["priced_historical_tickers"],
-                      "missing_historical_price_tickers": audit["missing_historical_price_tickers"],
+                      "priced": audit["symbols_with_any_price_series"],
+                      "missing_historical_price_tickers": audit["symbols_without_price_series"],
+                      "low_coverage_months": len(audit["months_below_95pct_price_coverage"]),
                       "retest": retest["status"], "conclusion": report["conclusion"]}, indent=2))
     return report
 
