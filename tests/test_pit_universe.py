@@ -144,5 +144,48 @@ class MembershipTests(unittest.TestCase):
 
 
 
+    def test_full_missing_price_inventory_is_not_truncated(self):
+        from pit_universe import Membership
+        df = pd.DataFrame({"snapshot_date": ["2020-01-01"] * 55,
+                           "ticker": [f"A{i:03d}" for i in range(55)]})
+        a = Membership(df).audit("2020-01-01", "2020-02-01", {})
+        self.assertEqual(a["symbols_without_price_series"], 55)
+        self.assertEqual(len(a["symbols_without_price_series_all"]), 55)
+        self.assertEqual(len(a["symbols_without_price_series_examples"]), 40)
+        self.assertEqual(a["months_below_95pct_price_coverage_count"], 2)
+
+    def test_five_evidence_gates_fail_closed_without_independent_sources(self):
+        from pit_evidence import assess_evidence, write_missing_price_manifest
+        with TemporaryDirectory() as d:
+            audit = {"symbols_without_price_series": 2,
+                     "symbols_without_price_series_all": ["AAA", "BBB"],
+                     "months_below_95pct_price_coverage_count": 4}
+            evidence = assess_evidence(audit, {"mode": "DERIVED_FROM_RAW_CACHE"}, Path(d))
+            self.assertFalse(evidence["all_five_resolved"])
+            self.assertEqual(len(evidence["gates"]), 5)
+            self.assertTrue(all(g["status"] == "BLOCKED"
+                                for g in evidence["gates"].values()))
+            out = Path(d) / "missing.csv"
+            write_missing_price_manifest(out, audit)
+            self.assertEqual(pd.read_csv(out)["ticker"].tolist(), ["AAA", "BBB"])
+
+    def test_schema_valid_evidence_does_not_certify_corporate_actions(self):
+        from pit_evidence import assess_evidence
+        with TemporaryDirectory() as d:
+            path = Path(d) / "ticker_events.csv"
+            pd.DataFrame([{"ticker": "AAA", "event_type": "delisted",
+                           "effective_date": "2020-02-01", "successor_ticker": "",
+                           "cash_recovery_per_share": "0", "source_url": "https://example.org/evidence",
+                           "observed_at": "2020-02-01"}]).to_csv(path, index=False)
+            audit = {"symbols_without_price_series": 1,
+                     "symbols_without_price_series_all": ["AAA"],
+                     "months_below_95pct_price_coverage_count": 1}
+            evidence = assess_evidence(audit, {}, Path(d))
+            self.assertEqual(evidence["gates"]["delisting_and_corporate_actions"]["status"],
+                             "BLOCKED")
+            self.assertFalse(evidence["all_five_resolved"])
+
+
+
 if __name__ == "__main__":
     unittest.main()

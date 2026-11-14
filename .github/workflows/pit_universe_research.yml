@@ -5,6 +5,8 @@ on:
     paths:
       - 'research/pit_universe.py'
       - 'research/run_pit_audit.py'
+      - 'research/pit_evidence.py'
+      - 'research/evidence/**'
       - 'backtest_optimizer.py'
       - 'tests/test_pit_universe.py'
       - '.github/workflows/pit_universe_research.yml'
@@ -40,7 +42,7 @@ jobs:
       - name: Membership and time-causality regressions
         run: python -m unittest discover -s tests -p test_pit_universe.py -v
       - name: Python syntax check
-        run: python -m py_compile research/pit_universe.py research/run_pit_audit.py backtest_optimizer.py
+        run: python -m py_compile research/pit_universe.py research/pit_evidence.py research/run_pit_audit.py backtest_optimizer.py
 
   membership-source-smoke:
     if: github.event_name == 'pull_request'
@@ -84,7 +86,9 @@ jobs:
         if: always()
         with:
           name: bist-pit-price-coverage-pr
-          path: artifacts/pit_universe_price_coverage_pr.json
+          path: |
+            artifacts/pit_universe_price_coverage_pr.json
+            artifacts/missing_historical_prices.csv
           if-no-files-found: warn
           retention-days: 30
 
@@ -130,6 +134,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bist-pit-universe-audit
-          path: artifacts/pit_universe_audit.json
+          path: |
+            artifacts/pit_universe_audit.json
+            artifacts/missing_historical_prices.csv
           if-no-files-found: warn
           retention-days: 30
