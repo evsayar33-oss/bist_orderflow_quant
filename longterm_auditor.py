@@ -21,8 +21,11 @@ def audit() -> str:
         L.append("🎯 12 aylık dönemlerde geçme: " + " · ".join(
             f"{TG.BENCH_TR.get(k, {'all': allk, 'each': 'Hepsi tek tek'}.get(k, k))} {TG.pct(v, nd=0)}" for k, v in rb.items()))
     if lots.get("closed_lots"):
-        L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · hedefi geçen {TG.pct(lots.get('hit_beat_all_pct'), nd=0)}"
-                 f" · ort. {lots.get('avg_months_held')} ay")
+        if int(lots["closed_lots"]) < 30:
+            L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · başarı oranı: KANIT BEKLENİYOR (en az 30 kapanış)")
+        else:
+            L.append(f"📦 Kapanan {lots['closed_lots']} pozisyon · hedefi geçen {TG.pct(lots.get('hit_beat_all_pct'), nd=0)}"
+                     f" · ort. {lots.get('avg_months_held')} ay")
     pos = (st.get("portfolio") or {}).get("positions", {}) or {}
     if pos:
         best = sorted(pos.items(), key=lambda kv: -kv[1]["level"])[:3]

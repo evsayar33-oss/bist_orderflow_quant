@@ -178,7 +178,7 @@ def health_lines(state: Dict, full: bool = False) -> List[str]:
     h = state.get("health") or {}
     if not h.get("checks"):
         return []
-    em = {"OK": "🟢", "UYARI": "🟡", "KRİTİK": "🔴"}
+    em = {"OK": "🟢", "UYARI": "🟡", "KRİTİK": "🔴", "BEKLEME": "⚪"}
     ov = h.get("overall", "OK")
     if not full:
         if ov == "OK":
@@ -195,9 +195,16 @@ def health_lines(state: Dict, full: bool = False) -> List[str]:
         L.append(f"📐 Canlı {str(lv['months']).replace('.', ',')} ay: portföy {pct(lv['live_ret_pct'], True)} · testte aynı süre için normal aralık "
                  f"{pct(b['p10'], True)} … {pct(b['p90'], True)} (ortanca {pct(b['p50'], True)})")
     w = h.get("win_rates") or {}
-    if (w.get("closed_lots") or {}).get("live"):
-        L.append(f"🎯 Kazanma oranı (kapanan): canlı {pct(w['hit_nominal_pct']['live'], nd=0)} · test {pct(w['hit_nominal_pct']['test'], nd=0)}"
+    n_live = (w.get("closed_lots") or {}).get("live", 0)
+    if n_live and w.get("comparison_status") != "DESCRIPTIVE_ONLY":
+        L.append(f"🎯 Kazanma oranı: KANIT BEKLENİYOR ({n_live}/{w.get('min_comparison_lots', 30)} kapanış; test "
+                 f"{(w.get('closed_lots') or {}).get('test', '?')}; aynı tutma süresi ve çıkış nedenleri doğrulanmalı)")
+    elif n_live:
+        L.append(f"🎯 Kazanma oranı (betimsel): canlı {pct(w['hit_nominal_pct']['live'], nd=0)} · test {pct(w['hit_nominal_pct']['test'], nd=0)}"
                  f" | BIST100'ü geçen: canlı {pct(w['hit_beat_xu100_pct']['live'], nd=0)} · test {pct(w['hit_beat_xu100_pct']['test'], nd=0)}")
+    if lv.get("status") == "OK":
+        L.append(f"🔎 Test karşılaştırması betimseldir: {lv.get('n_overlapping_windows', 0)} örtüşen tarih penceresi; "
+                 "hayatta kalma yanlılığı giderilmiş bağımsız kanıt DEĞİL.")
     cm = state.get("confidence_model_meta") or {}
     if cm:
         L.append(f"🧠 Güven modeli: canlı sonuç payı %{cm.get('live_weight', 0) * 100:.0f} ({cm.get('n_live', 0)} sonuçlanmış gözlem)")

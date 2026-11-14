@@ -288,6 +288,47 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     from confidence import predict, grade
     month = pd.Timestamp(today).strftime("%Y-%m")
     K, N, cap = int(C.TRANCHE_MONTHS), int(C.TRANCHE_N), int(C.TRANCHE_SECTOR_CAP)
+    # Explicit zero-exposure policy exits at the next open and cannot leave
+    # ghost cohorts whose names would be bought after risk recovers.
+    raw_rx = state.get("risk_exposure", 1.0)
+    try:
+        rx_check = 1.0 if raw_rx is None else float(raw_rx)
+    except (TypeError, ValueError):
+        rx_check = float("nan")
+    if not np.isfinite(rx_check) or not 0.0 <= rx_check <= 1.0:
+        held = list(pf.get("positions", {}))
+        return [], {"engine": "tranche", "month": month, "blocked": True,
+                    "block_reason": "INVALID_RISK_EXPOSURE", "picks": [], "buys": [],
+                    "sells": [], "holds": held, "confidence": {},
+                    "confidence_grade": {}, "suggested_split": {}, "extended": [],
+                    "expiring_next": [], "sell_reasons": {}, "target_weights": pf_weights(pf),
+                    "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
+                    "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
+    if rx_check == 0:
+        held = list(pf.get("positions", {}))
+        sells = {t: "RISK_EXPOSURE_ZERO" for t in held}
+        orders = [{"ticker": t, "action": "SELL", "reason": "RISK_EXPOSURE_ZERO",
+                   "target_w": 0.0} for t in held]
+        pf["cohorts"] = []
+        return orders, {"engine": "tranche", "month": month, "blocked": True,
+                        "block_reason": "RISK_EXPOSURE_ZERO", "picks": [], "buys": [],
+                        "sells": held, "holds": [], "confidence": {},
+                        "confidence_grade": {}, "suggested_split": {}, "extended": [],
+                        "expiring_next": [], "sell_reasons": sells, "target_weights": {},
+                        "exit_month": {}, "n_cohorts": 0, "cash_target": 1.0}
+    # Parity with autonomy_guard: SAFE blocks fresh orders without liquidating
+    # existing long-horizon cohorts. This decision is evaluated before ranking.
+    guard = state.get("autonomy_guard") or {}
+    if guard.get("block_new_entries") or str(guard.get("mode", "")).upper() == "SAFE":
+        held = list(pf.get("positions", {}))
+        return [], {"engine": "tranche", "month": month, "blocked": True,
+                    "block_reason": guard.get("reason", "AUTONOMY_SAFE"),
+                    "picks": [], "buys": [], "sells": [], "holds": held,
+                    "confidence": {}, "confidence_grade": {}, "suggested_split": {},
+                    "extended": [], "expiring_next": [],
+                    "sell_reasons": {}, "target_weights": pf_weights(pf),
+                    "exit_month": {}, "n_cohorts": len(pf.get("cohorts", [])),
+                    "cash_target": round(float(pf.get("cash", 0)) / max(float(pf.get("nav", 1)), 1e-12), 4)}
     f = frame.copy()
     f["confidence"] = predict(f, conf_model).to_numpy()
     f = f.set_index("ticker")
@@ -478,8 +519,13 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     tot_w = sum(tw.values())
     if tot_w > 0 and abs(tot_w - 1.0) > 1e-9:                     # stock-only: always fully invested
         tw = {t: w / tot_w for t, w in tw.items()}
-    rx = float(state.get("risk_exposure") or 1.0)                 # V3.16 portfolio-level protection (risk.py)
-    if rx < 1.0:
+    raw_rx = state.get("risk_exposure")
+    rx = 1.0 if raw_rx is None else float(raw_rx)
+    if not np.isfinite(rx) or not 0.0 <= rx <= 1.0:
+        raise ValueError("Invalid risk_exposure; refusing to produce a trading plan")
+    if rx == 0.0:
+        tw = {}  # explicit zero risk is a full exit, not zero-value REBAL holdings
+    elif rx < 1.0:
         tw = {t: w * rx for t, w in tw.items()}
     # ---- orders
     cw = pf_weights(pf)
@@ -487,7 +533,9 @@ def plan_tranche(pf: Dict, frame: pd.DataFrame, state: Dict, today, today_change
     orders, sells, holds, buys = [], {}, [], []
     for t in held:
         if t not in tw:
-            sells[t] = "COHORT_EXPIRY" if t in expired else ("ROTATION" if t == GOLD_TICKER else "NOT_SELECTED")
+            sells[t] = ("RISK_EXPOSURE_ZERO" if rx == 0.0 else
+                        "COHORT_EXPIRY" if t in expired else
+                        "ROTATION" if t == GOLD_TICKER else "NOT_SELECTED")
             orders.append({"ticker": t, "action": "SELL", "reason": sells[t], "target_w": 0.0})
         else:
             holds.append(t)

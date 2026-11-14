@@ -496,7 +496,8 @@ with tab4:
         tbl = [{"Ölçü": lab[k], "Canlı": ("—" if v.get("live") is None else str(v.get("live")).replace(".", ",")),
                 "Test": ("—" if v.get("test") is None else str(v.get("test")).replace(".", ","))} for k, v in w.items() if k in lab]
         if tbl:
-            st.caption("Kazanma oranları — canlı ve test")
+            st.caption("Kazanma oranları — canlı ve test (canlı 30 kapanıştan azsa başarı metrikleri saklanır; "
+                       "12 aylık ufuk ve çıkış nedenleri de karşılaştırılmalıdır)")
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 
         cm = state.get("confidence_model_meta") or {}

@@ -19,8 +19,8 @@ import pandas as pd
 
 import config as C
 
-GREEN, YELLOW, RED = "OK", "UYARI", "KRİTİK"
-_ORDER = {GREEN: 0, YELLOW: 1, RED: 2}
+GREEN, YELLOW, RED, WAITING = "OK", "UYARI", "KRİTİK", "BEKLEME"
+_ORDER = {WAITING: -1, GREEN: 0, YELLOW: 1, RED: 2}
 
 
 def _chk(key: str, name: str, status: str, msg: str, value=None) -> Dict:
@@ -52,37 +52,54 @@ def live_vs_test(nav_df: Optional[pd.DataFrame], bt_nav: pd.DataFrame) -> Dict:
     n = nav_df.copy()
     n["tarih"] = pd.to_datetime(n["tarih"])
     n = n.set_index("tarih").sort_index()
+    n = n.loc[~n.index.duplicated(keep="last")]
+    if len(n) < 2 or not {"nav", "xu100"}.issubset(n.columns):
+        return {"status": "WAIT", "reason": "LIVE_NAV_OR_BENCHMARK_MISSING"}
+    n["nav"] = pd.to_numeric(n["nav"], errors="coerce")
+    if not n["nav"].notna().all() or (n["nav"] <= 0).any():
+        return {"status": "WAIT", "reason": "INVALID_LIVE_NAV"}
     days = (n.index[-1] - n.index[0]).days
     h = days / 30.44
     live_ret = (n["nav"].iloc[-1] / n["nav"].iloc[0] - 1) * 100
-    x = pd.to_numeric(n.get("xu100"), errors="coerce").ffill().bfill() if "xu100" in n else pd.Series(dtype=float)
-    live_x = (x.iloc[-1] / x.iloc[0] - 1) * 100 if len(x) and x.iloc[0] > 0 else np.nan
+    # Never backfill the live benchmark (that uses future observations).
+    x = pd.to_numeric(n["xu100"], errors="coerce")
+    live_x = ((x.iloc[-1] / x.iloc[0] - 1) * 100
+              if pd.notna(x.iloc[0]) and pd.notna(x.iloc[-1]) and x.iloc[0] > 0 and x.iloc[-1] > 0
+              else np.nan)
     out = {"months": round(h, 1), "live_ret_pct": round(float(live_ret), 2),
            "live_xu100_pct": None if not np.isfinite(live_x) else round(float(live_x), 2)}
     if h < 1:
         out["status"] = "WAIT"
         return out
+    if not np.isfinite(live_x):
+        out.update({"status": "WAIT", "reason": "MISSING_LIVE_BENCHMARK_ENDPOINT"})
+        return out
+    if not {"tarih", "nav", "xu100"}.issubset(bt_nav.columns):
+        out.update({"status": "WAIT", "reason": "BACKTEST_NAV_OR_BENCHMARK_MISSING"})
+        return out
     b = bt_nav.set_index("tarih").sort_index()
+    b = b.loc[~b.index.duplicated(keep="last")]
     step = max(int(round(days * 252 / 365.25)), 1)
     if len(b) <= step + 20:
         out["status"] = "WAIT"
         return out
     r = (b["nav"].shift(-step) / b["nav"] - 1) * 100
-    bx = pd.to_numeric(b["xu100"], errors="coerce").ffill()
+    bx = pd.to_numeric(b["xu100"], errors="coerce")  # no forward-filled market evidence
     rx = (bx.shift(-step) / bx - 1) * 100
     ex = (r - rx).dropna()
     r = r.dropna()
-    if len(r) < 50:
-        out["status"] = "WAIT"
+    if len(r) < 50 or len(ex) < 50:
+        out.update({"status": "WAIT", "reason": "INSUFFICIENT_MATCHED_BACKTEST_WINDOWS"})
         return out
+    out["n_overlapping_windows"] = int(len(ex))
+    out["n_nonoverlapping_approx"] = int(len(ex) // step)
+    out["comparison_basis"] = "BIST100_EXCESS_SAME_AGE_DESCRIPTIVE"
+    out["bias_notice"] = "Backtest uses today's surviving liquid names; overlapping windows are not independent"
     out["band_ret_pct"] = {k: round(float(np.percentile(r, q)), 1) for k, q in (("p10", 10), ("p50", 50), ("p90", 90))}
-    if np.isfinite(live_x) and len(ex):
-        live_ex = live_ret - live_x
-        out["live_excess_pp"] = round(float(live_ex), 2)
-        out["band_excess_pp"] = {k: round(float(np.percentile(ex, q)), 1) for k, q in (("p10", 10), ("p50", 50), ("p90", 90))}
-        out["percentile"] = round(float((ex < live_ex).mean() * 100), 1)
-    else:
-        out["percentile"] = round(float((r < live_ret).mean() * 100), 1)
+    live_ex = live_ret - live_x
+    out["live_excess_pp"] = round(float(live_ex), 2)
+    out["band_excess_pp"] = {k: round(float(np.percentile(ex, q)), 1) for k, q in (("p10", 10), ("p50", 50), ("p90", 90))}
+    out["percentile"] = round(float((ex < live_ex).mean() * 100), 1)
     out["status"] = "OK"
     return out
 
@@ -178,8 +195,8 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
     bt_ic = ((report or {}).get("oos_composite_ic_12m") or {}).get("mean")
     n_ic = int(ic.get("n_dates") or 0)
     if n_ic < 6:
-        checks.append(_chk("ic", "Sinyal gücü (canlı)", GREEN,
-                           f"canlı sonuç birikiyor ({n_ic}/6 ay; ilk ölçüm alımdan 12 ay sonra)", n_ic))
+        checks.append(_chk("ic", "Sinyal gücü (canlı)", WAITING,
+                           f"KANIT BEKLENİYOR ({n_ic}/6 ay; ilk ölçüm alımdan 12 ay sonra)", n_ic))
     else:
         m, t = float(ic.get("ic_mean") or 0), float(ic.get("t_nw") or 0)
         ref = float(bt_ic or 0.1)
@@ -195,8 +212,40 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
                            f"öneriler için tahmin %{c12['picks_pred'] * 100:.0f}, gerçekleşen %{c12['picks_real'] * 100:.0f}"
                            f" ({c12['picks_n']} öneri)", d))
     else:
-        checks.append(_chk("conf", "Güven oranı tutarlılığı", GREEN,
-                           f"canlı ölçüm birikiyor ({c12.get('picks_n', 0)}/30 sonuçlanmış öneri)", None))
+        checks.append(_chk("conf", "Güven oranı tutarlılığı", WAITING,
+                           f"KANIT BEKLENİYOR ({c12.get('picks_n', 0)}/30 sonuçlanmış öneri)", None))
+
+    g_state = state.get("autonomy_guard") or {}
+    g_mode = str(g_state.get("mode") or "UNKNOWN").upper()
+    g_blocked = bool(g_state.get("block_new_entries")) or g_mode == "SAFE"
+    checks.append(_chk(
+        "guard_policy", "Yeni alım güvenlik kapısı",
+        RED if g_blocked else YELLOW if g_mode in ("WATCH", "RECOVERY", "UNKNOWN") else GREEN,
+        ("YENİ ALIMLAR BLOKE; " if g_blocked else "Alım izni açık; ")
+        + f"mod={g_mode}, neden={str(g_state.get('reason') or '—')[:80]}",
+        not g_blocked))
+
+    stop = float(getattr(C, "HARD_STOP_FROM_ENTRY_PCT", 1000.0))
+    overlay = getattr(C, "RISK_MODE", None)
+    checks.append(_chk(
+        "risk_policy", "Koruma politikası",
+        WAITING if stop > 100 and not overlay else GREEN,
+        ("Zorunlu hisse stopu ve portföy koruma overlay'i KAPALI; zarar bayrakları bilgi amaçlı"
+         if stop > 100 and not overlay else
+         f"Zorunlu stop: {stop if stop <= 100 else 'kapalı'}%; portföy overlay: {overlay or 'kapalı'}"),
+        {"hard_stop_pct": stop, "portfolio_overlay": overlay}))
+
+    evidence = report or {}
+    evidence_verified = all(bool(evidence.get(k)) for k in (
+        "pit_universe_verified", "delisted_symbols_included",
+        "asof_fundamentals_verified", "external_oos_verified"))
+    checks.append(_chk(
+        "backtest_evidence", "Backtest bağımsız kanıt",
+        GREEN if evidence_verified else WAITING,
+        ("PIT evren, silinen hisseler, as-of bilanço ve bağımsız OOS doğrulandı"
+         if evidence_verified else
+         "KANIT BEKLENİYOR: bugünkü likit hisse evreniyle geçmiş test yanlı olabilir; %90 başarı canlı doğrulama değildir"),
+        evidence_verified))
 
     gen = (report or {}).get("generated_at")
     age = (today - pd.Timestamp(gen[:10])).days if gen else None
@@ -209,23 +258,35 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
     if lv.get("status") != "OK":
         why = ("test NAV'ı yok — Walk Forward Backtest çalışınca ölçülür" if btn is None or btn.empty
                else f"canlı geçmiş kısa ({lv.get('months', 0)} ay); 1 aydan sonra ölçülür")
-        checks.append(_chk("live", "Canlı sonuç vs test", GREEN if not (btn is None or btn.empty) else YELLOW, why, None))
+        checks.append(_chk("live", "Canlı sonuç vs test", WAITING if btn is not None and not btn.empty else YELLOW, why, None))
     else:
         p = lv.get("percentile", 50)
         st = GREEN if p >= 15 else (YELLOW if p >= 5 else RED)
         what = "BIST100'e göre fark" if "live_excess_pp" in lv else "getiri"
         checks.append(_chk("live", "Canlı sonuç vs test", st,
-                           f"{str(lv['months']).replace('.', ',')} aylık {what}, testteki aynı süreli dönemlerin %{p:.0f}'inden iyi"
+                           f"{str(lv['months']).replace('.', ',')} aylık {what}, testteki aynı süreli dönemlerin %{p:.0f}'inden iyi (betimsel; {lv.get('n_overlapping_windows', 0)} örtüşen pencere)"
                            + (" (normal aralıkta)" if p >= 15 else " (testin alt ucunda)" if p >= 5 else " (testte neredeyse hiç görülmeyen kadar kötü)"), p))
     overall = max((c["status"] for c in checks), key=lambda s: _ORDER[s])
     live_lots = ((state.get("performance") or {}).get("lots") or {})
     bt_lots = (report or {}).get("closed_lots") or {}
-    win = {k: {"live": live_lots.get(k), "test": bt_lots.get(k)} for k in
-           ("closed_lots", "hit_nominal_pct", "hit_beat_xu100_pct", "hit_beat_cpi_pct", "hit_beat_all_pct", "avg_nominal_pct", "avg_months_held")}
+    # As in quant_superlab, a win-rate label without sample adequacy or
+    # comparable exits is not an empirical validation of the live strategy.
+    live_n = int(live_lots.get("closed_lots") or 0)
+    test_n = int(bt_lots.get("closed_lots") or 0)
+    comparable = live_n >= 30 and test_n >= 30
+    metric_keys = ("hit_nominal_pct", "hit_beat_xu100_pct", "hit_beat_cpi_pct",
+                   "hit_beat_all_pct", "avg_nominal_pct", "avg_months_held")
+    win = {"closed_lots": {"live": live_n, "test": test_n},
+           "comparison_status": "DESCRIPTIVE_ONLY" if comparable else "INSUFFICIENT_LIVE_SAMPLE",
+           "min_comparison_lots": 30,
+           "live_exit_mix": live_lots.get("exit_mix") or {},
+           "test_exit_mix": bt_lots.get("exit_mix") or {}}
+    win.update({k: {"live": live_lots.get(k) if comparable else None, "test": bt_lots.get(k)}
+                for k in metric_keys})
     return {"date": str(today.date()), "overall": overall, "checks": checks, "live_vs_test": lv, "win_rates": win,
             "red": [c["name"] for c in checks if c["status"] == RED],
             "yellow": [c["name"] for c in checks if c["status"] == YELLOW]}
 
 
 def emoji(status: str) -> str:
-    return {GREEN: "🟢", YELLOW: "🟡", RED: "🔴"}.get(status, "⚪")
+    return {GREEN: "🟢", YELLOW: "🟡", RED: "🔴", WAITING: "⚪"}.get(status, "⚪")
