@@ -2,6 +2,8 @@
 from __future__ import annotations
 import sys
 import unittest
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from io import StringIO
 from pathlib import Path
 import pandas as pd
@@ -59,6 +61,22 @@ class MembershipTests(unittest.TestCase):
         self.assertEqual(first["members"], 2)
         self.assertEqual(first["usable_asof_price_history"], 1)
         self.assertLess(first["coverage_ratio"], 0.95)
+
+    def test_catalog_only_never_claims_missing_prices_without_query(self):
+        from run_pit_audit import run
+        with TemporaryDirectory() as d:
+            csv = Path(d) / "members.csv"
+            csv.write_bytes(CSV)
+            output = Path(d) / "audit.json"
+            result = run(SimpleNamespace(
+                membership_csv=str(csv), membership_only=True,
+                start="2017-01-01", end="2017-07-01", retest=False,
+                output=str(output)))
+            self.assertEqual(result["audit"]["historical_tickers"], 3)
+            self.assertIsNone(result["audit"]["symbols_without_price_series"])
+            self.assertEqual(result["audit"]["price_coverage_status"], "NOT_QUERIED")
+            self.assertFalse(result["validated_survivorship_free_alpha"])
+            self.assertTrue(output.exists())
 
     def test_no_future_price_is_used_at_past_rebalance(self):
         idx = pd.bdate_range("2017-04-01", periods=265)
