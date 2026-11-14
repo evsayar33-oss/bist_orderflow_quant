@@ -48,6 +48,7 @@ import confidence as CF  # noqa: E402
 import health as HL  # noqa: E402
 from state_manager import read_json  # noqa: E402
 from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
+from safety_orders import enforce_pending_gate  # noqa: E402
 from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
                            load_state, load_trade_log, save_monthly_snapshots, save_state)
 
@@ -313,6 +314,11 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
     if not state.get("portfolio"):
         state["portfolio"] = new_portfolio(today)
     pf = state["portfolio"]
+    # Enforce yesterday's persisted SAFE decision BEFORE pending orders execute
+    # at today's open. Protective SELLs and reductions are preserved.
+    canceled_preopen = enforce_pending_gate(pf, state.get("autonomy_guard"))
+    if canceled_preopen:
+        print(f"⚠️ SAFE güvenlik kapısı: açılış öncesi {canceled_preopen} bekleyen alım/artış emri iptal edildi.")
     # A review taken while inflation was unknown had no real-return gate: cancel its
     # not-yet-executed buys and redo the review now that an inflation estimate exists.
     lr = state.get("last_rebalance", {}) or {}
@@ -385,6 +391,11 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         guard = {"mode": "SAFE", "block_new_entries": True, "reason": g["reason"]}
         print(f"⚠️ Portföy koruması hesaplanamadı; yeni alımlar engellendi: {exc}")
 
+    # Apply freshly evaluated post-close SAFE/risk failure to orders which
+    # could otherwise persist into a later session without monthly re-review.
+    canceled_postclose = enforce_pending_gate(pf, state.get("autonomy_guard"))
+    if canceled_postclose:
+        print(f"⚠️ SAFE güvenlik kapısı: kapanış sonrası {canceled_postclose} bekleyen alım/artış emri iptal edildi.")
     review, top = None, []
     state["_no_inflation"] = cpi_stats.get("expected_12m_pct") is None
     review_month = (as_of or today).strftime("%Y-%m")
