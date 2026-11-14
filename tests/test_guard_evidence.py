@@ -144,6 +144,8 @@ class EvidenceTests(unittest.TestCase):
         checks = {c["key"]: c for c in res["checks"]}
         self.assertEqual(checks["ic"]["status"], "BEKLEME")
         self.assertEqual(checks["conf"]["status"], "BEKLEME")
+        self.assertEqual(checks["backtest_evidence"]["status"], "BEKLEME")
+        self.assertFalse(checks["backtest_evidence"]["value"])
 
 
 if __name__ == "__main__":
