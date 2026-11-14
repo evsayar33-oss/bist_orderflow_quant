@@ -235,6 +235,18 @@ def evaluate(state: Dict, snaps: pd.DataFrame, nav_df: Optional[pd.DataFrame], r
          f"Zorunlu stop: {stop if stop <= 100 else 'kapalı'}%; portföy overlay: {overlay or 'kapalı'}"),
         {"hard_stop_pct": stop, "portfolio_overlay": overlay}))
 
+    evidence = report or {}
+    evidence_verified = all(bool(evidence.get(k)) for k in (
+        "pit_universe_verified", "delisted_symbols_included",
+        "asof_fundamentals_verified", "external_oos_verified"))
+    checks.append(_chk(
+        "backtest_evidence", "Backtest bağımsız kanıt",
+        GREEN if evidence_verified else WAITING,
+        ("PIT evren, silinen hisseler, as-of bilanço ve bağımsız OOS doğrulandı"
+         if evidence_verified else
+         "KANIT BEKLENİYOR: bugünkü likit hisse evreniyle geçmiş test yanlı olabilir; %90 başarı canlı doğrulama değildir"),
+        evidence_verified))
+
     gen = (report or {}).get("generated_at")
     age = (today - pd.Timestamp(gen[:10])).days if gen else None
     st = GREEN if age is not None and age <= 45 else (YELLOW if age is not None and age <= 100 else RED)
