@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pit_universe import Membership, download_membership, read_membership, save_json
+from pit_evidence import assess_evidence, write_missing_price_manifest
 
 
 def check_prices(members: Membership, start: str, end: str, *, download: bool):
@@ -171,7 +172,14 @@ def run(args):
                 retest = {"status": "NOT_TESTABLE", "reason": type(exc).__name__,
                           "detail": str(exc)[:300], "fundamentals": fundamentals_meta,
                           "traceback": traceback.format_exc(limit=12)[-5000:]}
+    evidence = assess_evidence(audit, fundamentals_meta if args.retest else {},
+                               Path(getattr(args, "evidence_dir", "research/evidence")))
+    manifest = Path(args.output).with_name("missing_historical_prices.csv")
+    if not args.membership_only:
+        write_missing_price_manifest(manifest, audit)
     report = {
+        "evidence_gates": evidence,
+        "missing_price_manifest": str(manifest) if not args.membership_only else None,
         "schema": "BIST_PIT_RESEARCH_V1",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": source, "prices": price, "audit": audit,
@@ -208,6 +216,7 @@ if __name__ == "__main__":
     ap.add_argument("--end", default="2026-10-01")
     ap.add_argument("--membership-csv", default=None)
     ap.add_argument("--membership-only", action="store_true")
+    ap.add_argument("--evidence-dir", default="research/evidence")
     ap.add_argument("--retest", action="store_true")
     ap.add_argument("--output", default="artifacts/pit_universe_audit.json")
     a = ap.parse_args()
