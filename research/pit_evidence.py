@@ -28,7 +28,10 @@ def _evidence(path: Path, fields: set[str], date_fields: tuple[str, ...]) -> tup
         missing = sorted(fields - set(d.columns))
         if missing:
             return pd.DataFrame(), {"status": "INVALID_SCHEMA", "missing_columns": missing}
-        if d[list(fields)].isna().any().any():
+        # Successor is legitimately absent for liquidations; recovery may be
+        # absent for mergers pending verification. Keep such rows visible.
+        mandatory = fields - {"successor_ticker", "cash_recovery_per_share"}
+        if d[list(mandatory)].isna().any().any():
             return pd.DataFrame(), {"status": "INCOMPLETE_ROWS", "records": len(d)}
         for name in date_fields:
             d[name] = pd.to_datetime(d[name], utc=True, errors="coerce")
@@ -57,6 +60,7 @@ def assess_evidence(audit: dict, fundamentals: dict, root: Path) -> dict:
     if not ticker.empty:
         relevant = ticker[ticker["ticker"].isin(missing)]
         tmeta["missing_price_symbols_with_event_record"] = int(relevant.ticker.nunique())
+        tmeta["event_rows_with_unknown_recovery"] = int(relevant["cash_recovery_per_share"].isna().sum())
         tmeta["unresolved_missing_price_symbols"] = sorted(set(missing) - set(relevant.ticker))
     if not fills.empty:
         for col in ("reference_price", "executed_price", "commission_pct"):
