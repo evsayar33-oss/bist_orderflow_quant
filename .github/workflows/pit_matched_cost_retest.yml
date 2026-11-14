@@ -1,0 +1,63 @@
+name: BIST PIT matched-window cost stress (research only)
+
+on:
+  pull_request:
+    paths:
+      - 'research/run_matched_cost_retest.py'
+      - 'tests/test_matched_cost_retest.py'
+      - '.github/workflows/pit_matched_cost_retest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bist-pit-matched-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy requests
+      - run: python -m unittest discover -s tests -p test_matched_cost_retest.py -v
+      - run: python -m py_compile research/run_matched_cost_retest.py
+
+  matched-cost-retest:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy scipy requests yfinance
+      - name: Record immutable production baseline
+        run: sha256sum data/backtest_report_v3.json > /tmp/bist-matched-production.sha256
+      - name: Matched-window baseline, PIT, and three cost scenarios
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: |
+          python research/run_matched_cost_retest.py \
+            --start 2017-01-01 --end 2026-10-01 \
+            --costs 0.5,1.0,2.0 \
+            --output artifacts/pit_matched_cost_retest.json
+      - name: Assert production files unchanged
+        if: always()
+        run: |
+          sha256sum --check /tmp/bist-matched-production.sha256
+          git diff --exit-code -- data/engine_state_v3.json data/research_prior_v3.json data/backtest_report_v3.json data/nav.csv data/trade_log.csv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bist-pit-matched-cost-retest
+          path: artifacts/pit_matched_cost_retest.json
+          if-no-files-found: warn
+          retention-days: 30
