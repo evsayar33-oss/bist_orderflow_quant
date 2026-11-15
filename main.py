@@ -435,15 +435,16 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
 
     # V3.14: bot için emir dosyası (yalnızca kapanış çalışmalarında; yenileme modu emir üretmez)
     bot_msg = None
-    try:
-        import bot_orders as BO
-        prices = {}
-        if snap is not None and not snap.empty and "close" in snap:
-            prices = {str(k): float(v) for k, v in snap.set_index("ticker")["close"].items() if pd.notna(v)}
-        new_orders = BO.write(BO.build(state, today, prices))
-        bot_msg = BO.telegram_block(new_orders)
-    except Exception as exc:
-        print(f"⚠️ Emir dosyası yazılamadı: {exc}")
+    if not refresh:
+        try:
+            import bot_orders as BO
+            prices = {}
+            if snap is not None and not snap.empty and "close" in snap:
+                prices = {str(k): float(v) for k, v in snap.set_index("ticker")["close"].items() if pd.notna(v)}
+            new_orders = BO.write(BO.build(state, today, prices))
+            bot_msg = BO.telegram_block(new_orders)
+        except Exception as exc:
+            print(f"⚠️ Emir dosyası yazılamadı: {exc}")
 
     if review and review.get("status") == "OK":
         send_telegram(TG.monthly_report(as_of or today, state, review, top))
@@ -455,8 +456,13 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         nv = pd.to_numeric(nav_df["nav"], errors="coerce").dropna() if nav_df is not None and "nav" in nav_df else pd.Series(dtype=float)
         day_ret = float((nv.iloc[-1] / nv.iloc[-2] - 1) * 100) if len(nv) >= 2 else None
         send_telegram(TG.events_report(today, events, state, day_ret))
-    else:
+    elif not refresh:
+        # Late GitHub cron retries and market-closed refreshes must not send
+        # routine "session not closed" Telegram messages. Preserve warnings,
+        # monthly-review results and real EOD reports above.
         send_telegram(TG.status_report(today, state, refresh))
+    else:
+        print("ℹ️ Sessiz yenileme: rutin Telegram durum mesajı gönderilmedi.")
     if bot_msg:
         send_telegram(bot_msg)
     print(f"✅ {today.date()} [{'YENİLEME' if refresh else 'EOD'}] | NAV {pf['nav']:.4f} | pozisyon {len(pf['positions'])} | aylık={'evet' if review else 'hayır'}")
