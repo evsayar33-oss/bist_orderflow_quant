@@ -49,6 +49,7 @@ import health as HL  # noqa: E402
 from state_manager import read_json  # noqa: E402
 from portfolio import apply_day, new_portfolio, weights as pf_weights  # noqa: E402
 from safety_orders import enforce_pending_gate  # noqa: E402
+from run_policy import may_write_orders, may_send_routine_status  # noqa: E402
 from state_manager import (append_rows, load_monthly_snapshots, load_nav, load_research_prior,  # noqa: E402
                            load_state, load_trade_log, save_monthly_snapshots, save_state)
 
@@ -435,7 +436,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
 
     # V3.14: bot için emir dosyası (yalnızca kapanış çalışmalarında; yenileme modu emir üretmez)
     bot_msg = None
-    if not refresh:
+    if may_write_orders(refresh):
         try:
             import bot_orders as BO
             prices = {}
@@ -456,7 +457,7 @@ def run(force: bool = False, today=None, fetch=MD.fetch_snapshot, hist_fn=MD.dow
         nv = pd.to_numeric(nav_df["nav"], errors="coerce").dropna() if nav_df is not None and "nav" in nav_df else pd.Series(dtype=float)
         day_ret = float((nv.iloc[-1] / nv.iloc[-2] - 1) * 100) if len(nv) >= 2 else None
         send_telegram(TG.events_report(today, events, state, day_ret))
-    elif not refresh:
+    elif may_send_routine_status(refresh):
         # Late GitHub cron retries and market-closed refreshes must not send
         # routine "session not closed" Telegram messages. Preserve warnings,
         # monthly-review results and real EOD reports above.
