@@ -59,6 +59,10 @@ jobs:
         run: |
           git config user.name 'QuantBot Paper'
           git config user.email 'quantbot@users.noreply.github.com'
+          if [ ! -f data/paper_breakout/paper_state.json ]; then
+            echo 'No completed session / no paper state yet; normal no-op.'
+            exit 0
+          fi
           git add data/paper_breakout/paper_state.json
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'paper: update price breakout 90d forward ledger'
