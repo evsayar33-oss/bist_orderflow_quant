@@ -1311,17 +1311,17 @@
       "real_cagr_pct": -67.05,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 3.38,
-        "gold": -4.83,
+        "usd": 3.37,
+        "gold": -5.63,
         "deposit": 3.54,
         "xu100": -5.96,
         "floor": 3.54,
         "hurdle": 3.54
       },
-      "usd_total_pct": -14.42,
-      "usd_cagr_pct": -67.93,
+      "usd_total_pct": -14.41,
+      "usd_cagr_pct": -67.91,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -48.44
+      "xu100_usd_cagr_pct": -48.41
     },
     "lots": {
       "closed_lots": 1,
@@ -1514,7 +1514,7 @@
     "fingerprint": "6298.1000|5872174217",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-17T23:44:33.972000Z"
+    "utc": "2026-11-18T00:59:19.167083Z"
   },
   "data_quality": {
     "ok": true,
@@ -1550,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.77,
-    "gold": 23.77,
+    "usd": 23.76,
+    "gold": 23.76,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
