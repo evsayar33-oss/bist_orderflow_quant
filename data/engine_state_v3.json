@@ -464,12 +464,12 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.854,
-      "NEUTRAL": 0.0584,
-      "RISK_ON": 0.0876
+      "RISK_OFF": 0.9953,
+      "NEUTRAL": 0.0044,
+      "RISK_ON": 0.0003
     },
-    "p_risk_off": 0.854,
-    "degraded": true,
+    "p_risk_off": 0.9953,
+    "degraded": false,
     "params": {
       "K": 3,
       "means": [
@@ -558,8 +558,8 @@
       "fit_date": "2026-10-27"
     },
     "last_fit": "2026-10-28",
-    "exp_mkt_5d_pct": 0.316,
-    "exp_mkt_12m_pct": 23.01,
+    "exp_mkt_5d_pct": 0.286,
+    "exp_mkt_12m_pct": 22.94,
     "argmax_history": [
       "NEUTRAL",
       "NEUTRAL",
@@ -568,13 +568,13 @@
       "NEUTRAL",
       "NEUTRAL",
       "NEUTRAL",
-      "NEUTRAL",
+      "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF"
     ],
-    "as_of": "2026-11-16",
+    "as_of": "2026-11-17",
     "persistence": 0.9254,
-    "source": "hmm_propagated",
+    "source": "hmm_yfinance",
     "state_stats": {
       "RISK_OFF": {
         "mean_daily_ret_pct": 0.045,
@@ -1311,17 +1311,17 @@
       "real_cagr_pct": -74.1,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 3.44,
-        "gold": -7.8,
+        "usd": 3.42,
+        "gold": -7.68,
         "deposit": 3.61,
         "xu100": -7.4,
         "floor": 3.61,
         "hurdle": 3.61
       },
-      "usd_total_pct": -17.54,
-      "usd_cagr_pct": -74.86,
+      "usd_total_pct": -17.53,
+      "usd_cagr_pct": -74.84,
       "usd_max_drawdown_pct": -18.45,
-      "xu100_usd_cagr_pct": -47.93
+      "xu100_usd_cagr_pct": -47.89
     },
     "lots": {
       "closed_lots": 1,
@@ -1338,7 +1338,9 @@
       "hit_beat_usd_pct": 0.0,
       "hit_beat_gold_pct": 0.0,
       "hit_beat_deposit_pct": 0.0,
-      "hit_beat_all_pct": 0.0
+      "hit_beat_all_pct": 0.0,
+      "hit_beat_xu100_pct": 0.0,
+      "avg_xu_excess_pct": -3.67
     },
     "open_positions": {
       "MNDRS": {
@@ -1512,7 +1514,7 @@
     "fingerprint": "6259.3700|5687035375",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-18T23:13:49.681060Z"
+    "utc": "2026-11-19T00:22:03.282901Z"
   },
   "data_quality": {
     "ok": true,
@@ -1548,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.42,
-    "gold": 23.42,
+    "usd": 23.4,
+    "gold": 23.4,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
