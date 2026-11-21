@@ -1,10 +1,26 @@
 import copy
 import unittest
 import pandas as pd
-from research.price_breakout_paper import new_state, step, picks, score, last_completed_weekday
+from research.price_breakout_paper import new_state, step, picks, score, last_completed_weekday, asof_monthly_snapshot
 
 
 class PaperLedgerTests(unittest.TestCase):
+    def test_latest_snapshot_selection_has_no_future_data_leak(self):
+        frame = pd.DataFrame({
+            "tarih": pd.to_datetime(["2026-10-30", "2026-11-18",
+                                    "2026-11-20", "2026-11-23"]),
+            "ticker": ["OLD", "AAA", "BBB", "FUTURE"],
+        })
+        date, rows = asof_monthly_snapshot(frame, "2026-11-20")
+        self.assertEqual(date.strftime("%Y-%m-%d"), "2026-11-20")
+        self.assertEqual(rows["ticker"].tolist(), ["BBB"])
+        date, rows = asof_monthly_snapshot(frame, "2026-11-19")
+        self.assertEqual(date.strftime("%Y-%m-%d"), "2026-11-18")
+        self.assertEqual(rows["ticker"].tolist(), ["AAA"])
+        date, rows = asof_monthly_snapshot(frame, "2026-11-01")
+        self.assertIsNone(date)
+        self.assertIsNone(rows)
+
     def test_calendar_cutoff_survives_delayed_cron(self):
         scenarios = [
             ("2026-11-20 18:15", "2026-11-20"),  # completed Friday
