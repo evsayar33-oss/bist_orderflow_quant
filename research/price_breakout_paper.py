@@ -174,28 +174,52 @@ def step(state, day, bars, signal=None):
     return staged
 
 
+def last_completed_weekday(now: pd.Timestamp) -> str:
+    """Last potentially completed BIST trading day; never infer holiday prices."""
+    local = now.tz_convert("Europe/Istanbul")
+    date = local.normalize()
+    if local.weekday() >= 5 or local.hour < 18 or (local.hour == 18 and local.minute < 15):
+        date -= pd.Timedelta(days=1)
+    while date.weekday() >= 5:
+        date -= pd.Timedelta(days=1)
+    return date.strftime("%Y-%m-%d")
+
+
+def asof_monthly_snapshot(snapshots: pd.DataFrame, cutoff: str):
+    """No look-ahead: select latest signal dated <= eligible completed day."""
+    eligible = snapshots.loc[
+        snapshots["tarih"].notna()
+        & (snapshots["tarih"] <= pd.Timestamp(cutoff))
+        & (snapshots["tarih"].dt.strftime("%Y-%m") == cutoff[:7])
+    ]
+    if eligible.empty:
+        return None, None
+    signal_date = eligible["tarih"].max()
+    return signal_date, eligible[eligible["tarih"] == signal_date]
+
+
 def run(output):
     path = Path(output)
     state = json.loads(path.read_text()) if path.exists() else None
     now = pd.Timestamp.now(tz="Europe/Istanbul")
-    # Only run after 18:15 local on weekdays. Prevent partial intraday OHLC.
-    if now.weekday() >= 5 or now.hour < 18 or (now.hour == 18 and now.minute < 15):
-        print("NO_COMPLETED_SESSION_YET")
-        return
+    cutoff = last_completed_weekday(now)
+    # The actual provider session dates below remain authoritative.
     snapshots = load_monthly_snapshots()
     if snapshots.empty:
         raise ValueError("NO_PERSISTED_MONTHLY_SNAPSHOTS")
     snapshots["tarih"] = pd.to_datetime(snapshots["tarih"]).dt.normalize()
-    latest_signal = snapshots["tarih"].max()
-    # A snapshot generated today may be acted upon only from the NEXT session.
-    current_month = now.strftime("%Y-%m")
-    latest = snapshots[snapshots["tarih"] == latest_signal]
-    if latest_signal.strftime("%Y-%m") != current_month:
-        latest = None
+    # If a late runner executes after a new snapshot is published, select the
+    # most recent snapshot available AS OF this eligible session, not the
+    # future snapshot. Never generate orders from later knowledge.
+    latest_signal, latest = asof_monthly_snapshot(snapshots, cutoff)
+    current_month = cutoff[:7]
+    if state is None and latest is None:
+        print("PAPER_WAITING_FOR_ELIGIBLE_MONTHLY_SNAPSHOT: " + cutoff)
+        return
     if state is None:
         # Starting now, not replaying any previous trading day.
-        state = new_state(now.strftime("%Y-%m-%d"))
-    if now.strftime("%Y-%m-%d") > state["end_after"]:
+        state = new_state(cutoff)
+    if cutoff > state["end_after"]:
         print("PAPER_WINDOW_COMPLETE")
         return
     # Daily replay only of sessions after the last committed observation.
@@ -211,7 +235,7 @@ def run(output):
         raise ValueError("NO_DAILY_PRICES")
     sessions = sorted(set().union(*(set(pd.to_datetime(g.index).strftime("%Y-%m-%d")) for g in hist.values())))
     sessions = [d for d in sessions if d > (state["last_day"] or "0000-00-00")
-                and d <= now.strftime("%Y-%m-%d")]
+                and d <= cutoff]
     if not sessions:
         print("NO_NEW_MARKET_SESSION")
         return
