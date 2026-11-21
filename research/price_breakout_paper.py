@@ -185,6 +185,19 @@ def last_completed_weekday(now: pd.Timestamp) -> str:
     return date.strftime("%Y-%m-%d")
 
 
+def asof_monthly_snapshot(snapshots: pd.DataFrame, cutoff: str):
+    """No look-ahead: select latest signal dated <= eligible completed day."""
+    eligible = snapshots.loc[
+        snapshots["tarih"].notna()
+        & (snapshots["tarih"] <= pd.Timestamp(cutoff))
+        & (snapshots["tarih"].dt.strftime("%Y-%m") == cutoff[:7])
+    ]
+    if eligible.empty:
+        return None, None
+    signal_date = eligible["tarih"].max()
+    return signal_date, eligible[eligible["tarih"] == signal_date]
+
+
 def run(output):
     path = Path(output)
     state = json.loads(path.read_text()) if path.exists() else None
@@ -195,13 +208,11 @@ def run(output):
     if snapshots.empty:
         raise ValueError("NO_PERSISTED_MONTHLY_SNAPSHOTS")
     snapshots["tarih"] = pd.to_datetime(snapshots["tarih"]).dt.normalize()
-    latest_signal = snapshots["tarih"].max()
-    # A snapshot generated today may be acted upon only from the NEXT session.
+    # If a late runner executes after a new snapshot is published, select the
+    # most recent snapshot available AS OF this eligible session, not the
+    # future snapshot. Never generate orders from later knowledge.
+    latest_signal, latest = asof_monthly_snapshot(snapshots, cutoff)
     current_month = cutoff[:7]
-    latest = snapshots[snapshots["tarih"] == latest_signal]
-    if (latest_signal.strftime("%Y-%m") != current_month
-            or latest_signal.strftime("%Y-%m-%d") > cutoff):
-        latest = None
     if state is None and latest is None:
         print("PAPER_WAITING_FOR_ELIGIBLE_MONTHLY_SNAPSHOT: " + cutoff)
         return
