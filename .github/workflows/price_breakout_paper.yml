@@ -23,6 +23,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Start bounded resource telemetry
+        continue-on-error: true
+        run: python3 scripts/resource_probe.py start
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -30,6 +33,12 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_price_breakout_paper.py' -v
       - run: python -m py_compile research/price_breakout_paper.py
 
+      - name: Report runner capacity
+        if: always()
+        continue-on-error: true
+        run: |
+          probe="$RUNNER_TEMP/repo-resource-$GITHUB_RUN_ID-$GITHUB_JOB/probe.py"
+          if test -f "$probe"; then python3 "$probe" finish; else echo "::warning::Resource telemetry unavailable"; fi
   paper:
     if: github.event_name != 'pull_request'
     needs: offline-tests
@@ -40,6 +49,9 @@ jobs:
         with:
           ref: main
           persist-credentials: true
+      - name: Start bounded resource telemetry
+        continue-on-error: true
+        run: python3 scripts/resource_probe.py start
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -78,3 +90,9 @@ jobs:
           path: data/paper_breakout/paper_state.json
           if-no-files-found: warn
           retention-days: 30
+      - name: Report runner capacity
+        if: always()
+        continue-on-error: true
+        run: |
+          probe="$RUNNER_TEMP/repo-resource-$GITHUB_RUN_ID-$GITHUB_JOB/probe.py"
+          if test -f "$probe"; then python3 "$probe" finish; else echo "::warning::Resource telemetry unavailable"; fi
