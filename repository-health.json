@@ -1,0 +1,43 @@
+{
+  "repository": "evsayar33-oss/bist_orderflow_quant",
+  "observed_at": "2026-11-24T11:25:11.275643+00:00",
+  "metrics": {
+    "repository_bytes": 21309440,
+    "cache_bytes": 0,
+    "artifact_bytes": 82521,
+    "artifact_count": 24,
+    "release_count": 0,
+    "release_asset_bytes": 0
+  },
+  "alerts": [],
+  "errors": [],
+  "repaired": [],
+  "archives": [],
+  "billing_quota": "unknown: account billing permission required",
+  "archive_candidates": 0,
+  "archive_pending": 0,
+  "workflow_states": {
+    ".github/workflows/backtest_optimization.yml": "active",
+    ".github/workflows/daily_audit.yml": "active",
+    ".github/workflows/daily_scan.yml": "active",
+    ".github/workflows/diag_export.yml": "active",
+    ".github/workflows/free_challenger_research.yml": "active",
+    ".github/workflows/guard_evidence_ci.yml": "active",
+    ".github/workflows/native_strategy_research.yml": "active",
+    ".github/workflows/pit_matched_cost_retest.yml": "active",
+    ".github/workflows/pit_universe_research.yml": "active",
+    ".github/workflows/price_breakout_paper.yml": "active",
+    ".github/workflows/repository_guardian.yml": "active",
+    ".github/workflows/variant_lab.yml": "active",
+    ".github/workflows/watchdog.yml": "active"
+  },
+  "operational_warning_budgets": {
+    "repository_bytes": 734003200,
+    "artifact_bytes": 419430400,
+    "cache_bytes": 8589934592,
+    "checkpoint_uncompressed_bytes": 603979776
+  },
+  "large_files": [],
+  "default_branch_commit_age_days": 0,
+  "status": "ok"
+}
