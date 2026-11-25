@@ -1311,17 +1311,17 @@
       "real_cagr_pct": -77.22,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 3.75,
-        "gold": -12.05,
+        "usd": 3.8,
+        "gold": -11.97,
         "deposit": 4.05,
         "xu100": -11.82,
         "floor": 4.05,
         "hurdle": 4.05
       },
-      "usd_total_pct": -21.15,
-      "usd_cagr_pct": -78.19,
-      "usd_max_drawdown_pct": -21.28,
-      "xu100_usd_cagr_pct": -63.67
+      "usd_total_pct": -21.19,
+      "usd_cagr_pct": -78.26,
+      "usd_max_drawdown_pct": -21.31,
+      "xu100_usd_cagr_pct": -63.79
     },
     "lots": {
       "closed_lots": 1,
@@ -1509,19 +1509,19 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-24",
+    "date": "2026-11-25",
     "status": "OK",
     "fingerprint": "8639.5900|3510046078",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-25T00:02:31.822781Z"
+    "utc": "2026-11-25T01:11:49.480015Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.0,
     "rows": 587,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1336,
+    "recommended_missing_rate": 0.1332,
     "fetch": {
       "source": "tradingview",
       "fields": {
@@ -1550,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 23.89,
-    "gold": 23.89,
+    "usd": 23.98,
+    "gold": 23.98,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1592,7 +1592,7 @@
   },
   "last_eod_date": "2026-11-24",
   "health": {
-    "date": "2026-11-24",
+    "date": "2026-11-25",
     "overall": "UYARI",
     "checks": [
       {
@@ -1620,8 +1620,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-24 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-24 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1693,8 +1693,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 22 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 22
+        "msg": "model 23 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 23
       },
       {
         "key": "live",
