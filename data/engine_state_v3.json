@@ -1312,9 +1312,9 @@
       "benchmarks_total_pct": {
         "cpi": 2.58,
         "usd": 3.8,
-        "gold": -11.97,
+        "gold": -11.82,
         "deposit": 4.05,
-        "xu100": -11.82,
+        "xu100": -12.92,
         "floor": 4.05,
         "hurdle": 4.05
       },
@@ -1514,7 +1514,7 @@
     "fingerprint": "8639.5900|3510046078",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-25T01:11:49.480015Z"
+    "utc": "2026-11-25T02:25:27.852391Z"
   },
   "data_quality": {
     "ok": true,
