@@ -1312,7 +1312,7 @@
       "benchmarks_total_pct": {
         "cpi": 2.58,
         "usd": 3.95,
-        "gold": -10.54,
+        "gold": -10.98,
         "deposit": 4.12,
         "xu100": -12.92,
         "floor": 4.12,
@@ -1514,14 +1514,14 @@
     "fingerprint": "5807.4300|3823379921",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-26T00:46:46.151413Z"
+    "utc": "2026-11-26T01:50:25.203909Z"
   },
   "data_quality": {
     "ok": true,
     "score": 92.1,
     "rows": 582,
     "invalid_rows": 0,
-    "recommended_missing_rate": 0.1316,
+    "recommended_missing_rate": 0.1313,
     "fetch": {
       "source": "tradingview",
       "fields": {
