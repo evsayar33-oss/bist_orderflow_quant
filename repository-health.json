@@ -1,11 +1,11 @@
 {
   "repository": "evsayar33-oss/bist_orderflow_quant",
-  "observed_at": "2026-11-25T17:05:31.410903+00:00",
+  "observed_at": "2026-11-26T16:45:26.511754+00:00",
   "metrics": {
-    "repository_bytes": 21107712,
+    "repository_bytes": 21147648,
     "cache_bytes": 0,
-    "artifact_bytes": 88082,
-    "artifact_count": 25,
+    "artifact_bytes": 93681,
+    "artifact_count": 26,
     "release_count": 0,
     "release_asset_bytes": 0
   },
