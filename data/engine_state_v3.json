@@ -1311,17 +1311,17 @@
       "real_cagr_pct": -80.18,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 3.96,
-        "gold": -10.6,
+        "usd": 3.95,
+        "gold": -10.54,
         "deposit": 4.12,
         "xu100": -12.92,
         "floor": 4.12,
         "hurdle": 4.12
       },
-      "usd_total_pct": -23.33,
-      "usd_cagr_pct": -81.23,
-      "usd_max_drawdown_pct": -23.45,
-      "xu100_usd_cagr_pct": -66.25
+      "usd_total_pct": -23.32,
+      "usd_cagr_pct": -81.22,
+      "usd_max_drawdown_pct": -23.44,
+      "xu100_usd_cagr_pct": -66.23
     },
     "lots": {
       "closed_lots": 1,
@@ -1509,12 +1509,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-25",
+    "date": "2026-11-26",
     "status": "OK",
     "fingerprint": "5807.4300|3823379921",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-25T23:46:52.410808Z"
+    "utc": "2026-11-26T00:46:46.151413Z"
   },
   "data_quality": {
     "ok": true,
@@ -1550,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 24.18,
-    "gold": 24.18,
+    "usd": 24.16,
+    "gold": 24.16,
     "deposit": 28.9,
     "hurdle": 28.9,
     "floor": 28.9,
@@ -1592,7 +1592,7 @@
   },
   "last_eod_date": "2026-11-25",
   "health": {
-    "date": "2026-11-25",
+    "date": "2026-11-26",
     "overall": "KRİTİK",
     "checks": [
       {
@@ -1620,8 +1620,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-25 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-25 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1693,8 +1693,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 23 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 23
+        "msg": "model 24 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 24
       },
       {
         "key": "live",
