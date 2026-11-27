@@ -464,11 +464,11 @@
   "regime": {
     "label": "RISK_OFF",
     "probs": {
-      "RISK_OFF": 0.9945,
-      "NEUTRAL": 0.0022,
-      "RISK_ON": 0.0033
+      "RISK_OFF": 0.9735,
+      "NEUTRAL": 0.0006,
+      "RISK_ON": 0.0259
     },
-    "p_risk_off": 0.9945,
+    "p_risk_off": 0.9735,
     "degraded": false,
     "params": {
       "K": 3,
@@ -558,10 +558,10 @@
       "fit_date": "2026-11-27"
     },
     "last_fit": "2026-11-27",
-    "exp_mkt_5d_pct": 0.263,
-    "exp_mkt_12m_pct": 22.39,
+    "exp_mkt_5d_pct": 0.271,
+    "exp_mkt_12m_pct": 22.42,
     "argmax_history": [
-      "NEUTRAL",
+      "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF",
       "RISK_OFF",
@@ -572,7 +572,7 @@
       "RISK_OFF",
       "RISK_OFF"
     ],
-    "as_of": "2026-11-25",
+    "as_of": "2026-11-26",
     "persistence": 0.9252,
     "source": "hmm_yfinance",
     "state_stats": {
@@ -1312,9 +1312,9 @@
       "benchmarks_total_pct": {
         "cpi": 2.58,
         "usd": 3.98,
-        "gold": -10.79,
+        "gold": -10.58,
         "deposit": 4.19,
-        "xu100": -15.38,
+        "xu100": -14.69,
         "floor": 4.19,
         "hurdle": 4.19
       },
@@ -1514,7 +1514,7 @@
     "fingerprint": "6002.1300|5490492050",
     "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-27T00:54:39.093082Z"
+    "utc": "2026-11-27T01:46:02.030889Z"
   },
   "data_quality": {
     "ok": true,
