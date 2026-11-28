@@ -1311,17 +1311,17 @@
       "real_cagr_pct": -75.01,
       "benchmarks_total_pct": {
         "cpi": 2.58,
-        "usd": 4.13,
-        "gold": -8.81,
+        "usd": 4.19,
+        "gold": -8.75,
         "deposit": 4.37,
         "xu100": -14.69,
         "floor": 4.37,
         "hurdle": 4.37
       },
-      "usd_total_pct": -21.17,
-      "usd_cagr_pct": -76.5,
+      "usd_total_pct": -21.22,
+      "usd_cagr_pct": -76.58,
       "usd_max_drawdown_pct": -23.44,
-      "xu100_usd_cagr_pct": -69.38
+      "xu100_usd_cagr_pct": -69.49
     },
     "lots": {
       "closed_lots": 1,
@@ -1509,12 +1509,12 @@
     "cash_target": 0.0
   },
   "last_run": {
-    "date": "2026-11-27",
+    "date": "2026-11-28",
     "status": "OK",
     "fingerprint": "5969.7600|8348723350",
-    "mode": "EOD",
+    "mode": "REFRESH",
     "monthly_review": false,
-    "utc": "2026-11-27T23:40:40.514630Z"
+    "utc": "2026-11-28T00:20:20.683261Z"
   },
   "data_quality": {
     "ok": true,
@@ -1550,8 +1550,8 @@
   },
   "hurdles": {
     "cpi": 26.75,
-    "usd": 24.21,
-    "gold": 24.21,
+    "usd": 24.32,
+    "gold": 24.32,
     "deposit": 30.8,
     "hurdle": 30.8,
     "floor": 30.8,
@@ -1592,7 +1592,7 @@
   },
   "last_eod_date": "2026-11-27",
   "health": {
-    "date": "2026-11-27",
+    "date": "2026-11-28",
     "overall": "UYARI",
     "checks": [
       {
@@ -1620,8 +1620,8 @@
         "key": "run",
         "name": "Günlük çalışma",
         "status": "OK",
-        "msg": "son kapanış işlemi 2026-11-27 (0 iş günü önce)",
-        "value": 0
+        "msg": "son kapanış işlemi 2026-11-27 (1 iş günü önce)",
+        "value": 1
       },
       {
         "key": "review",
@@ -1693,8 +1693,8 @@
         "key": "model_age",
         "name": "Model güncelliği",
         "status": "OK",
-        "msg": "model 25 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
-        "value": 25
+        "msg": "model 26 gün önce yeniden eğitildi (her ayın 2'sinde otomatik)",
+        "value": 26
       },
       {
         "key": "live",
